@@ -572,7 +572,7 @@ asyncio_mode = "auto"
 
 [tool.taskipy.tasks]
 test = "pytest"
-lint = "ruff check . && ruff format --check . && mypy src"
+lint = "ruff check . && ruff format --check . && mypy src contracts"
 fmt = "ruff check --fix . && ruff format ."
 dbt-parse = "dbt parse --project-dir dbt --profiles-dir dbt --target ci"
 api = "uvicorn api.main:app --reload --app-dir src"

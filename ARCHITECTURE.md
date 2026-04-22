@@ -1,6 +1,6 @@
 # Architecture
 
-```
+```text
 TfL Unified API ──polling──▶ Redpanda (Kafka) ──▶ Postgres (raw) ──▶ dbt ──▶ marts
                                                                                 │
 TfL strategy PDFs ──Docling──▶ embeddings ──▶ Pinecone                          │
@@ -33,7 +33,7 @@ TfL strategy PDFs ──Docling──▶ embeddings ──▶ Pinecone          
 | API | FastAPI + sse-starlette | Python 3.12 | OpenAPI 3.1 contract in `contracts/openapi.yaml` |
 | Agent | LangGraph 1.x + Pydantic AI | Python 3.12 | Two tools: `query_warehouse`, `search_tfl_docs` |
 | RAG | LlamaIndex + Pinecone + Docling | Python 3.12 | Hybrid retrieval over TfL strategy PDFs |
-| Frontend | Next.js 15/16 + shadcn/ui (Radix + Nova) | Node 22 | Biome only, TS types generated from OpenAPI |
+| Frontend | Next.js 16 + shadcn/ui (Radix + Nova) | Node 22 | Biome only, TS types generated from OpenAPI; upgrade from spec's v15 documented in PROGRESS.md |
 
 ## Contracts
 

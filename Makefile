@@ -1,4 +1,4 @@
-.PHONY: help bootstrap up down clean check seed openapi-ts
+.PHONY: help bootstrap up down clean check seed openapi-ts sync-dbt-sources
 
 help:
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -22,9 +22,10 @@ down: ## Stop Docker Compose (preserves volumes)
 clean: ## Remove Docker Compose + volumes (destructive)
 	docker compose down -v
 
-check: ## Lint + Python tests + TS lint + TS build
+check: ## Lint + Python tests + dbt parse + TS lint + TS build
 	uv run task lint
 	uv run task test
+	uv run task dbt-parse
 	pnpm --dir web lint
 	pnpm --dir web build
 
@@ -33,3 +34,7 @@ seed: ## Load fixtures into local Postgres
 
 openapi-ts: ## Regenerate TS types from OpenAPI
 	pnpm --dir web exec openapi-typescript ../contracts/openapi.yaml -o lib/types.ts
+
+sync-dbt-sources: ## Sync dbt/sources/tfl.yml from contracts/dbt_sources.yml (single source of truth)
+	cp contracts/dbt_sources.yml dbt/sources/tfl.yml
+	@echo "dbt/sources/tfl.yml synced from contracts/dbt_sources.yml"

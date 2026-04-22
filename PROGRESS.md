@@ -37,7 +37,9 @@ Mid-execution deviations, captured as ADRs or inline footnotes:
   for system orchestration.
 - Next.js generator produced v16.2.4 (spec locked at 15); kept v16
   because current `create-next-app` defaults to it and v16 is
-  backward-compatible for the app-router scaffold used here.
+  backward-compatible for the app-router scaffold used here. Tech-stack
+  table in ARCHITECTURE.md and `CLAUDE.md` tech-stack list updated to
+  match. A formal ADR will be added if issues surface in TM-E1+.
 - shadcn CLI flow changed: `--base=radix --preset=nova` matches the
   legacy "Default / Slate / CSS variables=Yes" intent and avoids
   interactive prompts.

@@ -21,11 +21,19 @@ Primary responsibilities:
 
 ## Language and communication
 
-**Respond in Brazilian Portuguese (PT-BR)** in all interactions with the author (PR reviews, explanations, summaries).
+**Respond in Brazilian Portuguese (PT-BR)** in every direct interaction with the author (terminal chat, explanations, summaries, review findings delivered back in chat).
 
-Keep in **English**: source code, docstrings, file/directory names, contracts, error messages, logs, tests, and Conventional Commit subject lines.
+Keep in **English** — no PT-BR anywhere, ever: source code, docstrings, file/directory names, contracts, error messages, logs, tests, and **every artifact persisted to git or GitHub**:
 
-Rationale: English is the interoperable tongue for tools (linters, CI, search), while PT-BR in chat reduces the author's cognitive load.
+- commit subjects + bodies
+- PR titles + descriptions
+- issue titles + bodies
+- GitHub-posted PR reviews and review comments (anything written via `gh pr review`, `gh pr comment`, `gh issue comment`, or the GitHub UI)
+- branch names, tag messages
+
+Rule of thumb: if the text lives on disk in `.git/` or on `github.com`, it is English. If it lives only in the terminal conversation with the author, it is PT-BR. A review you write for the author's eyes in chat stays PT-BR; the same review, when it becomes a `gh pr review --body`, is translated to English before posting.
+
+Rationale: English keeps git history portable (future maintainers, GitHub search, CI logs, linters); PT-BR in chat reduces the author's cognitive load without fragmenting the codebase or its history.
 
 ---
 
@@ -79,7 +87,7 @@ It is independent from `ai-engineering-monorepo`. Any reused code is **copied an
 | Validation | Pydantic v2 | Used at every boundary |
 | LLM observability | LangSmith | — |
 | App observability | Logfire | Covers FastAPI/Postgres/HTTP/OTel |
-| Frontend | Next.js 15 + shadcn/ui + TS | Design from claude.design |
+| Frontend | Next.js 16 + shadcn/ui (Radix + Nova) + TS | Design from claude.design |
 | Python linter | Ruff | Sole Python linter/formatter |
 | Types | Mypy strict | — |
 | TS linter | Biome | Sole TS linter/formatter |

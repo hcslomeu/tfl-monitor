@@ -189,7 +189,7 @@ paths:
           name: mode
           schema:
             type: string
-            enum: [tube, elizabeth-line, overground, dlr, bus, national-rail]
+            enum: [tube, elizabeth-line, overground, dlr, bus, national-rail, river-bus, cable-car, tram]
       responses:
         "200":
           description: Recent disruptions

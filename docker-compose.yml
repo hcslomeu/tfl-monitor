@@ -45,6 +45,7 @@ services:
   redpanda-console:
     image: redpandadata/console:v2.7.2
     restart: unless-stopped
+    profiles: ["ui"]
     environment:
       KAFKA_BROKERS: redpanda:9092
     ports:
@@ -65,8 +66,9 @@ services:
       AIRFLOW__CORE__LOAD_EXAMPLES: "False"
       _AIRFLOW_DB_MIGRATE: "true"
       _AIRFLOW_WWW_USER_CREATE: "true"
-      _AIRFLOW_WWW_USER_USERNAME: admin
-      _AIRFLOW_WWW_USER_PASSWORD: admin
+      _AIRFLOW_WWW_USER_USERNAME: ${AIRFLOW_ADMIN_USERNAME:-admin}
+      _AIRFLOW_WWW_USER_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD:-admin}
+      AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "False"
     user: "50000:0"
     volumes:
       - ./airflow/dags:/opt/airflow/dags
@@ -83,7 +85,7 @@ services:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER:-tflmonitor}:${POSTGRES_PASSWORD:-change_me}@postgres/${POSTGRES_DB:-tflmonitor}
       AIRFLOW__CORE__LOAD_EXAMPLES: "False"
-      AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "True"
+      AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "False"
     user: "50000:0"
     ports:
       - "8082:8080"

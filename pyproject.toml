@@ -61,7 +61,9 @@ pythonpath = ["src"]
 asyncio_mode = "auto"
 
 [tool.taskipy.tasks]
-test = "pytest || [ $? = 5 ]"
+# --exitfirst-on-collection-errors via Python wrapper: treat "no tests collected" (exit 5) as success.
+# Works on both POSIX shells and Windows PowerShell.
+test = "python -c \"import subprocess, sys; sys.exit(0 if subprocess.call(['pytest']) in (0, 5) else 1)\""
 lint = "ruff check . && ruff format --check . && mypy src contracts"
 fmt = "ruff check --fix . && ruff format ."
 dbt-parse = "dbt parse --project-dir dbt --profiles-dir dbt --target ci"
