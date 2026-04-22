@@ -1,0 +1,97 @@
+version: 2
+
+sources:
+  - name: tfl
+    description: "Raw Kafka-backed event streams and static reference tables for the TfL warehouse."
+    database: "{{ env_var('POSTGRES_DB', 'tflmonitor') }}"
+    schema: raw
+    tables:
+      - name: line_status
+        description: "Append-only snapshots of TfL line operational status."
+        columns:
+          - name: event_id
+            description: "Unique event identifier (UUIDv7)."
+            tests:
+              - not_null
+              - unique
+          - name: ingested_at
+            description: "UTC timestamp when the event landed in the warehouse."
+            tests:
+              - not_null
+          - name: event_type
+            tests:
+              - not_null
+          - name: source
+            tests:
+              - not_null
+          - name: payload
+            description: "Full JSON envelope from Kafka."
+            tests:
+              - not_null
+
+      - name: arrivals
+        description: "Append-only stream of predicted vehicle arrivals at stop points."
+        columns:
+          - name: event_id
+            tests:
+              - not_null
+              - unique
+          - name: ingested_at
+            tests:
+              - not_null
+          - name: event_type
+            tests:
+              - not_null
+          - name: source
+            tests:
+              - not_null
+          - name: payload
+            tests:
+              - not_null
+
+      - name: disruptions
+        description: "Append-only stream of reported disruptions across the network."
+        columns:
+          - name: event_id
+            tests:
+              - not_null
+              - unique
+          - name: ingested_at
+            tests:
+              - not_null
+          - name: event_type
+            tests:
+              - not_null
+          - name: source
+            tests:
+              - not_null
+          - name: payload
+            tests:
+              - not_null
+
+      - name: lines
+        description: "Canonical list of TfL lines with display metadata."
+        schema: ref
+        columns:
+          - name: line_id
+            tests:
+              - not_null
+              - unique
+          - name: line_name
+            tests:
+              - not_null
+          - name: mode
+            tests:
+              - not_null
+
+      - name: stations
+        description: "Canonical list of TfL stop points with coordinates."
+        schema: ref
+        columns:
+          - name: station_id
+            tests:
+              - not_null
+              - unique
+          - name: station_name
+            tests:
+              - not_null

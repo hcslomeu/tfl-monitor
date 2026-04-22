@@ -1,0 +1,494 @@
+openapi: 3.1.0
+info:
+  title: tfl-monitor API
+  version: 0.0.1
+  description: |
+    Public HTTP surface for the tfl-monitor platform.
+
+    - Live operational data, reliability metrics, and disruptions are backed by the
+      dbt-modelled warehouse.
+    - Conversational endpoints route to a LangGraph agent with SQL and RAG tools.
+
+    CORS allowlist (production) covers the dashboard origins only
+    (`https://tfl-monitor.vercel.app`, `http://localhost:3000`). Never `*`.
+    Error responses use RFC 7807 `application/problem+json`.
+
+servers:
+  - url: http://localhost:8000
+    description: Local development
+  - url: https://api.tfl-monitor.example
+    description: Production
+
+tags:
+  - name: health
+  - name: status
+  - name: reliability
+  - name: disruptions
+  - name: bus
+  - name: chat
+
+paths:
+  /health:
+    get:
+      tags: [health]
+      operationId: get_health
+      summary: Service liveness probe
+      responses:
+        "200":
+          description: Service healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+              example:
+                status: ok
+                dependencies: {}
+
+  /api/v1/status/live:
+    get:
+      tags: [status]
+      operationId: get_status_live
+      summary: Current operational status for every served line
+      responses:
+        "200":
+          description: Live line statuses
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LineStatus"
+              example:
+                - line_id: victoria
+                  line_name: Victoria
+                  mode: tube
+                  status_severity: 10
+                  status_severity_description: Good Service
+                  reason: null
+                  valid_from: "2026-04-22T07:00:00Z"
+                  valid_to: "2026-04-22T23:59:59Z"
+                - line_id: piccadilly
+                  line_name: Piccadilly
+                  mode: tube
+                  status_severity: 6
+                  status_severity_description: Severe Delays
+                  reason: "Signal failure at Acton Town"
+                  valid_from: "2026-04-22T06:15:00Z"
+                  valid_to: "2026-04-22T23:59:59Z"
+                - line_id: elizabeth
+                  line_name: Elizabeth line
+                  mode: elizabeth-line
+                  status_severity: 9
+                  status_severity_description: Minor Delays
+                  reason: "Earlier incident at Paddington"
+                  valid_from: "2026-04-22T05:30:00Z"
+                  valid_to: "2026-04-22T23:59:59Z"
+        "500":
+          $ref: "#/components/responses/Problem"
+
+  /api/v1/status/history:
+    get:
+      tags: [status]
+      operationId: get_status_history
+      summary: Historic line statuses over an arbitrary window
+      parameters:
+        - in: query
+          name: line_id
+          schema: { type: string }
+          required: false
+          description: Restrict to a single line (e.g. `victoria`).
+        - in: query
+          name: from
+          schema: { type: string, format: date-time }
+          required: true
+          description: Window start (UTC, inclusive).
+        - in: query
+          name: to
+          schema: { type: string, format: date-time }
+          required: true
+          description: Window end (UTC, exclusive).
+      responses:
+        "200":
+          description: Historic line statuses
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LineStatus"
+              example:
+                - line_id: victoria
+                  line_name: Victoria
+                  mode: tube
+                  status_severity: 10
+                  status_severity_description: Good Service
+                  reason: null
+                  valid_from: "2026-04-20T05:30:00Z"
+                  valid_to: "2026-04-20T23:59:59Z"
+                - line_id: victoria
+                  line_name: Victoria
+                  mode: tube
+                  status_severity: 9
+                  status_severity_description: Minor Delays
+                  reason: "Signalling issues earlier"
+                  valid_from: "2026-04-21T05:30:00Z"
+                  valid_to: "2026-04-21T23:59:59Z"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "500":
+          $ref: "#/components/responses/Problem"
+
+  /api/v1/reliability/{line_id}:
+    get:
+      tags: [reliability]
+      operationId: get_line_reliability
+      summary: Reliability score for a single line over a rolling window
+      parameters:
+        - in: path
+          name: line_id
+          required: true
+          schema: { type: string }
+        - in: query
+          name: window
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 90, default: 7 }
+          description: Window size in days.
+      responses:
+        "200":
+          description: Reliability summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LineReliability"
+              example:
+                line_id: victoria
+                line_name: Victoria
+                mode: tube
+                window_days: 7
+                reliability_percent: 94.2
+                sample_size: 2016
+                severity_histogram:
+                  "6": 12
+                  "9": 48
+                  "10": 1956
+        "404":
+          $ref: "#/components/responses/Problem"
+        "500":
+          $ref: "#/components/responses/Problem"
+
+  /api/v1/disruptions/recent:
+    get:
+      tags: [disruptions]
+      operationId: get_recent_disruptions
+      summary: Most recent disruptions, optionally scoped to a mode
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - in: query
+          name: mode
+          schema:
+            type: string
+            enum: [tube, elizabeth-line, overground, dlr, bus, national-rail, river-bus, cable-car, tram]
+      responses:
+        "200":
+          description: Recent disruptions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Disruption"
+              example:
+                - disruption_id: "2026-04-22-PIC-001"
+                  category: RealTime
+                  category_description: Real Time
+                  description: "Signal failure at Acton Town, reduced service on Piccadilly."
+                  summary: "Severe delays on Piccadilly line"
+                  affected_routes: [piccadilly]
+                  affected_stops: ["940GZZLUATN", "940GZZLUACT"]
+                  closure_text: ""
+                  severity: 6
+                  created: "2026-04-22T06:15:00Z"
+                  last_update: "2026-04-22T08:05:00Z"
+                - disruption_id: "2026-04-22-ELI-001"
+                  category: RealTime
+                  category_description: Real Time
+                  description: "Earlier incident at Paddington affecting Elizabeth line."
+                  summary: "Minor delays on Elizabeth line"
+                  affected_routes: [elizabeth]
+                  affected_stops: ["910GPADTON"]
+                  closure_text: ""
+                  severity: 6
+                  created: "2026-04-22T05:40:00Z"
+                  last_update: "2026-04-22T07:20:00Z"
+                - disruption_id: "2026-04-21-VIC-001"
+                  category: PlannedWork
+                  category_description: Planned Work
+                  description: "Engineering works affecting Victoria line weekend service."
+                  summary: "Minor delays this weekend"
+                  affected_routes: [victoria]
+                  affected_stops: []
+                  closure_text: "No service between Seven Sisters and Walthamstow Central on Sunday."
+                  severity: 9
+                  created: "2026-04-18T12:00:00Z"
+                  last_update: "2026-04-21T09:00:00Z"
+                - disruption_id: "2026-04-22-PIC-002"
+                  category: Information
+                  category_description: Information
+                  description: "Lifts out of service at Holborn."
+                  summary: "Step-free access affected"
+                  affected_routes: [piccadilly]
+                  affected_stops: ["940GZZLUHBN"]
+                  closure_text: ""
+                  severity: 9
+                  created: "2026-04-22T04:00:00Z"
+                  last_update: "2026-04-22T04:00:00Z"
+                - disruption_id: "2026-04-22-VIC-002"
+                  category: Information
+                  category_description: Information
+                  description: "Reduced frequency during morning peak due to staff shortage."
+                  summary: "Change of frequency on Victoria line"
+                  affected_routes: [victoria]
+                  affected_stops: []
+                  closure_text: ""
+                  severity: 9
+                  created: "2026-04-22T06:30:00Z"
+                  last_update: "2026-04-22T07:45:00Z"
+        "500":
+          $ref: "#/components/responses/Problem"
+
+  /api/v1/bus/{stop_id}/punctuality:
+    get:
+      tags: [bus]
+      operationId: get_bus_punctuality
+      summary: Punctuality statistics for a given bus stop
+      parameters:
+        - in: path
+          name: stop_id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Punctuality summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BusPunctuality"
+              example:
+                stop_id: "490008660N"
+                stop_name: "Trafalgar Square"
+                window_days: 7
+                on_time_percent: 88.5
+                early_percent: 4.1
+                late_percent: 7.4
+                sample_size: 1240
+        "404":
+          $ref: "#/components/responses/Problem"
+        "500":
+          $ref: "#/components/responses/Problem"
+
+  /api/v1/chat/stream:
+    post:
+      tags: [chat]
+      operationId: post_chat_stream
+      summary: Stream an agent response over SSE
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatRequest"
+      responses:
+        "200":
+          description: Server-Sent Events stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: |
+                  SSE frames. Each `data:` frame contains a JSON payload with at
+                  least `{"type": "token" | "tool" | "end", "content": <str>}`.
+        "400":
+          $ref: "#/components/responses/Problem"
+        "500":
+          $ref: "#/components/responses/Problem"
+
+  /api/v1/chat/{thread_id}/history:
+    get:
+      tags: [chat]
+      operationId: get_chat_history
+      summary: Retrieve messages for an existing chat thread
+      parameters:
+        - in: path
+          name: thread_id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Chat history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ChatMessage"
+              example:
+                - role: user
+                  content: "Which Tube line had the worst reliability last week?"
+                  created_at: "2026-04-20T14:12:00Z"
+                - role: assistant
+                  content: "The Piccadilly line averaged 87.5% reliability, the lowest of the network."
+                  created_at: "2026-04-20T14:12:04Z"
+        "404":
+          $ref: "#/components/responses/Problem"
+        "500":
+          $ref: "#/components/responses/Problem"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      required: [status, dependencies]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+        dependencies:
+          type: object
+          additionalProperties:
+            type: string
+            enum: [ok, degraded, unreachable]
+
+    LineStatus:
+      type: object
+      required:
+        - line_id
+        - line_name
+        - mode
+        - status_severity
+        - status_severity_description
+        - valid_from
+        - valid_to
+      properties:
+        line_id: { type: string }
+        line_name: { type: string }
+        mode:
+          type: string
+          enum: [tube, elizabeth-line, overground, dlr, bus, national-rail, river-bus, cable-car, tram]
+        status_severity:
+          type: integer
+          minimum: 0
+          maximum: 20
+        status_severity_description: { type: string }
+        reason:
+          type: [string, "null"]
+        valid_from: { type: string, format: date-time }
+        valid_to: { type: string, format: date-time }
+
+    LineReliability:
+      type: object
+      required: [line_id, line_name, mode, window_days, reliability_percent, sample_size, severity_histogram]
+      properties:
+        line_id: { type: string }
+        line_name: { type: string }
+        mode: { type: string }
+        window_days:
+          type: integer
+          minimum: 1
+          maximum: 90
+        reliability_percent:
+          type: number
+          minimum: 0
+          maximum: 100
+        sample_size:
+          type: integer
+          minimum: 0
+        severity_histogram:
+          type: object
+          additionalProperties:
+            type: integer
+            minimum: 0
+
+    Disruption:
+      type: object
+      required:
+        - disruption_id
+        - category
+        - category_description
+        - description
+        - summary
+        - affected_routes
+        - affected_stops
+        - closure_text
+        - severity
+        - created
+        - last_update
+      properties:
+        disruption_id: { type: string }
+        category:
+          type: string
+          enum: [RealTime, PlannedWork, Information, Incident, Undefined]
+        category_description: { type: string }
+        description: { type: string }
+        summary: { type: string }
+        affected_routes:
+          type: array
+          items: { type: string }
+        affected_stops:
+          type: array
+          items: { type: string }
+        closure_text: { type: string }
+        severity:
+          type: integer
+          minimum: 0
+        created: { type: string, format: date-time }
+        last_update: { type: string, format: date-time }
+
+    BusPunctuality:
+      type: object
+      required: [stop_id, stop_name, window_days, on_time_percent, early_percent, late_percent, sample_size]
+      properties:
+        stop_id: { type: string }
+        stop_name: { type: string }
+        window_days: { type: integer, minimum: 1, maximum: 90 }
+        on_time_percent: { type: number, minimum: 0, maximum: 100 }
+        early_percent: { type: number, minimum: 0, maximum: 100 }
+        late_percent: { type: number, minimum: 0, maximum: 100 }
+        sample_size: { type: integer, minimum: 0 }
+
+    ChatRequest:
+      type: object
+      required: [thread_id, message]
+      properties:
+        thread_id: { type: string }
+        message: { type: string, minLength: 1, maxLength: 4000 }
+
+    ChatMessage:
+      type: object
+      required: [role, content, created_at]
+      properties:
+        role:
+          type: string
+          enum: [user, assistant, system]
+        content: { type: string }
+        created_at: { type: string, format: date-time }
+
+    Problem:
+      type: object
+      description: "RFC 7807 problem details."
+      required: [type, title, status]
+      properties:
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string, format: uri }
+
+  responses:
+    Problem:
+      description: Error response following RFC 7807.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"

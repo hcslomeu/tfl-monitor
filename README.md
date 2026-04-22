@@ -132,7 +132,7 @@ make seed             # load fixtures into local Postgres
 make check            # lint + tests + build
 
 # in separate terminals:
-uv run api            # API on :8000
+uv run task api       # API on :8000
 pnpm --dir web dev    # dashboard on :3000
 ```
 

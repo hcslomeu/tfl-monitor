@@ -1,0 +1,24 @@
+.env
+.env.local
+__pycache__/
+*.pyc
+.venv/
+node_modules/
+.DS_Store
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+dist/
+build/
+*.egg-info/
+.claude/worktrees/
+
+# dbt
+dbt/target/
+dbt/dbt_packages/
+dbt/logs/
+dbt/.user.yml
+
+# Next.js
+web/.next/
+web/out/

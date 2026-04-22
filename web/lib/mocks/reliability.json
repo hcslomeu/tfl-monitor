@@ -1,0 +1,13 @@
+{
+	"line_id": "victoria",
+	"line_name": "Victoria",
+	"mode": "tube",
+	"window_days": 7,
+	"reliability_percent": 94.2,
+	"sample_size": 2016,
+	"severity_histogram": {
+		"6": 12,
+		"9": 48,
+		"10": 1956
+	}
+}

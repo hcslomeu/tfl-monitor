@@ -6,14 +6,14 @@ Guidance for Claude Code when working in this repository.
 
 ## Language and communication
 
-**All chat responses to the author must be in Brazilian Portuguese (PT-BR).** This applies to:
+**All direct chat responses to the author must be in Brazilian Portuguese (PT-BR).** This applies to:
 
 - Explanations, summaries, and chat replies
-- Commit message bodies (the subject line stays in English — Conventional Commits)
-- PR descriptions (body in PT-BR, title in English Conventional Commit format)
 - Questions asked back to the author during research/planning phases
+- Review findings reported back to the author in terminal chat (before
+  they are persisted anywhere)
 
-The following must remain in **English**:
+The following must remain in **English** (no PT-BR anywhere, ever):
 
 - Source code (identifiers, functions, classes, variables)
 - Docstrings (Python ecosystem convention)
@@ -21,8 +21,18 @@ The following must remain in **English**:
 - Content under `contracts/` (schemas, OpenAPI, SQL)
 - Error messages and log output (English is lingua-franca for systems)
 - Tests and assertions
-- Commit subject lines (Conventional Commits in English)
+- **Every artifact persisted to git or GitHub**: commit subjects **and
+  bodies**; PR titles **and descriptions**; issue titles **and bodies**;
+  GitHub-posted PR reviews and review comments (anything written via
+  `gh pr review`, `gh pr comment`, `gh issue comment`, or the GitHub UI);
+  branch names; tag messages.
 - Markdown content of this file and `AGENTS.md`
+
+**Rule of thumb:** if the text lives on disk in `.git/` or on
+`github.com`, it is English. If it lives only in the terminal
+conversation with the author, it is PT-BR. A review written for the
+author's eyes in chat stays PT-BR; the same review, when it becomes a
+`gh pr review --body`, is translated to English before posting.
 
 Rationale: reduce cognitive load for the author during review, without fragmenting the codebase or making tools (Codex, context7, linters, CI logs) harder to work with.
 
@@ -35,7 +45,7 @@ This repository is reviewed by the author and by Codex. Any structure too comple
 Hard rules:
 
 1. **One `pyproject.toml` at the root.** Python modules are plain folders under `src/`, not sub-packages with their own `pyproject.toml`.
-2. **A short `Makefile`** (max ~15 targets) for cross-tool orchestration. Pure-Python tasks use `uv run <task>` via `[tool.uv.scripts]`.
+2. **A short `Makefile`** (max ~15 targets) for system orchestration (Docker, bootstrap, `check`). Pure-Python dev tasks use `uv run task <name>` via `[tool.taskipy.tasks]` in `pyproject.toml`.
 3. **Minimal Docker Compose**: only services essential for local dev. No sidecars, no local observability (Grafana/Prometheus stay out — we use hosted observability instead).
 4. **No "just-in-case" abstractions.** If there is one consumer of a function, don't create an interface. If there is one vector store (Pinecone), don't create an abstract factory. Abstract when the second case arrives.
 5. **No elaborate hierarchical configuration.** One `.env` file. No nested Pydantic `BaseSettings` unless there are ≥15 variables.
@@ -89,7 +99,7 @@ If a detailed spec exists at `.claude/specs/TM-XXX-spec.md` for the active WP, i
 | Data validation | Pydantic v2 (everywhere — Kafka events, API models, config) |
 | LLM observability | LangSmith |
 | App observability | Logfire (FastAPI, Postgres, OpenTelemetry) |
-| Frontend | Next.js 15 + shadcn/ui + TypeScript (design via claude.design) |
+| Frontend | Next.js 16 + shadcn/ui (Radix + Nova preset) + TypeScript (design via claude.design) |
 | Backend hosting | Railway |
 | Frontend hosting | Vercel |
 | Postgres (prod) | Supabase free tier |
@@ -184,9 +194,9 @@ Follow three phases, using `/clear` between them:
 Always run:
 
 ```bash
-uv run lint      # ruff check + ruff format --check + mypy
-uv run test      # pytest
-uv run dbt-parse # if you touched dbt/
+uv run task lint      # ruff check + ruff format --check + mypy
+uv run task test      # pytest
+uv run task dbt-parse # if you touched dbt/
 
 # TypeScript (if you touched web/)
 pnpm --dir web lint
@@ -383,8 +393,9 @@ Do **not** use Pydantic AI for:
 When a WP is done:
 
 1. [ ] All acceptance criteria from the spec met
-2. [ ] `uv run lint` passes
-3. [ ] `uv run test` passes
+2. [ ] `uv run task lint` passes
+3. [ ] `uv run task test` passes
+4. [ ] `uv run task dbt-parse` passes if `dbt/` or `contracts/sql/` was touched
 4. [ ] `make check` passes end-to-end
 5. [ ] `PROGRESS.md` updated with completion date and notes
 6. [ ] Linear issue moved to `Done` (via Linear MCP)

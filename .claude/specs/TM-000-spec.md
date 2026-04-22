@@ -43,8 +43,8 @@ cd tfl-monitor
 cp .env.example .env     # edit with real keys
 make bootstrap           # install Python + Node deps
 make up                  # start Postgres, Redpanda, Airflow, MinIO
-uv run test              # pytest (passes, even with zero domain tests)
-uv run lint              # ruff + mypy (green)
+uv run task test         # pytest (passes, even with zero domain tests)
+uv run task lint         # ruff + mypy (green)
 pnpm --dir web build     # Next.js builds (empty pages with placeholders)
 ```
 
@@ -570,15 +570,15 @@ exclude = ["scripts/"]
 pythonpath = ["src"]
 asyncio_mode = "auto"
 
-[tool.uv.scripts]
+[tool.taskipy.tasks]
 test = "pytest"
-lint = "bash -c 'ruff check . && ruff format --check . && mypy src'"
-fmt = "bash -c 'ruff check --fix . && ruff format .'"
-dbt-parse = "dbt parse --project-dir dbt --profiles-dir dbt"
+lint = "ruff check . && ruff format --check . && mypy src contracts"
+fmt = "ruff check --fix . && ruff format ."
+dbt-parse = "dbt parse --project-dir dbt --profiles-dir dbt --target ci"
 api = "uvicorn api.main:app --reload --app-dir src"
 ```
 
-**Note:** `[tool.uv.scripts]` is uv's task runner. Invoke with `uv run test`, `uv run lint`, etc. **No Invoke, no Taskfile, no justfile.**
+**Note:** uv does not have a native task runner. Python dev tasks live in `[tool.taskipy.tasks]` (invoked with `uv run task <name>`). System orchestration (Docker, bootstrap, `check`) stays in the `Makefile`. **No Invoke, no justfile, no poethepoet.**
 
 ---
 
@@ -610,8 +610,8 @@ clean: ## Remove Docker Compose + volumes (destructive)
 	docker compose down -v
 
 check: ## Lint + Python tests + TS build
-	uv run lint
-	uv run test
+	uv run task lint
+	uv run task test
 	pnpm --dir web lint
 	pnpm --dir web build
 
@@ -722,10 +722,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
       - run: uv sync
-      - run: uv run lint
-      - run: uv run test
+      - run: uv run task lint
+      - run: uv run task test
       - run: uv run bandit -r src --severity-level high
-      - run: uv run dbt-parse
+      - run: uv run task dbt-parse
         env:
           POSTGRES_HOST: localhost
 
@@ -778,8 +778,8 @@ In `.claude/adrs/`:
 - [ ] Yes — ADR: <link>
 
 ## Checklist
-- [ ] `uv run lint` passes
-- [ ] `uv run test` passes
+- [ ] `uv run task lint` passes
+- [ ] `uv run task test` passes
 - [ ] New files or deps justified
 - [ ] Linear issue updated
 ```
@@ -791,8 +791,8 @@ In `.claude/adrs/`:
 This WP is DONE when:
 
 - [ ] Fresh clone + `make bootstrap` + `make up` works on a machine with only Docker, uv, pnpm, git installed
-- [ ] `uv run test` passes
-- [ ] `uv run lint` passes clean
+- [ ] `uv run task test` passes
+- [ ] `uv run task lint` passes clean
 - [ ] `pnpm --dir web build` passes clean
 - [ ] All files from §4 exist (or `.gitkeep` where indicated)
 - [ ] `from contracts.schemas import LineStatusEvent, ArrivalEvent, DisruptionEvent` works
