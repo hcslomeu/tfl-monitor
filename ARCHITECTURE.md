@@ -1,0 +1,78 @@
+# Architecture
+
+```
+TfL Unified API ──polling──▶ Redpanda (Kafka) ──▶ Postgres (raw) ──▶ dbt ──▶ marts
+                                                                                │
+TfL strategy PDFs ──Docling──▶ embeddings ──▶ Pinecone                          │
+                                               │                                │
+                                               └───────┬────────────────────────┘
+                                                       ▼
+                                            LangGraph agent (SQL ↔ RAG)
+                                                       │
+                                     FastAPI (SSE streaming) ◀┘
+                                               │
+                                               ▼
+                                      Next.js dashboard
+
+ Observability layered across the whole stack:
+ • LangSmith   → LLM + agent traces (routing decisions, retrieval, tokens)
+ • Logfire     → app + infra traces (FastAPI spans, Postgres queries, HTTP calls)
+```
+
+## Components
+
+| Layer | Component | Runtime | Notes |
+|---|---|---|---|
+| Ingestion | `src/ingestion/tfl_client` | Python 3.12 | Async `httpx` client against TfL Unified API |
+| Ingestion | `src/ingestion/producers` | Python 3.12 | `aiokafka` producers emitting tier-2 Kafka events |
+| Broker | Redpanda | Docker (local) / Redpanda Cloud (prod) | Kafka-wire compatible, topics: `line-status`, `arrivals`, `disruptions` |
+| Ingestion | `src/ingestion/consumers` | Python 3.12 | Consumes topics, writes JSONB rows into `raw.*` |
+| Warehouse | Postgres 16 | Docker (local) / Supabase (prod) | Schemas: `raw`, `ref`, `analytics` |
+| Transform | dbt-core + dbt-postgres | CLI | Staging / intermediate / marts under `dbt/models/` |
+| Orchestration | Airflow 2.10 | Docker (local) / Railway (prod) | LocalExecutor; DAGs under `airflow/dags/` |
+| API | FastAPI + sse-starlette | Python 3.12 | OpenAPI 3.1 contract in `contracts/openapi.yaml` |
+| Agent | LangGraph 1.x + Pydantic AI | Python 3.12 | Two tools: `query_warehouse`, `search_tfl_docs` |
+| RAG | LlamaIndex + Pinecone + Docling | Python 3.12 | Hybrid retrieval over TfL strategy PDFs |
+| Frontend | Next.js 15/16 + shadcn/ui (Radix + Nova) | Node 22 | Biome only, TS types generated from OpenAPI |
+
+## Contracts
+
+`contracts/` is the single source of truth. Two tiers of Pydantic schemas:
+
+- **Tier-1** (`contracts/schemas/tfl_api.py`) — raw TfL Unified API shapes
+  (camelCase, nested). Ingestion parses these on the wire.
+- **Tier-2** (`contracts/schemas/{line_status,arrivals,disruptions}.py`) —
+  internal Kafka event wire format (snake_case, flat). Producers emit
+  these; consumers and downstream services speak only this tier.
+
+Normalisation tier-1 → tier-2 is the ingestion client's job (TM-B1+).
+
+## Observability split
+
+| Question | Tool |
+|---|---|
+| How did the agent arrive at that answer? | LangSmith |
+| Which TfL endpoint is throttling us? | Logfire |
+| How many tokens did this conversation cost? | LangSmith |
+| Why is this endpoint p99 latency high? | Logfire |
+| Did the retriever pull the right chunks? | LangSmith |
+| Is the Kafka consumer keeping up? | Logfire |
+
+See [ADR 004](./.claude/adrs/004-logfire-langsmith-split.md).
+
+## Deployment
+
+| Piece | Host |
+|---|---|
+| API + agent + workers | Railway |
+| Frontend | Vercel |
+| Postgres | Supabase free tier |
+| Kafka | Redpanda Cloud Serverless free tier |
+| Vector DB | Pinecone serverless |
+
+## Related ADRs
+
+- [001 — Redpanda over Apache Kafka](./.claude/adrs/001-redpanda-over-kafka.md)
+- [002 — Contracts-first parallelism](./.claude/adrs/002-contracts-first.md)
+- [003 — Airflow on Railway](./.claude/adrs/003-airflow-on-railway.md)
+- [004 — Logfire + LangSmith split](./.claude/adrs/004-logfire-langsmith-split.md)

@@ -1,5 +1,68 @@
 [project]
 name = "tfl-monitor"
-version = "0.1.0"
+version = "0.0.1"
+description = "Real-time data platform for TfL (Transport for London)"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "sse-starlette>=2.1",
+    "httpx>=0.28",
+    "pydantic>=2.9",
+    "pydantic-ai>=0.0.14",
+    "pydantic-settings>=2.6",
+    "aiokafka>=0.12",
+    "psycopg[binary]>=3.2",
+    "langgraph>=1.0",
+    "langsmith>=0.1",
+    "llama-index>=0.12",
+    "pinecone>=5.0",
+    "docling>=2.0",
+    "anthropic>=0.39",
+    "openai>=1.54",
+    "logfire[fastapi,httpx,psycopg]>=3.0",
+    "python-dotenv>=1.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "bandit>=1.7",
+    "dbt-core>=1.9",
+    "dbt-postgres>=1.9",
+    "openapi-spec-validator>=0.7",
+    "taskipy>=1.14",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ingestion", "src/api", "src/agent", "contracts"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+exclude = ["scripts/"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+asyncio_mode = "auto"
+
+[tool.taskipy.tasks]
+test = "pytest || [ $? = 5 ]"
+lint = "ruff check . && ruff format --check . && mypy src contracts"
+fmt = "ruff check --fix . && ruff format ."
+dbt-parse = "dbt parse --project-dir dbt --profiles-dir dbt --target ci"
+api = "uvicorn api.main:app --reload --app-dir src"

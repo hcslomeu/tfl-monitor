@@ -35,7 +35,7 @@ This repository is reviewed by the author and by Codex. Any structure too comple
 Hard rules:
 
 1. **One `pyproject.toml` at the root.** Python modules are plain folders under `src/`, not sub-packages with their own `pyproject.toml`.
-2. **A short `Makefile`** (max ~15 targets) for cross-tool orchestration. Pure-Python tasks use `uv run <task>` via `[tool.uv.scripts]`.
+2. **A short `Makefile`** (max ~15 targets) for system orchestration (Docker, bootstrap, `check`). Pure-Python dev tasks use `uv run task <name>` via `[tool.taskipy.tasks]` in `pyproject.toml`.
 3. **Minimal Docker Compose**: only services essential for local dev. No sidecars, no local observability (Grafana/Prometheus stay out — we use hosted observability instead).
 4. **No "just-in-case" abstractions.** If there is one consumer of a function, don't create an interface. If there is one vector store (Pinecone), don't create an abstract factory. Abstract when the second case arrives.
 5. **No elaborate hierarchical configuration.** One `.env` file. No nested Pydantic `BaseSettings` unless there are ≥15 variables.
@@ -184,9 +184,9 @@ Follow three phases, using `/clear` between them:
 Always run:
 
 ```bash
-uv run lint      # ruff check + ruff format --check + mypy
-uv run test      # pytest
-uv run dbt-parse # if you touched dbt/
+uv run task lint      # ruff check + ruff format --check + mypy
+uv run task test      # pytest
+uv run task dbt-parse # if you touched dbt/
 
 # TypeScript (if you touched web/)
 pnpm --dir web lint
@@ -383,8 +383,8 @@ Do **not** use Pydantic AI for:
 When a WP is done:
 
 1. [ ] All acceptance criteria from the spec met
-2. [ ] `uv run lint` passes
-3. [ ] `uv run test` passes
+2. [ ] `uv run task lint` passes
+3. [ ] `uv run task test` passes
 4. [ ] `make check` passes end-to-end
 5. [ ] `PROGRESS.md` updated with completion date and notes
 6. [ ] Linear issue moved to `Done` (via Linear MCP)

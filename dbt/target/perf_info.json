@@ -1,0 +1,40 @@
+{
+    "path_count": 131,
+    "parsed_path_count": 131,
+    "static_analysis_path_count": 0,
+    "static_analysis_parsed_path_count": 0,
+    "is_partial_parse_enabled": true,
+    "is_static_analysis_enabled": true,
+    "read_files_elapsed": 0.04273895896039903,
+    "load_macros_elapsed": 0.32828374998643994,
+    "parse_project_elapsed": 0.010807999991811812,
+    "patch_sources_elapsed": 1.2125005014240742e-05,
+    "process_manifest_elapsed": 0.062129916972480714,
+    "load_all_elapsed": 0.47309491701889783,
+    "projects": [
+        {
+            "project_name": "tfl_monitor",
+            "elapsed": 0.006219082977622747,
+            "parsers": [],
+            "parsed_path_count": 0
+        },
+        {
+            "project_name": "dbt_postgres",
+            "elapsed": 0.002321124018635601,
+            "parsers": [],
+            "parsed_path_count": 0
+        },
+        {
+            "project_name": "dbt",
+            "elapsed": 0.0022019160096533597,
+            "parsers": [
+                {
+                    "parser": "doc",
+                    "elapsed": 0.00015870900824666023,
+                    "parsed_path_count": 1
+                }
+            ],
+            "parsed_path_count": 1
+        }
+    ]
+}

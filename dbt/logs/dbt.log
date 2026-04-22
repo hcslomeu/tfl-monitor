@@ -1,0 +1,26 @@
+[0m11:57:26.724581 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'start', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x10bd90050>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x10bee9c10>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x10bee98e0>]}
+
+
+============================== 11:57:26.758952 | 6e7b3b42-c331-43bf-8ad7-cb4ebda735de ==============================
+[0m11:57:26.758952 [info ] [MainThread]: Running with dbt=1.11.8
+[0m11:57:26.759426 [debug] [MainThread]: running dbt with arguments {'partial_parse': 'True', 'no_print': 'None', 'quiet': 'False', 'indirect_selection': 'eager', 'log_path': 'dbt/logs', 'introspect': 'True', 'debug': 'False', 'printer_width': '80', 'warn_error': 'None', 'empty': 'None', 'warn_error_options': 'WarnErrorOptionsV2(error=[], warn=[], silence=[])', 'fail_fast': 'False', 'use_experimental_parser': 'False', 'send_anonymous_usage_stats': 'True', 'static_parser': 'True', 'version_check': 'True', 'use_colors': 'True', 'target_path': 'None', 'invocation_command': 'dbt parse --project-dir dbt --profiles-dir dbt --target ci', 'log_cache_events': 'False', 'profiles_dir': 'dbt', 'write_json': 'True', 'log_format': 'default', 'cache_selected_only': 'False'}
+[0m11:57:28.744707 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'project_id', 'label': '6e7b3b42-c331-43bf-8ad7-cb4ebda735de', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x10c1d4260>]}
+[0m11:57:28.804227 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'adapter_info', 'label': '6e7b3b42-c331-43bf-8ad7-cb4ebda735de', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x10bf67710>]}
+[0m11:57:28.805555 [info ] [MainThread]: Registered adapter: postgres=1.10.0
+[0m11:57:28.905095 [debug] [MainThread]: checksum: 1a654e0e21f04d78bd106d0138431dae4f5bbe7f9fd5a8826f0c33d7c8d00485, vars: {}, profile: , target: ci, version: 1.11.8
+[0m11:57:28.905622 [info ] [MainThread]: Unable to do partial parsing because saved manifest not found. Starting full parse.
+[0m11:57:28.905864 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'partial_parser', 'label': '6e7b3b42-c331-43bf-8ad7-cb4ebda735de', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x10c134380>]}
+[0m11:57:29.369893 [warn ] [MainThread]: [[33mWARNING[0m]: Configuration paths exist in your dbt_project.yml file which do not apply to any resources.
+There are 3 unused configuration paths:
+- models.tfl_monitor.intermediate
+- models.tfl_monitor.marts
+- models.tfl_monitor.staging
+[0m11:57:29.373203 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'load_project', 'label': '6e7b3b42-c331-43bf-8ad7-cb4ebda735de', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x10afc6c00>]}
+[0m11:57:29.375880 [info ] [MainThread]: Performance info: dbt/target/perf_info.json
+[0m11:57:29.403426 [debug] [MainThread]: Wrote artifact WritableManifest to dbt/target/manifest.json
+[0m11:57:29.404819 [debug] [MainThread]: Wrote artifact SemanticManifest to dbt/target/semantic_manifest.json
+[0m11:57:29.438691 [debug] [MainThread]: Resource report: {"command_name": "parse", "command_success": true, "command_wall_clock_time": 2.7771616, "process_in_blocks": "0", "process_kernel_time": 0.496034, "process_mem_max_rss": "135102464", "process_out_blocks": "0", "process_user_time": 2.252489}
+[0m11:57:29.439154 [debug] [MainThread]: Command `dbt parse` succeeded at 11:57:29.439074 after 2.78 seconds
+[0m11:57:29.439434 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'end', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x1034331d0>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x10b65f680>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x10b754350>]}
+[0m11:57:29.439691 [debug] [MainThread]: Flushing usage events
+[0m11:57:30.026091 [debug] [MainThread]: An error was encountered while trying to flush usage events
