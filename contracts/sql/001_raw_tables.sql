@@ -17,6 +17,10 @@ CREATE TABLE IF NOT EXISTS raw.line_status (
     payload JSONB NOT NULL
 );
 
+ALTER TABLE raw.line_status
+    ALTER COLUMN event_id SET DEFAULT gen_random_uuid(),
+    ALTER COLUMN ingested_at SET DEFAULT now();
+
 CREATE TABLE IF NOT EXISTS raw.arrivals (
     event_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     ingested_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -25,6 +29,10 @@ CREATE TABLE IF NOT EXISTS raw.arrivals (
     payload JSONB NOT NULL
 );
 
+ALTER TABLE raw.arrivals
+    ALTER COLUMN event_id SET DEFAULT gen_random_uuid(),
+    ALTER COLUMN ingested_at SET DEFAULT now();
+
 CREATE TABLE IF NOT EXISTS raw.disruptions (
     event_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     ingested_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -32,3 +40,7 @@ CREATE TABLE IF NOT EXISTS raw.disruptions (
     source TEXT NOT NULL,
     payload JSONB NOT NULL
 );
+
+ALTER TABLE raw.disruptions
+    ALTER COLUMN event_id SET DEFAULT gen_random_uuid(),
+    ALTER COLUMN ingested_at SET DEFAULT now();
