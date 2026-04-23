@@ -59,6 +59,10 @@ exclude = ["scripts/"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 asyncio_mode = "auto"
+addopts = "-m 'not integration'"
+markers = [
+    "integration: requires live services (Postgres, Kafka, etc.); opt in with -m integration",
+]
 
 [tool.taskipy.tasks]
 # --exitfirst-on-collection-errors via Python wrapper: treat "no tests collected" (exit 5) as success.

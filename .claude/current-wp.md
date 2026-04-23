@@ -1,1 +1,1 @@
-TM-000 — Contracts and scaffold (in progress)
+TM-A1 — Docker Compose: Postgres + Redpanda + Airflow + MinIO (done 2026-04-23)

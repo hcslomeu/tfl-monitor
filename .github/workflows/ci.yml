@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  python:
+  lint:
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -29,7 +29,6 @@ jobs:
       - name: Verify dbt sources mirror the contract
         run: diff contracts/dbt_sources.yml dbt/sources/tfl.yml
       - run: uv run task lint
-      - run: uv run task test
       - run: uv run bandit -r src contracts scripts --severity-level high
       - run: uv run task dbt-parse
         env:
@@ -38,6 +37,14 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: postgres
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - run: uv sync --frozen
+      - run: uv run task test
 
   frontend:
     runs-on: ubuntu-latest

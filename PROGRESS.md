@@ -5,7 +5,7 @@ Current state of work packages. Update the status column as WPs land.
 | Phase | WP | Title | Track | Status | Notes |
 |---|---|---|---|---|---|
 | 0 | TM-000 | Contracts and scaffold | — | ✅ 2026-04-22 | Scaffold, contracts, tier-1/tier-2 schemas, fixtures fetched |
-| 1 | TM-A1 | Docker Compose + Postgres + Redpanda + Airflow | A-infra | ⬜ | |
+| 1 | TM-A1 | Docker Compose + Postgres + Redpanda + Airflow | A-infra | ✅ 2026-04-23 | Round 3 follow-up applied: pgcrypto + DB-side defaults on raw tables; integration smoke test gated on `DATABASE_URL` |
 | 1 | TM-B1 | Async TfL client + fixtures | B-ingestion | ⬜ | |
 | 2 | TM-C1 | dbt scaffold | C-dbt | ⬜ | |
 | 2 | TM-D1 | FastAPI skeleton + Logfire wiring | D-api-agent | ⬜ | |
