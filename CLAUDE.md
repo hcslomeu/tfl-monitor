@@ -27,6 +27,11 @@ The following must remain in **English** (no PT-BR anywhere, ever):
   `gh pr review`, `gh pr comment`, `gh issue comment`, or the GitHub UI);
   branch names; tag messages.
 - Markdown content of this file and `AGENTS.md`
+- **All coordination Markdown under `.claude/`** — `.claude/napkin.md`,
+  `.claude/current-wp.md`, every `.claude/specs/TM-*-{spec,research,plan}.md`,
+  every `.claude/adrs/NNN-*.md`. These outlive the session, are read by
+  future Claude / Codex agents, and are committed to git. Chat replies
+  about them stay PT-BR; the file content itself is English.
 
 **Rule of thumb:** if the text lives on disk in `.git/` or on
 `github.com`, it is English. If it lives only in the terminal
