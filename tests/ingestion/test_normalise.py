@@ -147,7 +147,10 @@ def test_disruption_id_independent_of_route_order() -> None:
         [
             {
                 **base,
-                "affectedRoutes": [{"id": "victoria"}, {"id": "central"}],
+                "affectedRoutes": [
+                    {"id": "r1", "lineId": "victoria"},
+                    {"id": "r2", "lineId": "central"},
+                ],
                 "affectedStops": [],
             }
         ]
@@ -156,7 +159,10 @@ def test_disruption_id_independent_of_route_order() -> None:
         [
             {
                 **base,
-                "affectedRoutes": [{"id": "central"}, {"id": "victoria"}],
+                "affectedRoutes": [
+                    {"id": "r2", "lineId": "central"},
+                    {"id": "r1", "lineId": "victoria"},
+                ],
                 "affectedStops": [],
             }
         ]
@@ -165,6 +171,8 @@ def test_disruption_id_independent_of_route_order() -> None:
     [payload_a] = disruption_payloads(response_a)
     [payload_b] = disruption_payloads(response_b)
 
+    assert payload_a.affected_routes == ["victoria", "central"]
+    assert payload_b.affected_routes == ["central", "victoria"]
     assert payload_a.disruption_id == payload_b.disruption_id
 
 
@@ -300,3 +308,23 @@ def test_disruption_payload_uses_lineid_not_id_for_affected_routes() -> None:
     [payload] = disruption_payloads(response)
 
     assert payload.affected_routes == ["victoria", "central"]
+
+
+def test_disruption_id_distinguishes_piccadilly_fixture_entries(
+    disruptions_tube_fixture: list[dict[str, Any]],
+) -> None:
+    """Regression: distinct ``type``/``closureText`` must produce distinct IDs.
+
+    Indices 6, 9 and 15 of ``disruptions_tube.json`` share the Piccadilly-line
+    description but differ in ``type`` (`lineInfo` vs `routeBlocking`) and/or
+    ``closureText``; collapsing them all onto the same synthetic ID would make
+    consumers treat semantically distinct events as duplicates.
+    """
+    response = _DISRUPTION_ADAPTER.validate_python(
+        [disruptions_tube_fixture[idx] for idx in (6, 9, 15)]
+    )
+
+    payloads = disruption_payloads(response)
+
+    ids = {p.disruption_id for p in payloads}
+    assert len(ids) >= 2, "type/closure_text differences must surface as distinct disruption_ids"

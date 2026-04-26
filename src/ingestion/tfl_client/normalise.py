@@ -145,11 +145,14 @@ def disruption_payloads(
     adapter synthesises:
 
     - ``disruption_id``: first ``32`` hex chars of a SHA-256 digest over
-      ``{"category", "description": stripped, "affected_routes": sorted([...])}``,
-      stable across processes (Python's built-in ``hash()`` is
-      randomised per process and is therefore not used). The description
-      is ``.strip()``-normalised so trivial upstream whitespace changes
-      do not invalidate the synthetic ID.
+      ``{"category", "type", "closure_text", "description": stripped,
+      "affected_routes": sorted([...])}``, stable across processes
+      (Python's built-in ``hash()`` is randomised per process and is
+      therefore not used). The description is ``.strip()``-normalised so
+      trivial upstream whitespace changes do not invalidate the synthetic
+      ID; ``type`` and ``closure_text`` are included so distinct events
+      sharing a description (common on the Piccadilly line in the
+      committed fixture) get distinct IDs.
     - ``created`` / ``last_update``: current UTC time. Downstream
       consumers must not rely on these for deduplication without a
       TfL-supplied key.
@@ -168,6 +171,8 @@ def disruption_payloads(
     for item in response:
         affected_routes = _extract_ids(item.affected_routes, "lineId")
         affected_stops = _extract_ids(item.affected_stops, "naptanId")
+        closure_text = item.closure_text or ""
+        disruption_type = item.type or ""
         try:
             category = DisruptionCategory(item.category)
         except ValueError:
@@ -177,6 +182,8 @@ def disruption_payloads(
                 disruption_id=_synthetic_disruption_id(
                     category=item.category,
                     description=item.description,
+                    disruption_type=disruption_type,
+                    closure_text=closure_text,
                     affected_routes=affected_routes,
                 ),
                 category=category,
@@ -185,7 +192,7 @@ def disruption_payloads(
                 summary=item.description[:_SUMMARY_MAX_LENGTH],
                 affected_routes=affected_routes,
                 affected_stops=affected_stops,
-                closure_text=item.closure_text or "",
+                closure_text=closure_text,
                 severity=0,
                 created=now,
                 last_update=now,
@@ -214,17 +221,26 @@ def _synthetic_disruption_id(
     *,
     category: str,
     description: str,
+    disruption_type: str,
+    closure_text: str,
     affected_routes: list[str],
 ) -> str:
     """Build a stable synthetic disruption ID via SHA-256.
 
-    The built-in ``hash()`` is unsuitable here because it is randomised
-    per Python process (PYTHONHASHSEED) and therefore unstable across
-    runs and workers.
+    Hash inputs include ``type`` (e.g. ``lineInfo`` / ``routeBlocking`` /
+    ``lineBlocking``) and ``closure_text`` (e.g. ``severeDelays`` /
+    ``partSuspended`` / ``suspended``) so semantically distinct events
+    that happen to share a description — observable in
+    ``tests/fixtures/tfl/disruptions_tube.json`` for the Piccadilly line —
+    no longer collapse onto the same ID. The built-in ``hash()`` is
+    unsuitable here because it is randomised per Python process
+    (``PYTHONHASHSEED``) and therefore unstable across runs and workers.
     """
     payload = json.dumps(
         {
             "category": category,
+            "type": disruption_type,
+            "closure_text": closure_text,
             "description": description.strip(),
             "affected_routes": sorted(affected_routes),
         },

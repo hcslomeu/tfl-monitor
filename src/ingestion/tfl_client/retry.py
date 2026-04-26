@@ -58,8 +58,10 @@ async def with_retry(
 
     Retries on ``httpx.TimeoutException``, ``httpx.TransportError``, and
     HTTP responses whose status code is in :data:`RETRYABLE_STATUS_CODES`.
-    Honours ``Retry-After`` for 429 responses when the header is a positive
-    integer; otherwise applies exponential backoff capped at 10 seconds.
+    Honours ``Retry-After`` for 429 and 503 responses (the codes in
+    :data:`_RETRY_AFTER_STATUS_CODES`) when the header is a positive
+    integer; otherwise — and for the other 5xx codes — applies
+    exponential backoff capped at 10 seconds.
 
     Args:
         call: Coroutine factory returning a fresh ``httpx.Response``.
