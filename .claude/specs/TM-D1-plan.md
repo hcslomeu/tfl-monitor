@@ -143,8 +143,8 @@ PR body (English):
 - [ ] OpenAPI drift test green (both directions).
 - [ ] `src/api/main.py` CORS allow-list contains both local and Vercel
   origins.
-- [ ] `uv run task lint` + `uv run task test` + `uv run bandit -r src`
-  + `make check` all exit 0.
+- [ ] `uv run task lint` + `uv run task test`
+  + `uv run bandit -r src --severity-level high` + `make check` all exit 0.
 - [ ] PR opened with `Closes TM-6` in the body.
 - [ ] `PROGRESS.md` TM-D1 row updated to ✅ with the completion date.
 

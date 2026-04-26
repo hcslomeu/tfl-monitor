@@ -234,10 +234,10 @@ Files:
 ### Phase 3.4 — Verification gate
 
 ```bash
-uv run task lint          # ruff + mypy strict on src/ingestion + contracts
-uv run task test          # adds tests/ingestion/*
-uv run bandit -r src      # HIGH severity only
-make check                # includes dbt-parse + TS
+uv run task lint                                  # ruff + mypy strict on src/ingestion + contracts
+uv run task test                                  # adds tests/ingestion/*
+uv run bandit -r src --severity-level high        # HIGH severity only
+make check                                        # includes dbt-parse + TS
 ```
 
 All must exit 0 before PR. If `mypy strict` rejects `TypeAdapter`'s
@@ -269,7 +269,7 @@ PR body (English):
   every behaviour listed in Phase 3.3; all green.
 - [ ] `uv run task lint` passes (ruff + mypy strict).
 - [ ] `uv run task test` passes (existing + new).
-- [ ] `uv run bandit -r src` passes with no HIGH severity findings.
+- [ ] `uv run bandit -r src --severity-level high` passes with no findings.
 - [ ] `make check` passes end-to-end.
 - [ ] PR opened with `Closes TM-4` in body.
 - [ ] `PROGRESS.md` TM-B1 row updated to ✅ with the completion date.

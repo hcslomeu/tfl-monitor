@@ -96,16 +96,22 @@ PR body structure (English, per CLAUDE.md §"Language and communication"):
 
 - **Summary** — 2 lines pointing at TM-000 scope absorption.
 - **Why close without implementation** — reference research file.
-- **What this PR actually touches** — 3 `.gitkeep`s + PROGRESS.md.
+- **What this PR actually touches** — `PROGRESS.md` plus the Phase A
+  spec files under `.claude/specs/TM-{B1,C1,D1}-{research,plan}.md`
+  (the `.gitkeep` pins were already committed by TM-000; no `dbt/`
+  files change here).
 - **Acceptance criteria** — checklist copied from research, all
   already-green items marked `[x]`.
 - **Closes TM-5**.
 
 ## Success criteria (copy of research, now checkable)
 
-- [ ] `dbt/models/{staging,intermediate,marts}/.gitkeep` are committed.
-- [ ] `PROGRESS.md` TM-C1 row reads ✅ with the 2026-04-23 date and a
+- [x] `dbt/models/{staging,intermediate,marts}/.gitkeep` are committed
+  (verified `git ls-files dbt/models` on `2026-04-23`; pins came from
+  TM-000).
+- [x] `PROGRESS.md` TM-C1 row reads ✅ with the 2026-04-23 date and a
   one-liner citing TM-000 absorption.
-- [ ] CI green on `main` after merge (all three jobs).
+- [ ] CI green on `main` after merge (all three jobs) — checked once
+  the PR merges.
 - [ ] Linear TM-5 transitions to Done on merge (automatic via the
-  Linear↔GitHub integration).
+  Linear↔GitHub integration) — checked once the PR merges.
