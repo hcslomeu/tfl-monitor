@@ -13,6 +13,11 @@ import httpx
 
 RETRYABLE_STATUS_CODES: frozenset[int] = frozenset({429, 500, 502, 503, 504})
 
+# RFC 9110 §10.2.3 / §15.5.4: ``Retry-After`` MAY accompany ``429``
+# (rate limit) and ``503`` (Service Unavailable). We honour both;
+# other 5xx responses use exponential backoff.
+_RETRY_AFTER_STATUS_CODES: frozenset[int] = frozenset({429, 503})
+
 _BASE_BACKOFF_SECONDS = 0.5
 _MAX_BACKOFF_SECONDS = 10.0
 
@@ -91,7 +96,11 @@ async def with_retry(
         if attempt == max_attempts - 1:
             break
 
-        delay = _retry_after_seconds(response) if response.status_code == 429 else None
+        delay = (
+            _retry_after_seconds(response)
+            if response.status_code in _RETRY_AFTER_STATUS_CODES
+            else None
+        )
         if delay is None:
             delay = _exponential_backoff(attempt)
         await asyncio.sleep(delay)

@@ -185,3 +185,118 @@ def test_disruption_unknown_category_falls_back_to_undefined() -> None:
     [payload] = disruption_payloads(response)
 
     assert payload.category == DisruptionCategory.UNDEFINED
+
+
+def test_line_status_skips_unknown_transport_mode() -> None:
+    response = _LINE_RESPONSE_ADAPTER.validate_python(
+        [
+            {
+                "id": "alien-line",
+                "name": "Alien Line",
+                "modeName": "hyperloop",
+                "lineStatuses": [
+                    {
+                        "statusSeverity": 10,
+                        "statusSeverityDescription": "Good Service",
+                        "validityPeriods": [],
+                    }
+                ],
+            },
+            {
+                "id": "victoria",
+                "name": "Victoria",
+                "modeName": "tube",
+                "lineStatuses": [
+                    {
+                        "statusSeverity": 10,
+                        "statusSeverityDescription": "Good Service",
+                        "validityPeriods": [],
+                    }
+                ],
+            },
+        ]
+    )
+
+    payloads = line_status_payloads(response)
+
+    assert len(payloads) == 1
+    assert payloads[0].line_id == "victoria"
+
+
+def test_line_status_default_validity_shared_across_payloads() -> None:
+    response = _LINE_RESPONSE_ADAPTER.validate_python(
+        [
+            {
+                "id": f"line-{idx}",
+                "name": f"Line {idx}",
+                "modeName": "tube",
+                "lineStatuses": [
+                    {
+                        "statusSeverity": 10,
+                        "statusSeverityDescription": "Good Service",
+                        "validityPeriods": [],
+                    }
+                ],
+            }
+            for idx in range(5)
+        ]
+    )
+
+    payloads = line_status_payloads(response)
+
+    assert len(payloads) == 5
+    valid_from_values = {p.valid_from for p in payloads}
+    valid_to_values = {p.valid_to for p in payloads}
+    assert len(valid_from_values) == 1, "default valid_from must be captured once per call"
+    assert len(valid_to_values) == 1, "default valid_to must be captured once per call"
+
+
+def test_disruption_id_ignores_trailing_whitespace_in_description() -> None:
+    base = {
+        "category": "RealTime",
+        "categoryDescription": "RealTime",
+        "affectedRoutes": [],
+        "affectedStops": [],
+        "closureText": "",
+    }
+    response_clean = _DISRUPTION_ADAPTER.validate_python(
+        [{**base, "description": "Severe delays on Victoria."}]
+    )
+    response_padded = _DISRUPTION_ADAPTER.validate_python(
+        [{**base, "description": "  Severe delays on Victoria.  \n"}]
+    )
+
+    [payload_clean] = disruption_payloads(response_clean)
+    [payload_padded] = disruption_payloads(response_padded)
+
+    assert payload_clean.disruption_id == payload_padded.disruption_id
+
+
+def test_disruption_payload_uses_lineid_not_id_for_affected_routes() -> None:
+    response = _DISRUPTION_ADAPTER.validate_python(
+        [
+            {
+                "category": "RealTime",
+                "categoryDescription": "RealTime",
+                "description": "Engineering works.",
+                "affectedRoutes": [
+                    {
+                        "id": "victoria-route-segment-1",
+                        "lineId": "victoria",
+                        "name": "Victoria",
+                    },
+                    {
+                        "id": "central-route-segment-3",
+                        "lineId": "central",
+                        "name": "Central",
+                    },
+                ],
+                "affectedStops": [],
+                "closureText": "",
+            }
+        ]
+    )
+
+    [payload] = disruption_payloads(response)
+
+    assert payload.affected_routes == ["victoria", "central"]

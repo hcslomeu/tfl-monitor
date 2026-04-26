@@ -204,6 +204,32 @@ async def test_429_falls_back_to_backoff_on_unparseable_retry_after(
     assert sleeps == [0.5]
 
 
+async def test_503_respects_retry_after(
+    line_status_tube_fixture: list[dict[str, Any]],
+    make_transport: Callable[[Callable[[httpx.Request], httpx.Response]], httpx.MockTransport],
+    script_responses: Callable[[list[httpx.Response]], Callable[[httpx.Request], httpx.Response]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sleeps: list[float] = []
+
+    async def _fake_sleep(delay: float) -> None:
+        sleeps.append(delay)
+
+    monkeypatch.setattr("ingestion.tfl_client.retry.asyncio.sleep", _fake_sleep)
+
+    handler = script_responses(
+        [
+            httpx.Response(503, headers={"Retry-After": "2"}),
+            _json_response(line_status_tube_fixture),
+        ]
+    )
+    async with _client(make_transport(handler), max_attempts=2) as client:
+        result = await client.fetch_line_statuses(["tube"])
+
+    assert len(result) == len(line_status_tube_fixture)
+    assert sleeps == [2.0]
+
+
 async def test_500_retries_then_succeeds(
     line_status_tube_fixture: list[dict[str, Any]],
     make_transport: Callable[[Callable[[httpx.Request], httpx.Response]], httpx.MockTransport],

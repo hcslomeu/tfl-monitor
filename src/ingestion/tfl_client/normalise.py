@@ -17,6 +17,8 @@ import hashlib
 import json
 from datetime import UTC, datetime, timedelta
 
+import logfire
+
 from contracts.schemas.arrivals import ArrivalPayload
 from contracts.schemas.common import DisruptionCategory, TransportMode
 from contracts.schemas.disruptions import DisruptionPayload
@@ -58,9 +60,19 @@ def line_status_payloads(
         order with stable iteration over ``lineStatuses`` and
         ``validityPeriods``.
     """
+    fallback_now = datetime.now(UTC)
+    fallback_until = fallback_now + timedelta(hours=_DEFAULT_VALIDITY_HOURS)
     payloads: list[LineStatusPayload] = []
     for line in response:
-        mode = TransportMode(line.mode_name)
+        try:
+            mode = TransportMode(line.mode_name)
+        except ValueError:
+            logfire.warn(
+                "tfl.normalise.unknown_transport_mode",
+                line_id=line.id,
+                mode_name=line.mode_name,
+            )
+            continue
         for status in line.line_statuses:
             common: dict[str, object] = {
                 "line_id": line.id,
@@ -80,12 +92,11 @@ def line_status_payloads(
                         )
                     )
             else:
-                now = datetime.now(UTC)
                 payloads.append(
                     LineStatusPayload(
                         **common,  # type: ignore[arg-type]
-                        valid_from=now,
-                        valid_to=now + timedelta(hours=_DEFAULT_VALIDITY_HOURS),
+                        valid_from=fallback_now,
+                        valid_to=fallback_until,
                     )
                 )
     return payloads
@@ -134,9 +145,11 @@ def disruption_payloads(
     adapter synthesises:
 
     - ``disruption_id``: first ``32`` hex chars of a SHA-256 digest over
-      ``{"category", "description", "affected_routes": sorted([...])}``,
+      ``{"category", "description": stripped, "affected_routes": sorted([...])}``,
       stable across processes (Python's built-in ``hash()`` is
-      randomised per process and is therefore not used).
+      randomised per process and is therefore not used). The description
+      is ``.strip()``-normalised so trivial upstream whitespace changes
+      do not invalidate the synthetic ID.
     - ``created`` / ``last_update``: current UTC time. Downstream
       consumers must not rely on these for deduplication without a
       TfL-supplied key.
@@ -153,7 +166,7 @@ def disruption_payloads(
     now = datetime.now(UTC)
     payloads: list[DisruptionPayload] = []
     for item in response:
-        affected_routes = _extract_ids(item.affected_routes, "id")
+        affected_routes = _extract_ids(item.affected_routes, "lineId")
         affected_stops = _extract_ids(item.affected_stops, "naptanId")
         try:
             category = DisruptionCategory(item.category)
@@ -182,7 +195,13 @@ def disruption_payloads(
 
 
 def _extract_ids(items: list[dict[str, object]], key: str) -> list[str]:
-    """Return the string values of ``key`` across a list of dict entries."""
+    """Return the string values of ``key`` across a list of dict entries.
+
+    For TfL ``affectedRoutes`` entries the correct key is ``lineId`` (the
+    parent line identifier) rather than ``id`` (which identifies the
+    specific route segment); ``DisruptionPayload.affected_routes`` is
+    documented as a list of line identifiers, so consumers join on it.
+    """
     extracted: list[str] = []
     for entry in items:
         value = entry.get(key)
@@ -206,7 +225,7 @@ def _synthetic_disruption_id(
     payload = json.dumps(
         {
             "category": category,
-            "description": description,
+            "description": description.strip(),
             "affected_routes": sorted(affected_routes),
         },
         sort_keys=True,
