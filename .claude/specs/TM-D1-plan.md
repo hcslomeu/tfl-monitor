@@ -113,10 +113,10 @@ turns out to require a new dep (CLAUDE.md §"Anti-patterns — YAGNI").
 Before opening the PR:
 
 ```bash
-uv run task lint          # ruff + ruff format + mypy strict
-uv run task test          # includes new tests/api/*
-uv run bandit -r src      # HIGH severity only
-make check                # broader; runs dbt-parse + TS lint too
+uv run task lint                                  # ruff + ruff format + mypy strict
+uv run task test                                  # includes new tests/api/*
+uv run bandit -r src --severity-level high        # HIGH severity only
+make check                                        # broader; runs dbt-parse + TS lint too
 ```
 
 All must exit 0. If mypy strict complains about `app.routes` typing,

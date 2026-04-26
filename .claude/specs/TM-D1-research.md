@@ -38,7 +38,13 @@ CORSMiddleware(
 )
 ```
 
-No `"*"` in production origins — matches CLAUDE.md security rule.
+CORS uses an explicit allow-list (no wildcard `*`), which satisfies the
+"no `*` in production" rule from CLAUDE.md §"Security-first". **However,
+the list currently contains only `http://localhost:3000`** and is
+missing the production Vercel origin documented at
+`contracts/openapi.yaml` lines 12–13 (`https://tfl-monitor.vercel.app`).
+That gap would block all production dashboard requests and is treated
+as a deployment blocker in the gap analysis below (G4).
 
 ### Logfire wiring — `src/api/observability.py`
 
@@ -95,14 +101,15 @@ required Logfire surface.
 | G1 | Parametrised test `tests/api/test_stubs.py` asserting every non-`/health` route returns 501 with the documented hint | Locks the spec (cannot accidentally ship a half-wired route before its owning WP) | ~30 lines pytest; adds `tests/api/` folder |
 | G2 | Test asserting every `operationId` in `contracts/openapi.yaml` has a matching FastAPI route (drift detector) | Catches silent route loss | ~40 lines; uses `yaml` + `app.routes` |
 | G3 | Document `/health` shape in a `src/api/README.md` or extend docstring | Portfolio-optics; explain why `dependencies` is `{}` until TM-D2 | docs only |
-| G4 | Extend CORS allow-list to include the Vercel prod origin (`https://tfl-monitor.vercel.app`) | Matches the value quoted in `contracts/openapi.yaml` info | 1 line change |
+| G4 | **Deployment blocker** — extend CORS allow-list to include the Vercel prod origin (`https://tfl-monitor.vercel.app`) so the production dashboard can reach the API | Without this, all prod requests fail CORS preflight; the openapi.yaml info block (lines 12–13) already declares this origin as in-scope | 1 line change |
 | G5 | Ship a `get_health` dependency-check scaffold (empty dict today) | Shape-only; actual DB/Kafka checks land in TM-D2/TM-B3 | `health.py` helper |
 | G6 | Add an `api/config.py` Pydantic `Settings` — not yet required (no env vars consumed outside observability) | YAGNI per CLAUDE.md rule 5 (< 15 vars) | defer |
 | G7 | Ensure `src/api/__init__.py` is valid (empty file today) | Neutral | no action |
 
-G1 and G2 give the WP something concrete to ship. G4 is a real bugfix
-(prod CORS origin is missing). G3 is optional polish. G5/G6/G7 are
-YAGNI.
+G1 and G2 give the WP something concrete to ship. **G4 is reclassified
+as P0/critical — a real production blocker, not optional polish** (the
+openapi.yaml spec already declares the missing origin). G3 is optional
+polish. G5/G6/G7 are YAGNI.
 
 ## Key documents reviewed
 
@@ -115,17 +122,15 @@ YAGNI.
 
 ## Open questions for the planning phase
 
-1. **Headline question.** Spec's declared AC ("skeleton + 501 + Logfire
-   configured") is already satisfied. Should TM-D1:
-   - (a) Ship G1 + G2 + G4 as the concrete deliverable (two new tests
-     + one CORS line). Small PR, real safety net added.
-   - (b) Close as already-delivered — PR only touches `PROGRESS.md`
-     and Linear TM-6, flagging that TM-000 absorbed the work.
-   - (c) Expand to partial TM-D2 groundwork (e.g. a `dependencies.py`
-     placeholder). Risks scope creep and cross-track contamination.
-2. G4 (adding the Vercel prod origin) involves a production security
-   surface — confirm whether it belongs in TM-D1 or in TM-A5 (deploy).
-3. G2 requires adding `pyyaml` (or reading the YAML with the existing
-   `openapi-spec-validator` dev dep). Adding a runtime dep for a test
-   is overkill; prefer `openapi-spec-validator` which is already
-   present.
+1. **Headline question — RESOLVED on 2026-04-23.** The spec's declared
+   AC from `SETUP.md` §7.3 ("skeleton + 501 + Logfire configured") is
+   already satisfied by TM-000, but G4 is a deployment blocker (CORS
+   omits the production Vercel origin). Author chose option **(a)**:
+   ship G1 + G2 + G4 as the concrete deliverable in TM-D1. Option (b)
+   "close as already-delivered" was rejected because deferring G4 to
+   TM-A5 (deploy) would push a known production blocker out of the
+   security/API track that owns it.
+2. G2 implementation — confirmed: use the loader bundled with
+   `openapi-spec-validator` (already a dev dep). No new runtime
+   dependency; if `pyyaml` is needed, add it only to the `dev` group
+   and justify in the PR body.

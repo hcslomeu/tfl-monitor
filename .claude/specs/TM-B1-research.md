@@ -45,7 +45,7 @@ roundtrips hold; TM-B1 must not break these.
 
 ### Ingestion scaffold — empty
 
-```
+```text
 src/ingestion/
   __init__.py          (0 bytes)
   tfl_client/

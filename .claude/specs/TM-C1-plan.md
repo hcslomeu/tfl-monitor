@@ -21,10 +21,11 @@ and §"Anti-patterns — YAGNI", no additional surface is justified here.
 **Decision (author-approved):** close TM-C1 as **already-delivered**.
 Ship a minimal inline commit that:
 
-1. Pins empty dbt model directories with `.gitkeep` so TM-C2 does not
-   start by re-creating them.
-2. Updates `PROGRESS.md` to flip the TM-C1 row to ✅ with a note
+1. Updates `PROGRESS.md` to flip the TM-C1 row to ✅ with a note
    pointing back to TM-000.
+2. Verifies the `.gitkeep` files under `dbt/models/{staging,intermediate,marts}/`
+   are already committed (they were added during the TM-000 scaffold —
+   no new file needed here; the PR is **docs-only**).
 
 No agent dispatch; the coordinator applies this directly.
 
@@ -52,25 +53,20 @@ No agent dispatch; the coordinator applies this directly.
 
 ## Sub-phases
 
-### Phase 3.1 — `.gitkeep`s
+### Phase 3.1 — `.gitkeep`s (already satisfied)
 
-Create three empty files to anchor the model directories in git:
-
-- `dbt/models/staging/.gitkeep`
-- `dbt/models/intermediate/.gitkeep`
-- `dbt/models/marts/.gitkeep`
-
-Directories already exist on disk and are committed because the
-`TM-000` scaffold added `*/.gitkeep` implicitly — verify via
-`git ls-files dbt/models`. If `.gitkeep` entries are already present,
-skip this phase and note it in the PR body.
+`dbt/models/{staging,intermediate,marts}/.gitkeep` are already tracked
+in `main` (verified via `git ls-files dbt/models`). The TM-000 scaffold
+added them. **No file creation needed**; this PR ships zero `dbt/`
+changes. The verification was logged in the PR body so the audit trail
+shows it was checked.
 
 ### Phase 3.2 — PROGRESS.md
 
 Update the `TM-C1` row in `PROGRESS.md`:
 
-```
-| 2 | TM-C1 | dbt scaffold | C-dbt | ✅ 2026-04-23 | Scope absorbed by TM-000 scaffold; `.gitkeep` pins for empty model dirs (see PR) |
+```md
+| 2 | TM-C1 | dbt scaffold | C-dbt | ✅ 2026-04-23 | Scope absorbed by TM-000 scaffold; `.gitkeep` pins for empty model dirs (already in main) |
 ```
 
 Add to the "TM-000 notes" section (or a new "Scope absorption" block)

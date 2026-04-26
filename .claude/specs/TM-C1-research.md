@@ -61,7 +61,7 @@ All functionally satisfied.
 
 Local `uv run task dbt-parse` against `ci` target:
 
-```
+```text
 19:04:33  Running with dbt=1.11.8
 19:04:33  Registered adapter: postgres=1.10.0
 19:04:33  [WARNING]: Configuration paths exist in your dbt_project.yml file which do not apply to any resources.

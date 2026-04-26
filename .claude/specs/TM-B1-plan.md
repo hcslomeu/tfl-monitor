@@ -109,10 +109,14 @@ __all__ = ["TflClient", "TflClientError"]
 - `async def __aexit__(self, *exc) -> None` closes the client.
 - `async def _request(self, path: str, *, params: dict | None = None) -> Any` —
   central call site that:
-  1. Merges `{"app_key": self._app_key}` into `params`.
-  2. Calls `self._http.get(path, params=params)` inside a
-     `logfire.span("tfl.request", path=path, params=...)` context so
-     requests appear in Logfire.
+  1. Builds the outbound parameters as a **new dict**:
+     `outbound = {**(params or {}), "app_key": self._app_key}`.
+     Never mutate the caller's `params` argument.
+  2. Builds a redacted copy for tracing — `traced = {k: ("***" if k == "app_key" else v) for k, v in outbound.items()}` —
+     and calls `self._http.get(path, params=outbound)` inside
+     `logfire.span("tfl.request", path=path, params=traced)`. The
+     `app_key` value is **never logged** (CLAUDE.md §"Security-first —
+     Secrets").
   3. Implements the retry policy (see Phase 3.3).
   4. Calls `response.raise_for_status()` on non-retryable 4xx.
   5. Returns `response.json()`.
@@ -140,8 +144,11 @@ Tiny hand-rolled retry helper (~30 lines) shared by `_request`:
   ```
 - Retry on: `httpx.TimeoutException`, `httpx.TransportError`, and
   responses with `status_code in {429, 500, 502, 503, 504}`.
-- For 429 responses: honour `Retry-After` if present (seconds form
-  only — HTTP-date form is rare from TfL; raise if unparseable).
+- For 429 responses: honour `Retry-After` if present and parseable as
+  a positive integer (seconds). If the header is absent, malformed, or
+  uses the HTTP-date form, **fall back** to the standard exponential
+  backoff below — never raise just because the header is unparseable
+  (RFC 9110 allows date form; client must remain robust).
 - Otherwise exponential backoff: `0.5 * 2 ** attempt` seconds, capped
   at 10s (`asyncio.sleep`).
 - On final failure, raise `TflClientError` wrapping the last
@@ -174,10 +181,15 @@ Details:
   `timeToStation → time_to_station_seconds`, `vehicleId → vehicle_id`.
 - `disruption_payloads` — TfL disruption responses are lossy (no stable
   `disruption_id` or `created` timestamp); the adapter synthesises
-  `disruption_id` from `hash(category, description, affected_routes)`
-  and uses `datetime.now(UTC)` for `created` / `last_update`. Flag
-  these as synthetic in the docstring so TM-B2 knows it cannot trust
-  them for deduplication without extra keys.
+  `disruption_id` from a deterministic SHA-256 digest over a stable
+  serialisation of the disruption — concretely
+  `hashlib.sha256(json.dumps({"category": ..., "description": ..., "affected_routes": sorted(...)}, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()` —
+  taking the first 32 hex chars to keep IDs compact. Python's built-in
+  `hash()` is rejected here because it is randomised per process and
+  unstable across runs. `created` / `last_update` use
+  `datetime.now(UTC)`. The docstring flags every synthesised field so
+  TM-B2 knows it cannot trust them for deduplication without
+  TfL-supplied keys.
 - `summary` in the payload is a truncated `description` (160 chars)
   because the free TfL endpoint does not return a separate summary —
   documented in the docstring.
