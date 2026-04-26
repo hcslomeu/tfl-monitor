@@ -49,6 +49,16 @@ def _api_routes(app_obj: Any) -> Iterable[APIRoute]:
             yield route
 
 
+def _spec_operation_ids(spec: dict[str, Any]) -> set[str]:
+    """Collect every ``operationId`` declared under ``paths`` in the OpenAPI spec."""
+    operation_ids: set[str] = set()
+    for path_item in spec["paths"].values():
+        for operation in path_item.values():
+            if isinstance(operation, dict) and "operationId" in operation:
+                operation_ids.add(operation["operationId"])
+    return operation_ids
+
+
 @pytest.fixture(scope="module")
 def client() -> TestClient:
     return TestClient(app)
@@ -80,14 +90,27 @@ def test_stub_returns_501(
     assert wp_hint in detail, f"expected {wp_hint!r} in detail, got {detail!r}"
 
 
+def test_every_app_route_declares_operation_id() -> None:
+    """Guard against silent drift: every user-defined route needs an ``operationId``.
+
+    Without this, a developer could add a route, forget to set ``operation_id``,
+    and the App→Spec drift test would still pass because the route would be
+    invisible to the comparison.
+    """
+    routes_missing_id = sorted(
+        f"{','.join(sorted(route.methods or set()))} {route.path}"
+        for route in _api_routes(app)
+        if route.path not in FASTAPI_BUILTIN_PATHS and not route.operation_id
+    )
+    assert not routes_missing_id, (
+        f"FastAPI routes without an operation_id (drift test would silently skip them): "
+        f"{routes_missing_id}"
+    )
+
+
 def test_spec_operation_ids_have_matching_routes(openapi_spec: dict[str, Any]) -> None:
     """Every ``operationId`` in the OpenAPI spec must exist as a FastAPI route."""
-    spec_operation_ids: set[str] = set()
-    for path_item in openapi_spec["paths"].values():
-        for operation in path_item.values():
-            if isinstance(operation, dict) and "operationId" in operation:
-                spec_operation_ids.add(operation["operationId"])
-
+    spec_operation_ids = _spec_operation_ids(openapi_spec)
     app_operation_ids = {route.operation_id for route in _api_routes(app) if route.operation_id}
 
     missing_in_app = spec_operation_ids - app_operation_ids
@@ -98,13 +121,13 @@ def test_spec_operation_ids_have_matching_routes(openapi_spec: dict[str, Any]) -
 
 
 def test_app_routes_have_matching_spec_entries(openapi_spec: dict[str, Any]) -> None:
-    """Every FastAPI route must have a matching ``operationId`` in the spec."""
-    spec_operation_ids: set[str] = set()
-    for path_item in openapi_spec["paths"].values():
-        for operation in path_item.values():
-            if isinstance(operation, dict) and "operationId" in operation:
-                spec_operation_ids.add(operation["operationId"])
+    """Every FastAPI route must have a matching ``operationId`` in the spec.
 
+    The companion ``test_every_app_route_declares_operation_id`` check
+    guarantees no route reaches this point with a falsy ``operation_id``,
+    so the set subtraction can never produce a ``None`` element.
+    """
+    spec_operation_ids = _spec_operation_ids(openapi_spec)
     app_operation_ids = {
         route.operation_id
         for route in _api_routes(app)
