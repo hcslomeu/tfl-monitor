@@ -7,7 +7,7 @@ Current state of work packages. Update the status column as WPs land.
 | 0 | TM-000 | Contracts and scaffold | — | ✅ 2026-04-22 | Scaffold, contracts, tier-1/tier-2 schemas, fixtures fetched |
 | 1 | TM-A1 | Docker Compose + Postgres + Redpanda + Airflow | A-infra | ✅ 2026-04-23 | Round 3 follow-up applied: pgcrypto + DB-side defaults on raw tables; integration smoke test gated on `DATABASE_URL` |
 | 1 | TM-B1 | Async TfL client + fixtures | B-ingestion | ⬜ | |
-| 2 | TM-C1 | dbt scaffold | C-dbt | ⬜ | |
+| 2 | TM-C1 | dbt scaffold | C-dbt | ✅ 2026-04-23 | Acceptance criteria absorbed by TM-000: `dbt/sources/tfl.yml` mirrors `contracts/dbt_sources.yml` (CI-enforced), `dbt-parse` green, `.gitkeep`s pin empty model dirs. |
 | 2 | TM-D1 | FastAPI skeleton + Logfire wiring | D-api-agent | ⬜ | |
 | 3 | TM-B2 | `line-status` producer | B-ingestion | ⬜ | |
 | 3 | TM-B3 | `line-status` consumer | B-ingestion | ⬜ | |
@@ -27,6 +27,14 @@ Current state of work packages. Update the status column as WPs land.
 | 7 | TM-A5 | Railway deploy (Airflow + API + agent + workers) | A-infra | ⬜ | |
 | 7 | TM-E4 | Vercel deploy | E-frontend | ⬜ | |
 | 7 | TM-F1 | README polish + demo video + live URL | F-polish | ⬜ | |
+
+## TM-C1 notes
+
+- Every functional acceptance criterion declared in `SETUP.md` §7.3 for
+  TM-C1 was already satisfied by the TM-000 scaffold (dbt project,
+  profiles, sources mirror, CI diff gate, `dbt-parse` task). This WP
+  closes as a zero-code PR after verifying the CI diff + parse pass;
+  see `.claude/specs/TM-C1-{research,plan}.md`.
 
 ## TM-000 notes
 
