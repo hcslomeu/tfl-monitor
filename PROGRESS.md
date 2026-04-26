@@ -6,7 +6,7 @@ Current state of work packages. Update the status column as WPs land.
 |---|---|---|---|---|---|
 | 0 | TM-000 | Contracts and scaffold | — | ✅ 2026-04-22 | Scaffold, contracts, tier-1/tier-2 schemas, fixtures fetched |
 | 1 | TM-A1 | Docker Compose + Postgres + Redpanda + Airflow | A-infra | ✅ 2026-04-23 | Round 3 follow-up applied: pgcrypto + DB-side defaults on raw tables; integration smoke test gated on `DATABASE_URL` |
-| 1 | TM-B1 | Async TfL client + fixtures | B-ingestion | ⬜ | |
+| 1 | TM-B1 | Async TfL client + fixtures | B-ingestion | ✅ 2026-04-26 | Async `httpx` client with hand-rolled retry (429/5xx/timeout), tier-1 → tier-2 normalisation (line-status, arrivals, disruptions with synthetic SHA-256 IDs), `app_key` redacted in Logfire spans, fixtures committed under `tests/fixtures/tfl/`. |
 | 2 | TM-C1 | dbt scaffold | C-dbt | ✅ 2026-04-23 | Acceptance criteria absorbed by TM-000: `dbt/sources/tfl.yml` mirrors `contracts/dbt_sources.yml` (CI-enforced), `dbt-parse` green, `.gitkeep`s pin empty model dirs. |
 | 2 | TM-D1 | FastAPI skeleton + Logfire wiring | D-api-agent | ✅ 2026-04-26 | Locked 501 stubs with parametrised tests, added bidirectional OpenAPI drift test, extended CORS allow-list with `https://tfl-monitor.vercel.app` (G1 + G2 + G4 from research). |
 | 3 | TM-B2 | `line-status` producer | B-ingestion | ⬜ | |
