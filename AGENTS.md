@@ -30,6 +30,7 @@ Keep in **English** — no PT-BR anywhere, ever: source code, docstrings, file/d
 - issue titles + bodies
 - GitHub-posted PR reviews and review comments (anything written via `gh pr review`, `gh pr comment`, `gh issue comment`, or the GitHub UI)
 - branch names, tag messages
+- **All coordination Markdown under `.claude/`** — `.claude/napkin.md`, `.claude/current-wp.md`, every `.claude/specs/TM-*-{spec,research,plan}.md`, every `.claude/adrs/NNN-*.md`. These outlive the session and are read by future agents.
 
 Rule of thumb: if the text lives on disk in `.git/` or on `github.com`, it is English. If it lives only in the terminal conversation with the author, it is PT-BR. A review you write for the author's eyes in chat stays PT-BR; the same review, when it becomes a `gh pr review --body`, is translated to English before posting.
 
