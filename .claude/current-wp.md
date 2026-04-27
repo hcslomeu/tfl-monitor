@@ -1,1 +1,1 @@
-TM-B2 — line-status producer to Kafka (PR pending review, branch feature/TM-B2-line-status-producer, since 2026-04-27)
+TM-B3 — line-status consumer to Postgres (next, depends on TM-B2 ✅ merged 2026-04-27 in #31)
