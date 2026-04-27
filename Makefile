@@ -1,4 +1,4 @@
-.PHONY: help bootstrap up down clean check seed openapi-ts sync-dbt-sources ingest-line-status
+.PHONY: help bootstrap up down clean check seed openapi-ts sync-dbt-sources
 
 help:
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -38,6 +38,3 @@ openapi-ts: ## Regenerate TS types from OpenAPI
 sync-dbt-sources: ## Sync dbt/sources/tfl.yml from contracts/dbt_sources.yml (single source of truth)
 	cp contracts/dbt_sources.yml dbt/sources/tfl.yml
 	@echo "dbt/sources/tfl.yml synced from contracts/dbt_sources.yml"
-
-ingest-line-status: ## Run line-status producer locally (host-side, against Compose Redpanda)
-	uv run python -m ingestion.producers.line_status

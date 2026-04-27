@@ -63,8 +63,13 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
-        rpk -X brokers=redpanda:9092 topic create line-status \
-          --partitions 1 --replicas 1 || true
+        set -e
+        out=$$(rpk -X brokers=redpanda:9092 topic create line-status \
+          --partitions 1 --replicas 1 2>&1) || rc=$$?
+        echo "$$out"
+        if [ "$${rc:-0}" -ne 0 ] && ! echo "$$out" | grep -qi "already exists\|TOPIC_ALREADY_EXISTS"; then
+          exit 1
+        fi
 
   tfl-line-status-producer:
     build:

@@ -44,7 +44,7 @@ class KafkaEventProducer:
         producer_factory: Callable[..., AIOKafkaProducer] | None = None,
     ) -> None:
         if not bootstrap_servers:
-            raise KafkaProducerError("bootstrap_servers must be a non-empty string")
+            raise ValueError("bootstrap_servers must be a non-empty string")
         self._bootstrap_servers = bootstrap_servers
         self._client_id = client_id
         self._producer_factory = producer_factory or AIOKafkaProducer
@@ -92,7 +92,8 @@ class KafkaEventProducer:
         attributes: dict[str, Any] = {
             "topic": topic,
             "key": key,
-            "event_type": event.__class__.__name__,
+            "event_type": getattr(event, "event_type", event.__class__.__name__),
+            "event_class": event.__class__.__name__,
         }
         with logfire.span("kafka.publish", **attributes):
             try:

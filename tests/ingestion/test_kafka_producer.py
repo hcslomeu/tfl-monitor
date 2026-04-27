@@ -136,7 +136,7 @@ async def test_aenter_starts_and_aexit_stops_producer() -> None:
 
 
 def test_constructor_rejects_empty_bootstrap_servers() -> None:
-    with pytest.raises(KafkaProducerError):
+    with pytest.raises(ValueError):
         KafkaEventProducer(bootstrap_servers="")
 
 

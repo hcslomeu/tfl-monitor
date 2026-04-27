@@ -36,7 +36,6 @@ __all__ = [
     "LINE_STATUS_POLL_PERIOD_SECONDS",
     "LineStatusProducer",
     "main",
-    "run_forever",
 ]
 
 LINE_STATUS_EVENT_TYPE = "line-status.snapshot"
@@ -89,6 +88,12 @@ class LineStatusProducer:
         except TflClientError as exc:
             logfire.warn("ingestion.line_status.tfl_failed", error=repr(exc))
             return 0
+        except Exception as exc:  # noqa: BLE001 - safety net keeps daemon alive
+            logfire.error(
+                "ingestion.line_status.tfl_unexpected_error",
+                error=repr(exc),
+            )
+            return 0
 
         payloads = line_status_payloads(tier1)
         published = 0
@@ -121,6 +126,12 @@ class LineStatusProducer:
             started = time.monotonic()
             await self.run_once()
             elapsed = time.monotonic() - started
+            if elapsed > self._period_seconds:
+                logfire.warn(
+                    "ingestion.line_status.cycle_overrun",
+                    elapsed=elapsed,
+                    period_seconds=self._period_seconds,
+                )
             await asyncio.sleep(max(0.0, self._period_seconds - elapsed))
 
 
@@ -148,16 +159,6 @@ async def _amain() -> None:
 def main() -> None:
     """Module entrypoint used by ``python -m ingestion.producers.line_status``."""
     asyncio.run(_amain())
-
-
-async def run_forever(
-    *,
-    tfl_client: TflClient,
-    kafka_producer: KafkaEventProducer,
-) -> NoReturn:
-    """Convenience wrapper that builds a :class:`LineStatusProducer` and runs forever."""
-    producer = LineStatusProducer(tfl_client=tfl_client, kafka_producer=kafka_producer)
-    await producer.run_forever()
 
 
 if __name__ == "__main__":

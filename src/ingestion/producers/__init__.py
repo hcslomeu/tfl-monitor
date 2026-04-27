@@ -6,7 +6,6 @@ from ingestion.producers.line_status import (
     LINE_STATUS_EVENT_TYPE,
     LINE_STATUS_POLL_PERIOD_SECONDS,
     LineStatusProducer,
-    run_forever,
 )
 
 __all__ = [
@@ -16,5 +15,4 @@ __all__ = [
     "LINE_STATUS_EVENT_TYPE",
     "LINE_STATUS_POLL_PERIOD_SECONDS",
     "LineStatusProducer",
-    "run_forever",
 ]

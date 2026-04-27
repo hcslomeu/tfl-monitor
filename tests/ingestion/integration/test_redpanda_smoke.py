@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import os
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -34,7 +34,7 @@ def _build_sample_event() -> LineStatusEvent:
         status_severity_description="Good Service",
         reason=None,
         valid_from=now,
-        valid_to=now.replace(year=now.year + 1),
+        valid_to=now + timedelta(days=365),
     )
     return LineStatusEvent(
         event_id=uuid.uuid4(),

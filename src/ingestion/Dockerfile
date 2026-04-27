@@ -16,4 +16,8 @@ COPY contracts ./contracts
 
 ENV PYTHONPATH=/app/src
 
+RUN useradd --system --uid 1001 --no-create-home --shell /usr/sbin/nologin app \
+    && chown -R app:app /app
+USER app
+
 CMD ["uv", "run", "python", "-m", "ingestion.producers.line_status"]
