@@ -1,1 +1,1 @@
-TM-A1 — Docker Compose: Postgres + Redpanda + Airflow + MinIO (done 2026-04-23)
+TM-B2 — line-status producer to Kafka (PR pending review, branch feature/TM-B2-line-status-producer, since 2026-04-27)
