@@ -56,6 +56,11 @@ python_version = "3.12"
 strict = true
 exclude = ["scripts/"]
 
+[[tool.mypy.overrides]]
+module = ["aiokafka", "aiokafka.*"]
+ignore_missing_imports = true
+follow_untyped_imports = true
+
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 asyncio_mode = "auto"
@@ -72,3 +77,5 @@ lint = "ruff check . && ruff format --check . && mypy src contracts"
 fmt = "ruff check --fix . && ruff format ."
 dbt-parse = "dbt parse --project-dir dbt --profiles-dir dbt --target ci"
 api = "uvicorn api.main:app --reload --app-dir src"
+init-topics = "docker compose --profile init up redpanda-init"
+ingest-line-status = "python -m ingestion.producers.line_status"

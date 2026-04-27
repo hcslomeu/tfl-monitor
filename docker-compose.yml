@@ -54,6 +54,40 @@ services:
       redpanda:
         condition: service_healthy
 
+  redpanda-init:
+    image: redpandadata/redpanda:v24.2.7
+    profiles: ["init"]
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        out=$$(rpk -X brokers=redpanda:9092 topic create line-status \
+          --partitions 1 --replicas 1 2>&1) || rc=$$?
+        echo "$$out"
+        if [ "$${rc:-0}" -ne 0 ] && ! echo "$$out" | grep -qi "already exists\|TOPIC_ALREADY_EXISTS"; then
+          exit 1
+        fi
+
+  tfl-line-status-producer:
+    build:
+      context: .
+      dockerfile: src/ingestion/Dockerfile
+    restart: unless-stopped
+    profiles: ["ingest"]
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    environment:
+      TFL_APP_KEY: ${TFL_APP_KEY:?TFL_APP_KEY is required}
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      LOGFIRE_TOKEN: ${LOGFIRE_TOKEN:-}
+      ENVIRONMENT: ${ENVIRONMENT:-local}
+      APP_VERSION: ${APP_VERSION:-0.0.1}
+    command: ["uv", "run", "python", "-m", "ingestion.producers.line_status"]
+
   airflow-init:
     build: ./airflow
     restart: "no"
