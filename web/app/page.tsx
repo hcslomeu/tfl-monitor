@@ -1,10 +1,10 @@
 /**
  * Network Now — landing view.
  *
- * Reads from `getStatusLive()`, which is a mock-backed fetcher in
- * TM-E1a. The real `/status/live` wiring lands in TM-E1b once TM-D2
- * connects the FastAPI handler to Postgres. The mock origin and the
- * swap point are documented in `lib/api/status-live.ts`.
+ * Reads live operational status from the FastAPI `/status/live`
+ * handler via `getStatusLive()`. TM-E1b wires the real call;
+ * `apiFetch` surfaces non-2xx responses as `ApiError`, which the
+ * page catches to render a fallback alert.
  */
 
 import { StatusBadge } from "@/components/status-badge";
@@ -18,6 +18,7 @@ import {
 	CardTitle,
 } from "@/components/ui/card";
 import { getStatusLive, type LineStatus } from "@/lib/api/status-live";
+import { ApiError } from "@/lib/api-client";
 
 const VALIDITY_FORMATTER = new Intl.DateTimeFormat("en-GB", {
 	hour: "2-digit",
@@ -55,7 +56,18 @@ function modeLabel(mode: LineStatus["mode"]): string {
 }
 
 export default async function NetworkNowPage() {
-	const lines = await getStatusLive();
+	let lines: LineStatus[] | null = null;
+	let errorDetail: string | null = null;
+
+	try {
+		lines = await getStatusLive();
+	} catch (err) {
+		if (err instanceof ApiError) {
+			errorDetail = err.detail;
+		} else {
+			errorDetail = err instanceof Error ? err.message : "Unknown error";
+		}
+	}
 
 	return (
 		<main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-6 px-6 py-12">
@@ -68,44 +80,49 @@ export default async function NetworkNowPage() {
 				</p>
 			</header>
 
-			<Alert>
-				<AlertTitle>Mock data</AlertTitle>
-				<AlertDescription>
-					Real <code>/status/live</code> wiring lands in TM-E1b once TM-D2
-					connects the FastAPI handler to Postgres. This page renders a
-					committed fixture so the layout can be reviewed in isolation.
-				</AlertDescription>
-			</Alert>
-
-			<section
-				aria-label="Line statuses"
-				className="flex flex-col gap-3"
-				data-testid="line-status-list"
-			>
-				{lines.map((line) => (
-					<Card key={line.line_id}>
-						<CardHeader>
-							<CardTitle className="flex flex-wrap items-center gap-2">
-								<span>{line.line_name}</span>
-								<Badge variant="outline">{modeLabel(line.mode)}</Badge>
-							</CardTitle>
-							<CardDescription className="flex flex-wrap items-center gap-2">
-								<StatusBadge
-									severity={line.status_severity}
-									description={line.status_severity_description}
-								/>
-								<span aria-hidden>·</span>
-								<span>{formatWindow(line)} (Europe/London)</span>
-							</CardDescription>
-						</CardHeader>
-						{line.reason ? (
-							<CardContent className="text-sm text-muted-foreground">
-								{line.reason}
-							</CardContent>
-						) : null}
-					</Card>
-				))}
-			</section>
+			{errorDetail ? (
+				<Alert role="alert">
+					<AlertTitle>Live status unavailable</AlertTitle>
+					<AlertDescription>{errorDetail}</AlertDescription>
+				</Alert>
+			) : lines && lines.length === 0 ? (
+				<Alert>
+					<AlertTitle>No lines reported</AlertTitle>
+					<AlertDescription>
+						The API returned no line-status rows in the freshness window.
+					</AlertDescription>
+				</Alert>
+			) : (
+				<section
+					aria-label="Line statuses"
+					className="flex flex-col gap-3"
+					data-testid="line-status-list"
+				>
+					{(lines ?? []).map((line) => (
+						<Card key={line.line_id}>
+							<CardHeader>
+								<CardTitle className="flex flex-wrap items-center gap-2">
+									<span>{line.line_name}</span>
+									<Badge variant="outline">{modeLabel(line.mode)}</Badge>
+								</CardTitle>
+								<CardDescription className="flex flex-wrap items-center gap-2">
+									<StatusBadge
+										severity={line.status_severity}
+										description={line.status_severity_description}
+									/>
+									<span aria-hidden>·</span>
+									<span>{formatWindow(line)} (Europe/London)</span>
+								</CardDescription>
+							</CardHeader>
+							{line.reason ? (
+								<CardContent className="text-sm text-muted-foreground">
+									{line.reason}
+								</CardContent>
+							) : null}
+						</Card>
+					))}
+				</section>
+			)}
 		</main>
 	);
 }
