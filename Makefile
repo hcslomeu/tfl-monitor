@@ -1,4 +1,4 @@
-.PHONY: help bootstrap up down clean check seed openapi-ts sync-dbt-sources consume-line-status
+.PHONY: help bootstrap up down clean check seed openapi-ts sync-dbt-sources consume-line-status consume-arrivals consume-disruptions
 
 help:
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -42,3 +42,9 @@ sync-dbt-sources: ## Sync dbt/sources/tfl.yml from contracts/dbt_sources.yml (si
 
 consume-line-status: ## Run line-status consumer locally (host-side, against Compose Redpanda + Postgres)
 	uv run task consume-line-status
+
+consume-arrivals: ## Run arrivals consumer locally (host-side, against Compose Redpanda + Postgres)
+	uv run task consume-arrivals
+
+consume-disruptions: ## Run disruptions consumer locally (host-side, against Compose Redpanda + Postgres)
+	uv run task consume-disruptions
