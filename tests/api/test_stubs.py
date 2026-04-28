@@ -32,8 +32,6 @@ FASTAPI_BUILTIN_PATHS = {"/openapi.json", "/docs", "/docs/oauth2-redirect", "/re
 StubCase = tuple[str, str, dict[str, Any] | None, str]
 
 STUB_ROUTES: list[StubCase] = [
-    ("GET", "/api/v1/disruptions/recent", None, "TM-D3"),
-    ("GET", "/api/v1/bus/dummy/punctuality", None, "TM-D3"),
     ("POST", "/api/v1/chat/stream", {"thread_id": "t-1", "message": "hi"}, "TM-D5"),
     ("GET", "/api/v1/chat/t-1/history", None, "TM-D5"),
 ]

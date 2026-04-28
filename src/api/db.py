@@ -14,7 +14,19 @@ from typing import Any
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
-from api.schemas import LineReliabilityResponse, LineStatusResponse
+from api.schemas import (
+    BusPunctualityResponse,
+    DisruptionResponse,
+    LineReliabilityResponse,
+    LineStatusResponse,
+    Mode,
+)
+
+# Bus punctuality is reported over a fixed 7-day window. The OpenAPI
+# contract does not declare a ``window`` query parameter, and the
+# example payload uses 7. Hard-coded here to keep the handler signature
+# small.
+BUS_PUNCTUALITY_WINDOW_DAYS = 7
 
 
 def build_pool(dsn: str) -> AsyncConnectionPool:
@@ -160,4 +172,170 @@ async def fetch_reliability(
         reliability_percent=float(agg["reliability_percent"]),
         sample_size=int(agg["sample_size"]),
         severity_histogram=histogram,
+    )
+
+
+# /disruptions/recent -- snapshot-grain pull from stg_disruptions; the
+# daily mart drops description/summary/affected_stops/closure_text/
+# created/last_update which the OpenAPI contract requires. ``mode``
+# filtering goes through stg_line_status because ref.lines is empty
+# until TM-A2/TM-A3. The triple-keyed ``%(mode)s`` bind expands at
+# every call site (psycopg substitutes named parameters by name, so a
+# single bound value drives the OR short-circuit, the EXISTS predicate,
+# and any future filter site identically).
+DISRUPTIONS_SQL = """
+SELECT
+    disruption_id,
+    category,
+    category_description,
+    description,
+    summary,
+    COALESCE(closure_text, '')                AS closure_text,
+    severity,
+    created,
+    last_update,
+    affected_routes,
+    affected_stops
+FROM analytics.stg_disruptions sd
+WHERE event_type = 'disruptions.snapshot'
+  AND (
+      %(mode)s IS NULL
+      OR EXISTS (
+          SELECT 1
+          FROM analytics.stg_line_status sls
+          WHERE sls.mode = %(mode)s
+            AND sls.line_id IN (
+                SELECT jsonb_array_elements_text(sd.affected_routes)
+            )
+      )
+  )
+ORDER BY last_update DESC NULLS LAST, ingested_at DESC
+LIMIT %(limit)s
+"""
+
+
+# /bus/{stop_id}/punctuality -- a documented PROXY computed on top of
+# stg_arrivals.time_to_station_seconds. TfL publishes arrival
+# predictions (not actual departure events), so the percentages
+# reflect the distribution of predictions, not realised arrivals. The
+# 300 s threshold matches TfL's own published 5-minute bus performance
+# KPI (TfL Annual Report 2023/24); using the same threshold keeps the
+# proxy aligned with the public KPI even though the underlying signal
+# is different. Buckets:
+#   late    -- time_to_station_seconds < 0       -- predicted arrival
+#                                                   already past
+#   on_time -- 0 <= time_to_station_seconds <= 300 -- bus visible in
+#                                                     a 5-minute window
+#   early   -- time_to_station_seconds > 300      -- prediction shows
+#                                                    bus more than 5
+#                                                    minutes out
+BUS_PUNCTUALITY_SQL = """
+SELECT
+    COUNT(*)::int AS sample_size,
+    COUNT(*) FILTER (WHERE time_to_station_seconds < 0)::int AS late_count,
+    COUNT(*) FILTER (
+        WHERE time_to_station_seconds BETWEEN 0 AND 300
+    )::int AS on_time_count,
+    COUNT(*) FILTER (WHERE time_to_station_seconds > 300)::int AS early_count
+FROM analytics.stg_arrivals
+WHERE station_id = %(stop_id)s
+  AND ingested_at >= now() - (%(window)s::int * INTERVAL '1 day')
+"""
+
+
+# Fetch the most recently observed station_name for a stop. The bus
+# mart does not denormalise station_name; stg_arrivals does. One
+# extra round-trip on the same connection (mirrors the two-query
+# pattern used by /reliability).
+BUS_STOP_NAME_SQL = """
+SELECT station_name
+FROM analytics.stg_arrivals
+WHERE station_id = %(stop_id)s
+ORDER BY ingested_at DESC
+LIMIT 1
+"""
+
+
+def _as_str_list(value: Any) -> list[str]:
+    """Coerce a JSONB column value into ``list[str]``.
+
+    psycopg with ``dict_row`` decodes JSONB into native Python types,
+    so an array column comes back as a ``list``. Defensive cast in
+    case the column ever materialises as ``None`` (no schema-level
+    default protects this column today).
+    """
+    if value is None:
+        return []
+    return [str(item) for item in value]
+
+
+async def fetch_recent_disruptions(
+    pool: AsyncConnectionPool,
+    *,
+    limit: int,
+    mode: Mode | None,
+) -> list[DisruptionResponse]:
+    """Return the most recent disruptions, optionally scoped to a mode."""
+    params = {"limit": limit, "mode": mode}
+    async with pool.connection() as conn, conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(DISRUPTIONS_SQL, params)
+        rows: list[dict[str, Any]] = await cur.fetchall()
+
+    return [
+        DisruptionResponse(
+            disruption_id=row["disruption_id"],
+            category=row["category"],
+            category_description=row["category_description"],
+            description=row["description"],
+            summary=row["summary"],
+            affected_routes=_as_str_list(row["affected_routes"]),
+            affected_stops=_as_str_list(row["affected_stops"]),
+            closure_text=row["closure_text"],
+            severity=int(row["severity"]),
+            created=row["created"],
+            last_update=row["last_update"],
+        )
+        for row in rows
+    ]
+
+
+async def fetch_bus_punctuality(
+    pool: AsyncConnectionPool,
+    *,
+    stop_id: str,
+    window: int,
+) -> BusPunctualityResponse | None:
+    """Return punctuality proxy for ``stop_id`` over the last ``window`` days.
+
+    Returns ``None`` when no arrivals have been ingested for that stop
+    in the window, or when the stop has never been seen at all
+    (``station_name`` lookup misses).
+    """
+    params = {"stop_id": stop_id, "window": window}
+    async with pool.connection() as conn:
+        async with conn.cursor(row_factory=dict_row) as cur:
+            await cur.execute(BUS_PUNCTUALITY_SQL, params)
+            agg = await cur.fetchone()
+        if agg is None or not agg.get("sample_size"):
+            return None
+        async with conn.cursor(row_factory=dict_row) as cur:
+            await cur.execute(BUS_STOP_NAME_SQL, {"stop_id": stop_id})
+            name_row = await cur.fetchone()
+
+    if name_row is None or not name_row.get("station_name"):
+        return None
+
+    sample_size = int(agg["sample_size"])
+    late_count = int(agg["late_count"])
+    on_time_count = int(agg["on_time_count"])
+    early_count = int(agg["early_count"])
+
+    return BusPunctualityResponse(
+        stop_id=stop_id,
+        stop_name=str(name_row["station_name"]),
+        window_days=window,
+        on_time_percent=round(100.0 * on_time_count / sample_size, 1),
+        early_percent=round(100.0 * early_count / sample_size, 1),
+        late_percent=round(100.0 * late_count / sample_size, 1),
+        sample_size=sample_size,
     )
