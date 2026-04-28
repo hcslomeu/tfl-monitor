@@ -26,6 +26,7 @@ from api.agent.tools import make_tools
 
 DEFAULT_PINECONE_INDEX = "tfl-strategy-docs"
 DEFAULT_MODEL_NAME = "claude-3-5-sonnet-latest"
+DEFAULT_MODEL_TIMEOUT_SECONDS = 60.0
 
 
 def compile_agent(
@@ -55,11 +56,13 @@ def compile_agent(
 
     chat_model: Any = model
     if chat_model is None:
+        # Bound timeout so a stalled Anthropic / network never hangs the
+        # agent loop. 60 s matches the httpx default used in TM-B1.
         chat_model = ChatAnthropic(
             model_name=DEFAULT_MODEL_NAME,
             temperature=0.0,
             api_key=SecretStr(anthropic_key),
-            timeout=None,
+            timeout=DEFAULT_MODEL_TIMEOUT_SECONDS,
             stop=None,
         )
 

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
+import logfire
 from langchain_core.tools import BaseTool, tool
 from llama_index.core.retrievers import BaseRetriever
 from psycopg_pool import AsyncConnectionPool
@@ -88,8 +89,9 @@ def make_tools(
     @tool
     async def query_tube_status() -> list[dict[str, Any]]:
         """Return the current operational status of every line right now."""
-        rows = await fetch_live_status(pool)
-        return [r.model_dump(mode="json") for r in rows]
+        with logfire.span("agent.tool.query_tube_status"):
+            rows = await fetch_live_status(pool)
+            return [r.model_dump(mode="json") for r in rows]
 
     @tool(args_schema=LineReliabilityQuery)
     async def query_line_reliability(
@@ -102,13 +104,18 @@ def make_tools(
         the SQL fires, so free-text references like ``"Lizzy"`` map to
         the canonical ``elizabeth``.
         """
-        canonical = await normalise_line_id(line_id)
-        if canonical is None:
-            return f"Unknown line: {line_id!r}"
-        result = await fetch_reliability(pool, line_id=canonical, window=window_days)
-        if result is None:
-            return f"No reliability data for {canonical}."
-        return result.model_dump(mode="json")
+        with logfire.span(
+            "agent.tool.query_line_reliability",
+            line_id_raw=line_id,
+            window_days=window_days,
+        ):
+            canonical = await normalise_line_id(line_id)
+            if canonical is None:
+                return f"Unknown line: {line_id!r}"
+            result = await fetch_reliability(pool, line_id=canonical, window=window_days)
+            if result is None:
+                return f"No reliability data for {canonical}."
+            return result.model_dump(mode="json")
 
     @tool(args_schema=RecentDisruptionsQuery)
     async def query_recent_disruptions(
@@ -116,8 +123,9 @@ def make_tools(
         mode: Mode | None = None,
     ) -> list[dict[str, Any]]:
         """Return the most recent disruptions, optionally scoped by mode."""
-        rows = await fetch_recent_disruptions(pool, limit=limit, mode=mode)
-        return [r.model_dump(mode="json") for r in rows]
+        with logfire.span("agent.tool.query_recent_disruptions", limit=limit, mode=mode):
+            rows = await fetch_recent_disruptions(pool, limit=limit, mode=mode)
+            return [r.model_dump(mode="json") for r in rows]
 
     @tool(args_schema=BusPunctualityQuery)
     async def query_bus_punctuality(stop_id: str) -> dict[str, Any] | str:
@@ -127,14 +135,15 @@ def make_tools(
         predictions, not realised departure events. Cite the proxy
         nature when surfacing the percentages to the user.
         """
-        result = await fetch_bus_punctuality(
-            pool,
-            stop_id=stop_id,
-            window=BUS_PUNCTUALITY_WINDOW_DAYS,
-        )
-        if result is None:
-            return f"No punctuality data for stop {stop_id!r}."
-        return result.model_dump(mode="json")
+        with logfire.span("agent.tool.query_bus_punctuality", stop_id=stop_id):
+            result = await fetch_bus_punctuality(
+                pool,
+                stop_id=stop_id,
+                window=BUS_PUNCTUALITY_WINDOW_DAYS,
+            )
+            if result is None:
+                return f"No punctuality data for stop {stop_id!r}."
+            return result.model_dump(mode="json")
 
     @tool(args_schema=TflDocSearchQuery)
     async def search_tfl_docs(
@@ -148,8 +157,14 @@ def make_tools(
         for policy or forecast questions; reach for the SQL tools for
         live operational data.
         """
-        snippets = await retrieve(retriever, query=query, doc_id=doc_id, top_k=top_k)
-        return [s.model_dump(mode="json") for s in snippets]
+        with logfire.span(
+            "agent.tool.search_tfl_docs",
+            doc_id=doc_id,
+            top_k=top_k,
+            query_chars=len(query),
+        ):
+            snippets = await retrieve(retriever, query=query, doc_id=doc_id, top_k=top_k)
+            return [s.model_dump(mode="json") for s in snippets]
 
     return [
         query_tube_status,

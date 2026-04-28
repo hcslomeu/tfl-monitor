@@ -1,8 +1,8 @@
 """Integration: stream a turn then read it back via ``/history`` (TM-D5).
 
 Confirms that the SSE handler persists both the user input and the
-assistant response, and that ``GET /chat/{thread_id}/history`` surfaces
-both rows in chronological order.
+assistant response, and that ``GET /api/v1/chat/{thread_id}/history``
+surfaces both rows in chronological order.
 
 Same gates and cost profile as ``tests/integration/test_chat_stream.py``.
 """

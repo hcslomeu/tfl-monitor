@@ -204,3 +204,54 @@ def test_chat_stream_422_on_oversized_message() -> None:
         json={"thread_id": "t-bad", "message": "x" * 4001},
     )
     assert response.status_code == 422
+
+
+@dataclass
+class FailingAgent:
+    """Agent that raises mid-stream after emitting one token.
+
+    Exercises the ``finally`` block's ``completed`` guard so a truncated
+    assistant turn never lands in ``analytics.chat_messages``.
+    """
+
+    calls: list[dict[str, Any]] = field(default_factory=list)
+
+    def astream(
+        self,
+        inputs: Any,
+        *,
+        config: Any,
+        stream_mode: Any,
+    ) -> AsyncIterator[tuple[str, Any]]:
+        self.calls.append({"inputs": inputs, "config": config, "stream_mode": stream_mode})
+
+        async def _gen() -> AsyncIterator[tuple[str, Any]]:
+            yield _token_chunk("partial ")
+            raise RuntimeError("upstream model crashed")
+
+        return _gen()
+
+
+def test_chat_stream_error_does_not_persist_partial_assistant(
+    fake_pool_factory: Callable[..., Any],
+    attach_pool: Callable[[Any], None],
+    attach_agent: Callable[[Any], None],
+) -> None:
+    pool = fake_pool_factory([])  # only the user INSERT should fire
+    attach_pool(pool)
+    attach_agent(FailingAgent())
+
+    client = TestClient(app)
+    response = client.post(
+        "/api/v1/chat/stream",
+        json={"thread_id": "t-error", "message": "trigger crash"},
+    )
+
+    assert response.status_code == 200
+    frames = _parse_sse(response.text)
+    assert frames[-1] == {"type": "end", "content": "error"}
+    # Exactly one INSERT — the user turn before streaming. The truncated
+    # assistant text must NOT have been persisted.
+    assert pool.conn.executed == [
+        (INSERT_SQL, {"thread_id": "t-error", "role": "user", "content": "trigger crash"}),
+    ]

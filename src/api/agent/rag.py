@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+import logfire
 from llama_index.core import VectorStoreIndex
 from llama_index.core.retrievers import BaseRetriever
 from llama_index.embeddings.openai import OpenAIEmbedding
@@ -90,9 +91,21 @@ async def retrieve(
         Snippets sorted by score descending and capped at ``top_k``.
     """
     targets = [doc_id] if doc_id is not None else list(retrievers.keys())
-    coros = [_one(retrievers[ns], query) for ns in targets if ns in retrievers]
-    nested = await asyncio.gather(*coros)
-    flat = [hit for hits in nested for hit in hits]
+    selected = [ns for ns in targets if ns in retrievers]
+    coros = [_one(retrievers[ns], query) for ns in selected]
+    results = await asyncio.gather(*coros, return_exceptions=True)
+    flat: list[TflDocSnippet] = []
+    for ns, result in zip(selected, results, strict=False):
+        if isinstance(result, BaseException):
+            # Partial-failure: a single namespace error must not collapse
+            # the whole tool response. Other namespaces may still answer.
+            logfire.warning(
+                "agent.rag.namespace_failed",
+                namespace=ns,
+                error=str(result),
+            )
+            continue
+        flat.extend(result)
     flat.sort(key=lambda h: h.score, reverse=True)
     return flat[:top_k]
 
@@ -103,10 +116,17 @@ async def _one(retriever: BaseRetriever, query: str) -> list[TflDocSnippet]:
 
 
 def _normalise_page(value: Any) -> int | None:
-    """Map the TM-D4 ``-1`` page sentinel (and ``None``) to ``None``."""
+    """Map the TM-D4 ``-1`` page sentinel (and ``None``) to ``None``.
+
+    Non-numeric metadata (e.g. a stray string from a future Pinecone
+    schema drift) coerces to ``None`` rather than raising.
+    """
     if value is None or value == PAGE_UNKNOWN_SENTINEL:
         return None
-    return int(value)
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _to_snippet(node: Any) -> TflDocSnippet:
@@ -133,12 +153,12 @@ def _to_snippet(node: Any) -> TflDocSnippet:
     score = float(raw_score) if raw_score is not None else 0.0
 
     return TflDocSnippet(
-        doc_id=str(meta.get("doc_id", "")),
-        doc_title=str(meta.get("doc_title", "")),
-        section_title=str(meta.get("section_title", "")),
+        doc_id=str(meta.get("doc_id") or ""),
+        doc_title=str(meta.get("doc_title") or ""),
+        section_title=str(meta.get("section_title") or ""),
         page_start=_normalise_page(page_start),
         page_end=_normalise_page(page_end),
         text=str(text or ""),
         score=score,
-        resolved_url=str(meta.get("resolved_url", "")),
+        resolved_url=str(meta.get("resolved_url") or ""),
     )

@@ -10,6 +10,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal, get_args
 
+import logfire
 from pydantic import BaseModel
 from pydantic_ai import Agent
 
@@ -69,6 +70,9 @@ async def normalise_line_id(text: str) -> str | None:
         return text
     try:
         result = await _normaliser().run(text)
-    except Exception:  # noqa: BLE001 — boundary; LangSmith captures
+    except Exception:  # noqa: BLE001 — boundary; surface as None
+        # LangSmith captures the underlying SDK error. Mirror it on
+        # Logfire so on-call has timing + structured attributes locally.
+        logfire.exception("agent.normalise_line_id.failed", text=text)
         return None
     return result.output.line_id

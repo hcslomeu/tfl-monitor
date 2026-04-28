@@ -7,9 +7,9 @@ Gated on the ``integration`` pytest marker so the default
         uv run pytest -m integration tests/integration/test_chat_history.py -v
 
 The test exercises ``append_message`` / ``fetch_history`` directly
-against a live Postgres pool. The HTTP route ``GET /chat/{thread_id}/history``
-is still 501 until the orchestrator wires the handler; route-level
-integration coverage lives in a follow-up file.
+against a live Postgres pool. Route-level integration coverage for
+``GET /api/v1/chat/{thread_id}/history`` lives in
+``tests/integration/test_chat_history_after_stream.py``.
 """
 
 from __future__ import annotations

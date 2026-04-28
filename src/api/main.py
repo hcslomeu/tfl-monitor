@@ -254,6 +254,7 @@ async def post_chat_stream(request: Request, body: ChatRequest) -> Response:
         config: dict[str, Any] = {"configurable": {"thread_id": body.thread_id}}
         inputs = {"messages": [{"role": "user", "content": body.message}]}
         assistant_buffer: list[str] = []
+        completed = False
         try:
             async for mode, payload in agent.astream(
                 inputs, config=config, stream_mode=["messages", "updates"]
@@ -265,13 +266,17 @@ async def post_chat_stream(request: Request, body: ChatRequest) -> Response:
                         assistant_buffer.append(frame["content"])
                     yield {"data": serialise(frame)}
             yield {"data": serialise(frame_end())}
+            completed = True
         except asyncio.CancelledError:
             raise
         except Exception:
             logfire.exception("chat_stream_failed", thread_id=body.thread_id)
             yield {"data": serialise(frame_end("error"))}
         finally:
-            if assistant_buffer:
+            # Only persist the assistant turn when the stream finished
+            # cleanly. Disconnects and errors leave ``completed=False`` so
+            # ``analytics.chat_messages`` never sees a truncated reply.
+            if completed and assistant_buffer:
                 await append_message(
                     pool,
                     thread_id=body.thread_id,

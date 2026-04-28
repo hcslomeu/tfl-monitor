@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
 from api.schemas import ChatMessageResponse
+
+ChatRole = Literal["user", "assistant", "system"]
 
 INSERT_SQL = """
 INSERT INTO analytics.chat_messages (thread_id, role, content)
@@ -26,7 +28,7 @@ async def append_message(
     pool: AsyncConnectionPool,
     *,
     thread_id: str,
-    role: str,
+    role: ChatRole,
     content: str,
 ) -> None:
     """Persist a single chat turn for ``thread_id``.
@@ -34,8 +36,9 @@ async def append_message(
     Args:
         pool: Open ``AsyncConnectionPool`` (typically ``app.state.db_pool``).
         thread_id: Stable identifier for the conversation.
-        role: One of ``user``, ``assistant``, ``system`` (enforced by
-            the table's CHECK constraint).
+        role: ``user``, ``assistant``, or ``system``. Mypy enforces the
+            literal at the call site; the table's CHECK constraint is
+            the runtime backstop.
         content: Raw turn text.
     """
     params: dict[str, Any] = {"thread_id": thread_id, "role": role, "content": content}

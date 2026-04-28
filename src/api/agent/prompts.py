@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date as _date
+from datetime import UTC, datetime
 
 SYSTEM_PROMPT_TEMPLATE = """You are tfl-monitor's assistant for London transport.
 Tools:
@@ -30,5 +30,5 @@ def render(today: str | None = None) -> str:
     Returns:
         Fully-rendered system prompt.
     """
-    today = today or _date.today().isoformat()
+    today = today or datetime.now(UTC).date().isoformat()
     return SYSTEM_PROMPT_TEMPLATE.format(today=today)
