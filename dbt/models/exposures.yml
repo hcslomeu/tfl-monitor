@@ -1,0 +1,62 @@
+version: 2
+
+# dbt exposures wire the warehouse marts to the API endpoints that
+# consume them. dbt-docs renders these as terminal nodes in the
+# lineage graph, making it obvious which model powers which endpoint.
+#
+# Chat endpoints (/api/v1/chat/...) are intentionally absent — the
+# agent reads from Pinecone (RAG) and the warehouse on demand; it is
+# not a fixed mart consumer.
+
+exposures:
+  - name: api_status_live
+    type: application
+    url: https://tfl-monitor-api.example/api/v1/status/live
+    description: "Latest line-status snapshot per line. Sourced from stg_line_status (snapshot grain) for current valid_from/valid_to/reason fields, not the daily mart."
+    depends_on:
+      - ref('stg_line_status')
+    owner:
+      name: tfl-monitor-api
+      email: ops@tfl-monitor.invalid
+
+  - name: api_status_history
+    type: application
+    url: https://tfl-monitor-api.example/api/v1/status/history
+    description: "Line-status timeseries over a configurable window. Reads snapshot rows from stg_line_status filtered by ingested_at."
+    depends_on:
+      - ref('stg_line_status')
+    owner:
+      name: tfl-monitor-api
+      email: ops@tfl-monitor.invalid
+
+  - name: api_line_reliability
+    type: application
+    url: https://tfl-monitor-api.example/api/v1/reliability/{line_id}
+    description: "Per-line daily reliability summary plus severity drilldown."
+    depends_on:
+      - ref('mart_tube_reliability_daily_summary')
+      - ref('mart_tube_reliability_daily')
+    owner:
+      name: tfl-monitor-api
+      email: ops@tfl-monitor.invalid
+
+  - name: api_recent_disruptions
+    type: application
+    url: https://tfl-monitor-api.example/api/v1/disruptions/recent
+    description: "Recent disruptions feed grouped by line. Snapshot-level fields (description, summary, affected_stops, created, last_update) come from stg_disruptions; mart_disruptions_daily provides the daily aggregate (count, max_severity)."
+    depends_on:
+      - ref('stg_disruptions')
+      - ref('mart_disruptions_daily')
+    owner:
+      name: tfl-monitor-api
+      email: ops@tfl-monitor.invalid
+
+  - name: api_bus_punctuality
+    type: application
+    url: https://tfl-monitor-api.example/api/v1/bus/{stop_id}/punctuality
+    description: "Per-stop bus prediction freshness building blocks."
+    depends_on:
+      - ref('mart_bus_metrics_daily')
+    owner:
+      name: tfl-monitor-api
+      email: ops@tfl-monitor.invalid
