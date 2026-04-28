@@ -15,7 +15,7 @@ Current state of work packages. Update the status column as WPs land.
 | 3 | TM-D2 | Wire endpoints to Postgres | D-api-agent | ⬜ | |
 | 3 | TM-E1a | Next.js scaffold + shadcn + Network Now (mocked) | E-frontend | ✅ 2026-04-28 | scaffold + mocked data; real wiring in E1b post-D2. Vitest+RTL added (6 tests), `make check` chains `pnpm --dir web test`. |
 | 3 | TM-E1b | Network Now wired to real `/status/live` | E-frontend | ⬜ | Swap `lib/api/status-live.ts` body for `apiFetch<LineStatus[]>(...)` once TM-D2 lands. |
-| 4 | TM-B4 | arrivals + disruptions topics | B-ingestion | ⬜ | |
+| 4 | TM-B4 | arrivals + disruptions topics | B-ingestion | ✅ 2026-04-28 | `ArrivalsProducer` polls 5 NaPTAN hubs every 30s (partition key `station_id`, `event_type="arrivals.snapshot"`); `DisruptionsProducer` polls 4 modes every 300s (partition key `disruption_id`, `event_type="disruptions.snapshot"`). Consumer + writer generalised: `RawEventConsumer[E]` + `RawEventWriter(table)` with allow-listed table names; line-status migrated in same PR (Logfire namespace `ingestion.line_status.*` preserved via `log_namespace` override). `redpanda-init` creates all three topics; four new Compose services on profile `ingest`. 27 new unit tests (arrivals + disruptions producers, parametrised consumer × 3 topics, 3 namespace whitebox cases) + smoke parametrised across topics. |
 | 4 | TM-C3 | Remaining marts + tests + exposures | C-dbt | ⬜ | |
 | 4 | TM-D3 | Remaining endpoints | D-api-agent | ⬜ | |
 | 4 | TM-E2 | Disruption Log view | E-frontend | ⬜ | |

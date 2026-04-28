@@ -64,12 +64,15 @@ services:
     command:
       - |
         set -e
-        out=$$(rpk -X brokers=redpanda:9092 topic create line-status \
-          --partitions 1 --replicas 1 2>&1) || rc=$$?
-        echo "$$out"
-        if [ "$${rc:-0}" -ne 0 ] && ! echo "$$out" | grep -qi "already exists\|TOPIC_ALREADY_EXISTS"; then
-          exit 1
-        fi
+        for topic in line-status arrivals disruptions; do
+          rc=0
+          out=$$(rpk -X brokers=redpanda:9092 topic create $$topic \
+            --partitions 1 --replicas 1 2>&1) || rc=$$?
+          echo "$$out"
+          if [ "$$rc" -ne 0 ] && ! echo "$$out" | grep -qi "already exists\|TOPIC_ALREADY_EXISTS"; then
+            exit 1
+          fi
+        done
 
   tfl-line-status-producer:
     build:
@@ -106,6 +109,78 @@ services:
       ENVIRONMENT: ${ENVIRONMENT:-local}
       APP_VERSION: ${APP_VERSION:-0.0.1}
     command: ["uv", "run", "python", "-m", "ingestion.consumers.line_status"]
+
+  tfl-arrivals-producer:
+    build:
+      context: .
+      dockerfile: src/ingestion/Dockerfile
+    restart: unless-stopped
+    profiles: ["ingest"]
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    environment:
+      TFL_APP_KEY: ${TFL_APP_KEY:?TFL_APP_KEY is required}
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      LOGFIRE_TOKEN: ${LOGFIRE_TOKEN:-}
+      ENVIRONMENT: ${ENVIRONMENT:-local}
+      APP_VERSION: ${APP_VERSION:-0.0.1}
+    command: ["uv", "run", "python", "-m", "ingestion.producers.arrivals"]
+
+  tfl-arrivals-consumer:
+    build:
+      context: .
+      dockerfile: src/ingestion/Dockerfile
+    restart: unless-stopped
+    profiles: ["ingest"]
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tflmonitor}:${POSTGRES_PASSWORD:-change_me}@postgres:5432/${POSTGRES_DB:-tflmonitor}
+      LOGFIRE_TOKEN: ${LOGFIRE_TOKEN:-}
+      ENVIRONMENT: ${ENVIRONMENT:-local}
+      APP_VERSION: ${APP_VERSION:-0.0.1}
+    command: ["uv", "run", "python", "-m", "ingestion.consumers.arrivals"]
+
+  tfl-disruptions-producer:
+    build:
+      context: .
+      dockerfile: src/ingestion/Dockerfile
+    restart: unless-stopped
+    profiles: ["ingest"]
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    environment:
+      TFL_APP_KEY: ${TFL_APP_KEY:?TFL_APP_KEY is required}
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      LOGFIRE_TOKEN: ${LOGFIRE_TOKEN:-}
+      ENVIRONMENT: ${ENVIRONMENT:-local}
+      APP_VERSION: ${APP_VERSION:-0.0.1}
+    command: ["uv", "run", "python", "-m", "ingestion.producers.disruptions"]
+
+  tfl-disruptions-consumer:
+    build:
+      context: .
+      dockerfile: src/ingestion/Dockerfile
+    restart: unless-stopped
+    profiles: ["ingest"]
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tflmonitor}:${POSTGRES_PASSWORD:-change_me}@postgres:5432/${POSTGRES_DB:-tflmonitor}
+      LOGFIRE_TOKEN: ${LOGFIRE_TOKEN:-}
+      ENVIRONMENT: ${ENVIRONMENT:-local}
+      APP_VERSION: ${APP_VERSION:-0.0.1}
+    command: ["uv", "run", "python", "-m", "ingestion.consumers.disruptions"]
 
   airflow-init:
     build: ./airflow
