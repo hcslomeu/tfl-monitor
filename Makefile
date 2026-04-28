@@ -22,11 +22,12 @@ down: ## Stop Docker Compose (preserves volumes)
 clean: ## Remove Docker Compose + volumes (destructive)
 	docker compose down -v
 
-check: ## Lint + Python tests + dbt parse + TS lint + TS build
+check: ## Lint + Python tests + dbt parse + TS lint + TS test + TS build
 	uv run task lint
 	uv run task test
 	uv run task dbt-parse
 	pnpm --dir web lint
+	pnpm --dir web test
 	pnpm --dir web build
 
 seed: ## Load fixtures into local Postgres

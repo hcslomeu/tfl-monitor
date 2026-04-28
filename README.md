@@ -68,7 +68,7 @@ Full diagram and component table in [`ARCHITECTURE.md`](./ARCHITECTURE.md).
 | Validation | Pydantic v2 | Every data boundary in the system |
 | LLM observability | LangSmith | Traces every agent decision, tool call, retrieval |
 | App observability | Logfire | FastAPI, Postgres, HTTP — OpenTelemetry-native |
-| Frontend | Next.js 15 + shadcn/ui + claude.design | Server components, typed API client from OpenAPI |
+| Frontend | Next.js 16 + shadcn/ui + claude.design | Server components, typed API client from OpenAPI |
 | Deploy | Railway + Vercel + Supabase + Redpanda Cloud + Pinecone | Free tiers where possible; ~£5/mo for Airflow on Railway |
 
 ## Engineering highlights
@@ -138,6 +138,19 @@ pnpm --dir web dev    # dashboard on :3000
 
 Visit `http://localhost:3000`.
 
+Frontend tooling (delegated to `pnpm` — never npm or yarn):
+
+```bash
+pnpm --dir web lint   # Biome (sole linter/formatter)
+pnpm --dir web test   # Vitest + React Testing Library
+pnpm --dir web build  # Next.js production build
+```
+
+`make check` chains the Python and TypeScript gates for both halves of
+the codebase. See [`web/README.md`](./web/README.md) for the full
+frontend quickstart, including how to regenerate TS types from the
+OpenAPI contract.
+
 Bring it all down with `make down` (preserves data) or `make clean` (wipes volumes).
 
 ## Status — work packages
@@ -155,7 +168,8 @@ Project built as WPs organised into parallel tracks. Track labels indicate which
 | 3 | TM-B3 | `line-status` consumer | B-ingestion | ⬜ |
 | 3 | TM-C2 | dbt staging + first mart | C-dbt | ⬜ |
 | 3 | TM-D2 | Wire endpoints to Postgres | D-api-agent | ⬜ |
-| 3 | TM-E1 | Next.js + claude.design + Network Now | E-frontend | ⬜ |
+| 3 | TM-E1a | Next.js scaffold + shadcn + Network Now (mocked) | E-frontend | ⬜ |
+| 3 | TM-E1b | Network Now wired to real `/status/live` | E-frontend | ⬜ |
 | 4 | TM-B4 | arrivals + disruptions topics | B-ingestion | ⬜ |
 | 4 | TM-C3 | Remaining marts + tests + exposures | C-dbt | ⬜ |
 | 4 | TM-D3 | Remaining endpoints | D-api-agent | ⬜ |
