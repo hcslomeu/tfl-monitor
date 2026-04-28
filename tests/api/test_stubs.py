@@ -31,10 +31,11 @@ FASTAPI_BUILTIN_PATHS = {"/openapi.json", "/docs", "/docs/oauth2-redirect", "/re
 # (method, path, body, expected_wp_hint)
 StubCase = tuple[str, str, dict[str, Any] | None, str]
 
-STUB_ROUTES: list[StubCase] = [
-    ("POST", "/api/v1/chat/stream", {"thread_id": "t-1", "message": "hi"}, "TM-D5"),
-    ("GET", "/api/v1/chat/t-1/history", None, "TM-D5"),
-]
+# All previously stubbed routes have been wired by their owning WPs
+# (TM-D2, TM-D3, TM-D5). The parametrised stub probe stays in place so
+# any future 501 placeholder can be added back here without rebuilding
+# the harness; the bidirectional drift checks below remain authoritative.
+STUB_ROUTES: list[StubCase] = []
 
 
 def _api_routes(app_obj: Any) -> Iterable[APIRoute]:

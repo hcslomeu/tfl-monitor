@@ -94,6 +94,7 @@ addopts = "-m 'not integration and not airflow'"
 markers = [
     "integration: requires live services (Postgres, Kafka, etc.); opt in with -m integration",
     "airflow: requires apache-airflow installed; opt in with -m airflow",
+    "slow: spends real LLM / RAG budget; opt in with -m 'integration and slow'",
 ]
 
 [tool.taskipy.tasks]

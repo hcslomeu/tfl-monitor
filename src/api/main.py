@@ -1,24 +1,30 @@
 """FastAPI entrypoint for the tfl-monitor API.
 
-Status, reliability, disruptions, and bus endpoints query Postgres via
-a shared ``AsyncConnectionPool`` opened by the lifespan. Chat
-endpoints stay stubbed at HTTP 501 until TM-D5 lands. The shape of the
-API is fixed by ``contracts/openapi.yaml``.
+Status, reliability, disruptions, bus, and chat endpoints query Postgres
+via a shared ``AsyncConnectionPool`` opened by the lifespan. The chat
+agent is compiled once in the lifespan and cached on
+``app.state.agent``. The shape of the API is fixed by
+``contracts/openapi.yaml``.
 """
 
 from __future__ import annotations
 
+import asyncio
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
-from typing import Annotated, Any, NoReturn
+from typing import Annotated, Any
 
 import logfire
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
+from sse_starlette.sse import EventSourceResponse
 
+from api.agent.graph import compile_agent
+from api.agent.history import append_message, fetch_history
+from api.agent.streaming import frame_end, project, serialise
 from api.db import (
     BUS_PUNCTUALITY_WINDOW_DAYS,
     build_pool,
@@ -31,6 +37,8 @@ from api.db import (
 from api.observability import configure_observability
 from api.schemas import (
     BusPunctualityResponse,
+    ChatMessageResponse,
+    ChatRequest,
     DisruptionResponse,
     LineReliabilityResponse,
     LineStatusResponse,
@@ -63,18 +71,26 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     pool = build_pool(dsn)
     await pool.open()
     app.state.db_pool = pool
+    app.state.agent = compile_agent(pool=pool)
     logfire.info(
         "api_db_pool_opened",
         service="tfl-monitor-api",
         database_url_configured=True,
         pool_min_size=1,
         pool_max_size=4,
+        chat_agent_configured=app.state.agent is not None,
     )
+    if app.state.agent is None:
+        logfire.info(
+            "api_chat_agent_disabled_no_credentials",
+            service="tfl-monitor-api",
+        )
     try:
         yield
     finally:
         await pool.close()
         app.state.db_pool = None
+        app.state.agent = None
         logfire.info("api_db_pool_closed", service="tfl-monitor-api")
 
 
@@ -87,8 +103,9 @@ app = FastAPI(
 
 # Pre-seed so unit tests that build ``TestClient(app)`` outside an
 # ``async with`` block (and therefore skip the lifespan) still see the
-# attribute. Tests that need a live pool monkeypatch this slot.
+# attribute. Tests that need a live pool / agent monkeypatch these slots.
 app.state.db_pool = None
+app.state.agent = None
 
 configure_observability(app)
 
@@ -102,10 +119,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-def _not_implemented(detail: str) -> NoReturn:
-    raise HTTPException(status_code=501, detail=detail)
 
 
 def _problem(status: int, title: str, detail: str) -> JSONResponse:
@@ -221,14 +234,67 @@ async def get_bus_punctuality(
 
 
 @app.post("/api/v1/chat/stream", operation_id="post_chat_stream", response_model=None)
-async def post_chat_stream() -> NoReturn:
-    _not_implemented("Not implemented — see TM-D5")
+async def post_chat_stream(request: Request, body: ChatRequest) -> Response:
+    """Stream a LangGraph agent response over Server-Sent Events.
+
+    Persists the user turn before yielding the first frame and the
+    assistant turn after the final ``end`` frame so a concurrent
+    ``GET /history`` always sees a coherent view of the conversation.
+    """
+    pool = request.app.state.db_pool
+    agent = getattr(request.app.state, "agent", None)
+    if pool is None:
+        return _problem(503, "Service Unavailable", "Database pool is not available")
+    if agent is None:
+        return _problem(503, "Service Unavailable", "Chat agent is not configured")
+
+    await append_message(pool, thread_id=body.thread_id, role="user", content=body.message)
+
+    async def event_stream() -> AsyncIterator[dict[str, str]]:
+        config: dict[str, Any] = {"configurable": {"thread_id": body.thread_id}}
+        inputs = {"messages": [{"role": "user", "content": body.message}]}
+        assistant_buffer: list[str] = []
+        try:
+            async for mode, payload in agent.astream(
+                inputs, config=config, stream_mode=["messages", "updates"]
+            ):
+                if await request.is_disconnected():
+                    return
+                for frame in project(mode, payload):
+                    if frame["type"] == "token":
+                        assistant_buffer.append(frame["content"])
+                    yield {"data": serialise(frame)}
+            yield {"data": serialise(frame_end())}
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logfire.exception("chat_stream_failed", thread_id=body.thread_id)
+            yield {"data": serialise(frame_end("error"))}
+        finally:
+            if assistant_buffer:
+                await append_message(
+                    pool,
+                    thread_id=body.thread_id,
+                    role="assistant",
+                    content="".join(assistant_buffer),
+                )
+
+    return EventSourceResponse(event_stream(), ping=15)
 
 
 @app.get(
     "/api/v1/chat/{thread_id}/history",
     operation_id="get_chat_history",
-    response_model=None,
+    response_model=list[ChatMessageResponse],
 )
-async def get_chat_history(thread_id: str) -> NoReturn:
-    _not_implemented("Not implemented — see TM-D5")
+async def get_chat_history(
+    request: Request,
+    thread_id: str,
+) -> list[ChatMessageResponse] | Response:
+    pool = request.app.state.db_pool
+    if pool is None:
+        return _problem(503, "Service Unavailable", "Database pool is not available")
+    rows = await fetch_history(pool, thread_id=thread_id)
+    if not rows:
+        return _problem(404, "Not Found", f"No history for thread {thread_id}")
+    return rows

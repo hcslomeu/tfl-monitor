@@ -2,16 +2,15 @@
 
 Provides minimal fakes for the chat model and the LlamaIndex retriever
 so the agent suite never touches the live Anthropic, OpenAI, or
-Pinecone services.
+Pinecone services. ``attach_agent`` lives in ``tests/conftest.py`` so
+both the agent suite and the API suite (chat stream tests) share it.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import Any
 
-import pytest
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
@@ -91,19 +90,3 @@ def make_node(
         text=text,
         score=score,
     )
-
-
-@pytest.fixture
-def attach_agent() -> Iterator[Any]:
-    """Attach a fake agent to ``app.state.agent`` and restore on teardown."""
-    from api.main import app
-
-    original = getattr(app.state, "agent", None)
-
-    def _attach(agent: Any) -> None:
-        app.state.agent = agent
-
-    try:
-        yield _attach
-    finally:
-        app.state.agent = original
