@@ -68,12 +68,15 @@ class RawEventConsumer[E: Event[Any]]:
         writer: RawEventWriter,
         event_class: type[E],
         topic_label: str,
+        log_namespace: str | None = None,
         clock: Callable[[], float] = time.monotonic,
         lag_refresh_messages: int = DEFAULT_LAG_REFRESH_MESSAGES,
         lag_refresh_seconds: float = DEFAULT_LAG_REFRESH_SECONDS,
     ) -> None:
         if not topic_label:
             raise ValueError("topic_label must be a non-empty string")
+        if log_namespace is not None and not log_namespace:
+            raise ValueError("log_namespace must be a non-empty string when provided")
         if lag_refresh_messages <= 0:
             raise ValueError("lag_refresh_messages must be > 0")
         if lag_refresh_seconds <= 0:
@@ -82,6 +85,12 @@ class RawEventConsumer[E: Event[Any]]:
         self._writer = writer
         self._event_class = event_class
         self._topic_label = topic_label
+        # ``log_namespace`` exists so the line-status entrypoint can keep
+        # TM-B3's ``ingestion.line_status.*`` log keys after migration —
+        # the topic name uses a hyphen, but the historical namespace used
+        # an underscore. New topics fall back to ``topic_label`` so their
+        # log keys mirror the topic name.
+        self._log_namespace = log_namespace or topic_label
         self._clock = clock
         self._lag_refresh_messages = lag_refresh_messages
         self._lag_refresh_seconds = lag_refresh_seconds
@@ -138,7 +147,7 @@ class RawEventConsumer[E: Event[Any]]:
                 event = self._event_class.model_validate_json(msg.value or b"")
             except pydantic.ValidationError as exc:
                 logfire.warn(
-                    f"ingestion.{self._topic_label}.poison_pill",
+                    f"ingestion.{self._log_namespace}.poison_pill",
                     error=repr(exc),
                     topic=msg.topic,
                     partition=msg.partition,
@@ -152,7 +161,7 @@ class RawEventConsumer[E: Event[Any]]:
                 rowcount = await self._writer.insert(event)
             except psycopg.OperationalError as exc:
                 logfire.warn(
-                    f"ingestion.{self._topic_label}.db_transient",
+                    f"ingestion.{self._log_namespace}.db_transient",
                     error=repr(exc),
                     event_id=str(event.event_id),
                 )
@@ -161,7 +170,7 @@ class RawEventConsumer[E: Event[Any]]:
                 return False
             except Exception as exc:  # noqa: BLE001 - safety net keeps daemon alive
                 logfire.error(
-                    f"ingestion.{self._topic_label}.unknown_failure",
+                    f"ingestion.{self._log_namespace}.unknown_failure",
                     error=repr(exc),
                     event_id=str(event.event_id),
                 )
@@ -177,7 +186,7 @@ class RawEventConsumer[E: Event[Any]]:
             await self._kafka_consumer.commit()
         except KafkaConsumerError as exc:
             logfire.warn(
-                f"ingestion.{self._topic_label}.commit_failed",
+                f"ingestion.{self._log_namespace}.commit_failed",
                 error=repr(exc),
                 topic=msg.topic,
                 partition=msg.partition,
@@ -197,7 +206,7 @@ class RawEventConsumer[E: Event[Any]]:
             await self._writer.reconnect()
         except Exception as exc:  # noqa: BLE001 - safety net keeps daemon alive
             logfire.warn(
-                f"ingestion.{self._topic_label}.reconnect_failed",
+                f"ingestion.{self._log_namespace}.reconnect_failed",
                 error=repr(exc),
             )
             await asyncio.sleep(_REPLAY_BACKOFF_SECONDS)
@@ -208,7 +217,7 @@ class RawEventConsumer[E: Event[Any]]:
             self._kafka_consumer.seek(TopicPartition(msg.topic, msg.partition), msg.offset)
         except KafkaConsumerError as exc:
             logfire.warn(
-                f"ingestion.{self._topic_label}.seek_failed",
+                f"ingestion.{self._log_namespace}.seek_failed",
                 error=repr(exc),
                 topic=msg.topic,
                 partition=msg.partition,
@@ -223,7 +232,7 @@ class RawEventConsumer[E: Event[Any]]:
             end_offsets = await self._kafka_consumer.end_offsets(partitions)
         except KafkaConsumerError as exc:
             logfire.warn(
-                f"ingestion.{self._topic_label}.lag_refresh_failed",
+                f"ingestion.{self._log_namespace}.lag_refresh_failed",
                 error=repr(exc),
             )
             return

@@ -21,6 +21,7 @@ from ingestion.observability import configure_logfire
 
 __all__ = [
     "LINE_STATUS_CONSUMER_GROUP_ID",
+    "LINE_STATUS_LOG_NAMESPACE",
     "LINE_STATUS_TABLE",
     "LINE_STATUS_TOPIC_LABEL",
     "main",
@@ -29,6 +30,11 @@ __all__ = [
 LINE_STATUS_CONSUMER_GROUP_ID = "tfl-monitor-line-status-writer"
 LINE_STATUS_TABLE = "raw.line_status"
 LINE_STATUS_TOPIC_LABEL = "line-status"
+# Preserved from TM-B3: the historical Logfire namespace uses an underscore
+# (``ingestion.line_status.*``) even though the Kafka topic name is the
+# hyphenated ``line-status``. Migrating to the generic consumer must not
+# silently rename log keys downstream alerts may already match on.
+LINE_STATUS_LOG_NAMESPACE = "line_status"
 _LINE_STATUS_CLIENT_ID = "tfl-monitor-ingestion-line-status-consumer"
 
 
@@ -57,6 +63,7 @@ async def _amain() -> None:
             writer=writer,
             event_class=LineStatusEvent,
             topic_label=LINE_STATUS_TOPIC_LABEL,
+            log_namespace=LINE_STATUS_LOG_NAMESPACE,
         )
         await consumer.run_forever()
 

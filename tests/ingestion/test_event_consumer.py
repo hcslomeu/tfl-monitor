@@ -476,3 +476,43 @@ def test_constructor_rejects_non_positive_lag_refresh_seconds() -> None:
             topic_label="line-status",
             lag_refresh_seconds=0.0,
         )
+
+
+def test_log_namespace_defaults_to_topic_label() -> None:
+    consumer = RawEventConsumer[LineStatusEvent](
+        kafka_consumer=cast(KafkaEventConsumer, _FakeKafka()),
+        writer=cast(RawEventWriter, _FakeWriter()),
+        event_class=LineStatusEvent,
+        topic_label="arrivals",
+    )
+    assert consumer._log_namespace == "arrivals"  # noqa: SLF001 - whitebox assertion
+
+
+def test_log_namespace_override_preserves_legacy_keys() -> None:
+    """The line-status entrypoint passes ``log_namespace="line_status"``.
+
+    Migrating TM-B3's consumer to the generic class must not silently
+    rename the historical ``ingestion.line_status.*`` Logfire keys —
+    downstream alerts may already match on them. This whitebox check
+    guards the override path the entrypoint relies on.
+    """
+    consumer = RawEventConsumer[LineStatusEvent](
+        kafka_consumer=cast(KafkaEventConsumer, _FakeKafka()),
+        writer=cast(RawEventWriter, _FakeWriter()),
+        event_class=LineStatusEvent,
+        topic_label="line-status",
+        log_namespace="line_status",
+    )
+    assert consumer._topic_label == "line-status"  # noqa: SLF001 - whitebox assertion
+    assert consumer._log_namespace == "line_status"  # noqa: SLF001
+
+
+def test_constructor_rejects_empty_log_namespace_override() -> None:
+    with pytest.raises(ValueError):
+        RawEventConsumer[LineStatusEvent](
+            kafka_consumer=cast(KafkaEventConsumer, _FakeKafka()),
+            writer=cast(RawEventWriter, _FakeWriter()),
+            event_class=LineStatusEvent,
+            topic_label="line-status",
+            log_namespace="",
+        )
