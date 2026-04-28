@@ -13,7 +13,8 @@ Current state of work packages. Update the status column as WPs land.
 | 3 | TM-B3 | `line-status` consumer | B-ingestion | ✅ 2026-04-28 | Async `LineStatusConsumer.run_forever` reads `line-status` topic with `group_id="tfl-monitor-line-status-writer"`, `auto_offset_reset="earliest"`, `enable_auto_commit=False`. `KafkaEventConsumer` wrapper mirrors TM-B2 producer. `RawLineStatusWriter` over single async psycopg connection with `INSERT … ON CONFLICT (event_id) DO NOTHING` for idempotency, reconnect-on-`OperationalError`. Failure isolation: poison pill = skip+commit; transient DB = reconnect+replay; unknown = log+replay. Lag traced on every `kafka.consume` span, refreshed every 50 msgs / 30 s. Compose service `tfl-line-status-consumer` (profile `ingest`) + `consume-line-status` task/Makefile. Observability helper `src/ingestion/observability.py` extracted (producer migrated). 21 unit tests + 1 integration smoke. |
 | 3 | TM-C2 | dbt staging + first mart | C-dbt | ⬜ | |
 | 3 | TM-D2 | Wire endpoints to Postgres | D-api-agent | ⬜ | |
-| 3 | TM-E1 | Next.js + claude.design + Network Now | E-frontend | ⬜ | |
+| 3 | TM-E1a | Next.js scaffold + shadcn + Network Now (mocked) | E-frontend | ✅ 2026-04-28 | scaffold + mocked data; real wiring in E1b post-D2. Vitest+RTL added (6 tests), `make check` chains `pnpm --dir web test`. |
+| 3 | TM-E1b | Network Now wired to real `/status/live` | E-frontend | ⬜ | Swap `lib/api/status-live.ts` body for `apiFetch<LineStatus[]>(...)` once TM-D2 lands. |
 | 4 | TM-B4 | arrivals + disruptions topics | B-ingestion | ⬜ | |
 | 4 | TM-C3 | Remaining marts + tests + exposures | C-dbt | ⬜ | |
 | 4 | TM-D3 | Remaining endpoints | D-api-agent | ⬜ | |
