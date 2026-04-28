@@ -1,1 +1,4 @@
-# Additional Airflow provider packages land in TM-A2.
+# DAGs invoke project entrypoints via `uv run`, so the Airflow image
+# needs a uv binary on PATH. uv is installed into the same Python
+# env as Airflow at image-build time.
+uv>=0.5
