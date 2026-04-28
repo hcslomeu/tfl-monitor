@@ -81,8 +81,37 @@ describe("Disruption Log page", () => {
 		).toBeInTheDocument();
 	});
 
-	it("colours the category badge by tone", async () => {
-		getRecentDisruptionsMock.mockResolvedValueOnce(SAMPLE);
+	it("colours the category badge by tone across every category", async () => {
+		const ALL_CATEGORIES: Disruption[] = [
+			...SAMPLE,
+			{
+				disruption_id: "2026-04-22-INC-001",
+				category: "Incident",
+				category_description: "Incident",
+				description: "Person ill on a train at Holborn.",
+				summary: "Severe delays following passenger incident",
+				affected_routes: ["central"],
+				affected_stops: [],
+				closure_text: "",
+				severity: 6,
+				created: "2026-04-22T07:10:00Z",
+				last_update: "2026-04-22T07:30:00Z",
+			},
+			{
+				disruption_id: "2026-04-22-UND-001",
+				category: "Undefined",
+				category_description: "Undefined",
+				description: "Unclassified disruption surfaced by the feed.",
+				summary: "Unclassified disruption",
+				affected_routes: [],
+				affected_stops: [],
+				closure_text: "",
+				severity: 0,
+				created: "2026-04-22T07:00:00Z",
+				last_update: "2026-04-22T07:00:00Z",
+			},
+		];
+		getRecentDisruptionsMock.mockResolvedValueOnce(ALL_CATEGORIES);
 
 		const ui = await DisruptionsPage();
 		render(ui);
@@ -99,6 +128,8 @@ describe("Disruption Log page", () => {
 			"data-tone",
 			"info",
 		);
+		expect(screen.getByText("Incident")).toHaveAttribute("data-tone", "severe");
+		expect(screen.getByText("Other")).toHaveAttribute("data-tone", "neutral");
 	});
 
 	it("renders the closure_text in a destructive alert when present", async () => {
@@ -177,5 +208,16 @@ describe("Disruption Log page", () => {
 
 		expect(screen.getAllByRole("alert").length).toBeGreaterThan(0);
 		expect(screen.getByText(/network down/i)).toBeInTheDocument();
+	});
+
+	it("renders error fallback when ApiError detail is empty", async () => {
+		getRecentDisruptionsMock.mockRejectedValueOnce(new ApiError(503, ""));
+
+		const ui = await DisruptionsPage();
+		render(ui);
+
+		expect(screen.getAllByRole("alert").length).toBeGreaterThan(0);
+		expect(screen.getByText(/disruptions unavailable/i)).toBeInTheDocument();
+		expect(screen.getByText(/HTTP 503/)).toBeInTheDocument();
 	});
 });

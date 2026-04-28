@@ -92,15 +92,19 @@ function CategoryBadge({ category }: { category: Disruption["category"] }) {
 
 export default async function DisruptionsPage() {
 	let disruptions: Disruption[] | null = null;
-	let errorDetail: string | null = null;
+	let hasError = false;
+	let errorDetail = "";
 
 	try {
 		disruptions = await getRecentDisruptions();
 	} catch (err) {
+		hasError = true;
 		if (err instanceof ApiError) {
-			errorDetail = err.detail;
+			errorDetail = err.detail || `HTTP ${err.status}`;
+		} else if (err instanceof Error && err.message) {
+			errorDetail = err.message;
 		} else {
-			errorDetail = err instanceof Error ? err.message : "Unknown error";
+			errorDetail = "Unknown error";
 		}
 	}
 
@@ -116,7 +120,7 @@ export default async function DisruptionsPage() {
 				</p>
 			</header>
 
-			{errorDetail ? (
+			{hasError ? (
 				<Alert role="alert">
 					<AlertTitle>Disruptions unavailable</AlertTitle>
 					<AlertDescription>{errorDetail}</AlertDescription>
@@ -135,7 +139,7 @@ export default async function DisruptionsPage() {
 					data-testid="disruption-list"
 				>
 					{(disruptions ?? []).map((d) => (
-						<Card key={d.disruption_id}>
+						<Card key={`${d.disruption_id}-${d.last_update}`}>
 							<CardHeader>
 								<CardTitle className="flex flex-wrap items-center gap-2">
 									<span>{d.summary}</span>
