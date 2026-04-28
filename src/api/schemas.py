@@ -113,3 +113,30 @@ class Problem(BaseModel):
     status: int
     detail: str | None = None
     instance: str | None = None
+
+
+class ChatRequest(BaseModel):
+    """Body of ``POST /api/v1/chat/stream``.
+
+    Mirrors the OpenAPI ``ChatRequest`` schema; ``extra="forbid"`` so a
+    malformed client cannot smuggle additional fields past the route
+    boundary.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    thread_id: str = Field(min_length=1)
+    message: str = Field(min_length=1, max_length=4000)
+
+
+class ChatMessageResponse(BaseModel):
+    """Single chat turn returned by ``GET /api/v1/chat/{thread_id}/history``.
+
+    Mirrors the OpenAPI ``ChatMessage`` schema.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    role: Literal["user", "assistant", "system"]
+    content: str
+    created_at: datetime
