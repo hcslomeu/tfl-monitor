@@ -492,13 +492,13 @@ Notes:
 `pyproject.toml` `[tool.taskipy.tasks]` — add next to
 `ingest-line-status`:
 
-```
+```ini
 consume-line-status = "python -m ingestion.consumers.line_status"
 ```
 
 `Makefile` — add a target next to `ingest-line-status`:
 
-```
+```makefile
 consume-line-status: ## Run line-status consumer locally (host-side, against Compose Redpanda + Postgres)
 	uv run python -m ingestion.consumers.line_status
 ```

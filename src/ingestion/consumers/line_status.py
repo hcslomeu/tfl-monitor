@@ -27,7 +27,7 @@ from typing import NoReturn
 import logfire
 import psycopg
 import pydantic
-from aiokafka.structs import ConsumerRecord
+from aiokafka.structs import ConsumerRecord, TopicPartition
 
 from contracts.schemas import LineStatusEvent
 from ingestion.consumers.kafka import KafkaConsumerError, KafkaEventConsumer
@@ -46,6 +46,7 @@ LINE_STATUS_CONSUMER_GROUP_ID = "tfl-monitor-line-status-writer"
 LINE_STATUS_LAG_REFRESH_MESSAGES = 50
 LINE_STATUS_LAG_REFRESH_SECONDS = 30.0
 _POISON_PILL_PREVIEW_BYTES = 256
+_REPLAY_BACKOFF_SECONDS = 1.0
 
 
 def _truncate(value: bytes | None, limit: int) -> str:
@@ -134,7 +135,7 @@ class LineStatusConsumer:
                     offset=msg.offset,
                     preview=_truncate(msg.value, _POISON_PILL_PREVIEW_BYTES),
                 )
-                await self._kafka_consumer.commit()
+                await self._safe_commit(msg)
                 return False
 
             try:
@@ -145,7 +146,8 @@ class LineStatusConsumer:
                     error=repr(exc),
                     event_id=str(event.event_id),
                 )
-                await self._writer.reconnect()
+                await self._safe_reconnect()
+                self._schedule_replay(msg)
                 return False
             except Exception as exc:  # noqa: BLE001 - safety net keeps daemon alive
                 logfire.error(
@@ -153,10 +155,64 @@ class LineStatusConsumer:
                     error=repr(exc),
                     event_id=str(event.event_id),
                 )
+                self._schedule_replay(msg)
                 return False
 
-            await self._kafka_consumer.commit()
+            await self._safe_commit(msg)
             return bool(rowcount)
+
+    async def _safe_commit(self, msg: ConsumerRecord[bytes, bytes]) -> None:
+        """Commit the latest offsets; never raise.
+
+        A failed commit only delays the offset update by one cycle —
+        the next successful commit picks up the latest position. We
+        never crash the daemon on a transient broker hiccup.
+        """
+        try:
+            await self._kafka_consumer.commit()
+        except KafkaConsumerError as exc:
+            logfire.warn(
+                "ingestion.line_status.commit_failed",
+                error=repr(exc),
+                topic=msg.topic,
+                partition=msg.partition,
+                offset=msg.offset,
+            )
+
+    async def _safe_reconnect(self) -> None:
+        """Reconnect the writer; swallow + back off if the DB stays down.
+
+        Replay is enforced by :meth:`_schedule_replay`, so the loop can
+        retry the same message on the next iteration even when the
+        reconnect itself fails.
+        """
+        try:
+            await self._writer.reconnect()
+        except psycopg.OperationalError as exc:
+            logfire.warn(
+                "ingestion.line_status.reconnect_failed",
+                error=repr(exc),
+            )
+            await asyncio.sleep(_REPLAY_BACKOFF_SECONDS)
+
+    def _schedule_replay(self, msg: ConsumerRecord[bytes, bytes]) -> None:
+        """Roll the consumer back to ``msg.offset`` so the next iteration replays it.
+
+        ``aiokafka`` advances the in-memory fetch position when a record
+        is consumed from the iterator; without ``seek`` the failed
+        message is skipped even though no offset was committed. Any
+        seek failure is logged but never propagated.
+        """
+        try:
+            self._kafka_consumer.seek(TopicPartition(msg.topic, msg.partition), msg.offset)
+        except KafkaConsumerError as exc:
+            logfire.warn(
+                "ingestion.line_status.seek_failed",
+                error=repr(exc),
+                topic=msg.topic,
+                partition=msg.partition,
+                offset=msg.offset,
+            )
 
     async def _refresh_lag(self) -> None:
         partitions = self._kafka_consumer.assignment()

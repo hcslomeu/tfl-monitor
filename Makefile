@@ -40,4 +40,4 @@ sync-dbt-sources: ## Sync dbt/sources/tfl.yml from contracts/dbt_sources.yml (si
 	@echo "dbt/sources/tfl.yml synced from contracts/dbt_sources.yml"
 
 consume-line-status: ## Run line-status consumer locally (host-side, against Compose Redpanda + Postgres)
-	uv run python -m ingestion.consumers.line_status
+	uv run task consume-line-status

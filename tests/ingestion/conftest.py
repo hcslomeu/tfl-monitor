@@ -110,11 +110,13 @@ class FakeAIOKafkaConsumer:
         self.started = False
         self.stopped = False
         self.commit_count = 0
+        self.seeks: list[tuple[TopicPartition, int]] = []
         self.end_offsets_calls: list[list[TopicPartition]] = []
         self._records: list[ConsumerRecord[bytes, bytes]] = []
         self._end_offsets: dict[TopicPartition, int] = {}
         self.commit_fail_next: BaseException | None = None
         self.end_offsets_fail_next: BaseException | None = None
+        self.seek_fail_next: BaseException | None = None
         self.start_fail: BaseException | None = None
 
     # -- test setup helpers --
@@ -153,6 +155,13 @@ class FakeAIOKafkaConsumer:
 
     def assignment(self) -> set[TopicPartition]:
         return set(self._end_offsets.keys())
+
+    def seek(self, partition: TopicPartition, offset: int) -> None:
+        if self.seek_fail_next is not None:
+            exc = self.seek_fail_next
+            self.seek_fail_next = None
+            raise exc
+        self.seeks.append((partition, offset))
 
     def __aiter__(self) -> AsyncIterator[ConsumerRecord[bytes, bytes]]:
         records = list(self._records)

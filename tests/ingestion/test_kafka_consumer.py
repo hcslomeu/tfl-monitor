@@ -138,3 +138,52 @@ async def test_commit_outside_context_manager_fails() -> None:
     )
     with pytest.raises(KafkaConsumerError):
         await consumer.commit()
+
+
+async def test_aenter_cleans_up_on_start_failure() -> None:
+    fake = FakeAIOKafkaConsumer()
+    fake.start_fail = KafkaError("simulated start failure")
+
+    consumer = KafkaEventConsumer(
+        "line-status",
+        bootstrap_servers="localhost:19092",
+        group_id="g",
+        consumer_factory=_factory_returning(fake),
+    )
+    with pytest.raises(KafkaConsumerError):
+        await consumer.__aenter__()
+
+    # Partial consumer was stopped and the wrapper reset so a retry
+    # cannot accidentally use a half-initialized client.
+    assert fake.stopped is True
+    with pytest.raises(KafkaConsumerError):
+        await consumer.commit()
+
+
+async def test_seek_translates_kafka_error_to_kafka_consumer_error() -> None:
+    fake = FakeAIOKafkaConsumer()
+    fake.seek_fail_next = KafkaError("simulated seek failure")
+
+    async with KafkaEventConsumer(
+        "line-status",
+        bootstrap_servers="localhost:19092",
+        group_id="g",
+        consumer_factory=_factory_returning(fake),
+    ) as consumer:
+        with pytest.raises(KafkaConsumerError):
+            consumer.seek(TopicPartition("line-status", 0), 42)
+
+
+async def test_seek_records_partition_and_offset() -> None:
+    fake = FakeAIOKafkaConsumer()
+    tp = TopicPartition("line-status", 0)
+
+    async with KafkaEventConsumer(
+        "line-status",
+        bootstrap_servers="localhost:19092",
+        group_id="g",
+        consumer_factory=_factory_returning(fake),
+    ) as consumer:
+        consumer.seek(tp, 42)
+
+    assert fake.seeks == [(tp, 42)]

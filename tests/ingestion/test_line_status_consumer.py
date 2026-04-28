@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, Self, cast
 
 import psycopg
+import pytest
 from aiokafka.structs import ConsumerRecord, TopicPartition
 
 from contracts.schemas import LineStatusEvent, LineStatusPayload, TransportMode
@@ -56,9 +57,12 @@ class _FakeKafka:
     def __init__(self, records: list[ConsumerRecord[bytes, bytes]] | None = None) -> None:
         self._records: list[ConsumerRecord[bytes, bytes]] = list(records or [])
         self.commit_count = 0
+        self.seeks: list[tuple[TopicPartition, int]] = []
         self.end_offsets_calls: list[list[TopicPartition]] = []
         self.end_offsets_value: dict[TopicPartition, int] = {}
         self._assignment: set[TopicPartition] = set()
+        self.commit_fail_next: BaseException | None = None
+        self.seek_fail_next: BaseException | None = None
 
     def queue(self, record: ConsumerRecord[bytes, bytes]) -> None:
         self._records.append(record)
@@ -74,6 +78,10 @@ class _FakeKafka:
         return None
 
     async def commit(self) -> None:
+        if self.commit_fail_next is not None:
+            exc = self.commit_fail_next
+            self.commit_fail_next = None
+            raise exc
         self.commit_count += 1
 
     async def end_offsets(self, partitions: list[TopicPartition]) -> dict[TopicPartition, int]:
@@ -82,6 +90,13 @@ class _FakeKafka:
 
     def assignment(self) -> set[TopicPartition]:
         return set(self._assignment)
+
+    def seek(self, partition: TopicPartition, offset: int) -> None:
+        if self.seek_fail_next is not None:
+            exc = self.seek_fail_next
+            self.seek_fail_next = None
+            raise exc
+        self.seeks.append((partition, offset))
 
     def __aiter__(self) -> AsyncIterator[ConsumerRecord[bytes, bytes]]:
         records = list(self._records)
@@ -101,6 +116,7 @@ class _FakeWriter:
         self.reconnect_count = 0
         self._default_rowcount = rowcount
         self.fail_next: BaseException | None = None
+        self.reconnect_fail_next: BaseException | None = None
 
     async def __aenter__(self) -> Self:
         return self
@@ -117,6 +133,10 @@ class _FakeWriter:
         return self._default_rowcount
 
     async def reconnect(self) -> None:
+        if self.reconnect_fail_next is not None:
+            exc = self.reconnect_fail_next
+            self.reconnect_fail_next = None
+            raise exc
         self.reconnect_count += 1
 
 
@@ -170,7 +190,7 @@ async def test_run_once_skips_and_commits_poison_pill() -> None:
 
 async def test_run_once_does_not_commit_on_db_operational_error() -> None:
     event = _build_event()
-    kafka = _FakeKafka([_record_for(event, offset=0)])
+    kafka = _FakeKafka([_record_for(event, partition=0, offset=7)])
     writer = _FakeWriter()
     writer.fail_next = psycopg.OperationalError("simulated transient db error")
 
@@ -181,11 +201,14 @@ async def test_run_once_does_not_commit_on_db_operational_error() -> None:
     assert writer.inserted == []
     assert kafka.commit_count == 0
     assert writer.reconnect_count == 1
+    # Without seek aiokafka would silently advance past the failed
+    # message; replay is what makes at-least-once correct.
+    assert kafka.seeks == [(TopicPartition("line-status", 0), 7)]
 
 
 async def test_run_once_does_not_commit_on_unknown_db_error() -> None:
     event = _build_event()
-    kafka = _FakeKafka([_record_for(event, offset=0)])
+    kafka = _FakeKafka([_record_for(event, partition=0, offset=3)])
     writer = _FakeWriter()
     writer.fail_next = RuntimeError("boom")
 
@@ -196,6 +219,53 @@ async def test_run_once_does_not_commit_on_unknown_db_error() -> None:
     assert writer.inserted == []
     assert kafka.commit_count == 0
     assert writer.reconnect_count == 0
+    assert kafka.seeks == [(TopicPartition("line-status", 0), 3)]
+
+
+async def test_commit_failure_is_swallowed_and_loop_continues() -> None:
+    events = [_build_event(line_id=f"line-{i}") for i in range(2)]
+    kafka = _FakeKafka([_record_for(e, offset=i) for i, e in enumerate(events)])
+    # First commit blows up; second must still be attempted (loop survives).
+    from ingestion.consumers import KafkaConsumerError
+
+    kafka.commit_fail_next = KafkaConsumerError("transient broker hiccup")
+    writer = _FakeWriter()
+
+    consumer = _make_consumer(kafka, writer)
+    inserted = await consumer.run_once()
+
+    # Both inserts ran; one commit succeeded after the first was swallowed.
+    assert inserted == 2
+    assert len(writer.inserted) == 2
+    assert kafka.commit_count == 1
+    assert kafka.seeks == []  # commit failure must NOT trigger a replay
+
+
+async def test_reconnect_failure_is_swallowed_with_replay_scheduled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def _no_sleep(_delay: float) -> None:
+        return None
+
+    monkeypatch.setattr(
+        "ingestion.consumers.line_status.asyncio.sleep",
+        _no_sleep,
+    )
+
+    event = _build_event()
+    kafka = _FakeKafka([_record_for(event, partition=0, offset=11)])
+    writer = _FakeWriter()
+    writer.fail_next = psycopg.OperationalError("db down")
+    writer.reconnect_fail_next = psycopg.OperationalError("db still down")
+
+    consumer = _make_consumer(kafka, writer)
+    inserted = await consumer.run_once()
+
+    # Daemon stays alive even when reconnect itself raises; the message
+    # is queued for replay so no row goes missing once the DB is back.
+    assert inserted == 0
+    assert kafka.commit_count == 0
+    assert kafka.seeks == [(TopicPartition("line-status", 0), 11)]
 
 
 async def test_duplicate_returns_zero_rowcount_but_still_commits() -> None:

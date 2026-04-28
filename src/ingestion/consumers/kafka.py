@@ -8,6 +8,7 @@ registry until a second consumer lands (TM-B4).
 
 from __future__ import annotations
 
+import contextlib
 from collections.abc import AsyncIterator, Callable, Iterable
 from types import TracebackType
 from typing import Self, cast
@@ -61,7 +62,7 @@ class KafkaEventConsumer:
         self._consumer: AIOKafkaConsumer | None = None
 
     async def __aenter__(self) -> Self:
-        self._consumer = self._consumer_factory(
+        consumer = self._consumer_factory(
             self._topic,
             bootstrap_servers=self._bootstrap_servers,
             client_id=self._client_id,
@@ -69,10 +70,14 @@ class KafkaEventConsumer:
             auto_offset_reset=self._auto_offset_reset,
             enable_auto_commit=False,
         )
+        self._consumer = consumer
         with logfire.span("kafka.consumer.start", topic=self._topic, group_id=self._group_id):
             try:
-                await self._consumer.start()  # type: ignore[no-untyped-call]
+                await consumer.start()  # type: ignore[no-untyped-call]
             except KafkaError as exc:
+                with contextlib.suppress(Exception):
+                    await consumer.stop()  # type: ignore[no-untyped-call]
+                self._consumer = None
                 raise KafkaConsumerError(f"Kafka consumer start failed: {exc!r}") from exc
         return self
 
@@ -121,6 +126,19 @@ class KafkaEventConsumer:
         """Return the partitions currently assigned to the consumer."""
         consumer = self._require_consumer()
         return set(consumer.assignment())  # type: ignore[no-untyped-call]
+
+    def seek(self, partition: TopicPartition, offset: int) -> None:
+        """Roll the in-memory fetch position back to ``offset`` for ``partition``.
+
+        Used to replay a message after a downstream failure so the next
+        ``__aiter__`` call re-yields it. ``aiokafka.AIOKafkaConsumer.seek``
+        is sync; ``KafkaError`` is wrapped into ``KafkaConsumerError``.
+        """
+        consumer = self._require_consumer()
+        try:
+            consumer.seek(partition, offset)  # type: ignore[no-untyped-call]
+        except KafkaError as exc:
+            raise KafkaConsumerError(f"Kafka seek failed: {exc!r}") from exc
 
     def _require_consumer(self) -> AIOKafkaConsumer:
         if self._consumer is None:
