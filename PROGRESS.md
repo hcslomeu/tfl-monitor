@@ -20,7 +20,7 @@ Current state of work packages. Update the status column as WPs land.
 | 4 | TM-D3 | Remaining endpoints | D-api-agent | ⬜ | |
 | 4 | TM-E2 | Disruption Log view | E-frontend | ⬜ | |
 | 5 | TM-A2 | Airflow DAGs | A-infra | ⬜ | |
-| 5 | TM-D4 | RAG ingestion: Docling → Pinecone | D-api-agent | ⬜ | |
+| 5 | TM-D4 | RAG ingestion: Docling → Pinecone | D-api-agent | ✅ 2026-04-28 | `src/rag/` package: `sources.py` resolves the direct-PDF URL on each landing page (3 TfL strategy docs) via per-source allowlist regex; `fetch.py` does conditional GET (`If-None-Match` + `If-Modified-Since`) into `data/strategy_docs/`; `parse.py` wraps Docling 2.x `DocumentConverter` + `HybridChunker` (library defaults; the Docling 2.x constructor derives chunk size from its tokenizer); `embed.py` async-batches OpenAI `text-embedding-3-small` (100/req, retry on 429); `upsert.py` Pinecone serverless `tfl-strategy-docs` (1536 dim, cosine, AWS us-east-1), one namespace per `doc_id`, stable id = `sha256("{resolved_url}::{chunk_index}")`, delete-namespace-on-rollover idempotency; `ingest.py` orchestrator with `--refresh-urls`, `--force-refetch`, `--dry-run` flags, fail-loud on missing `PINECONE_API_KEY`/`OPENAI_API_KEY`. 28 unit tests with fakes for httpx/Docling/OpenAI/Pinecone. |
 | 6 | TM-D5 | LangGraph agent (SQL + RAG + Pydantic AI) | D-api-agent | ⬜ | |
 | 6 | TM-E3 | Chat view with SSE | E-frontend | ⬜ | |
 | 7 | TM-A3 | Supabase provisioning | A-infra | ⬜ | |

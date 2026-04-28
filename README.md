@@ -153,6 +153,26 @@ OpenAPI contract.
 
 Bring it all down with `make down` (preserves data) or `make clean` (wipes volumes).
 
+### RAG ingestion (TM-D4)
+
+Three TfL strategy PDFs (Business Plan, Mayor's Transport Strategy 2018, Annual Report) are fetched, parsed via Docling, embedded with OpenAI `text-embedding-3-small`, and upserted into the Pinecone serverless index `tfl-strategy-docs`. The fetcher follows landing pages on `tfl.gov.uk` and `london.gov.uk` to discover the current direct-PDF URL, then issues conditional `If-None-Match` / `If-Modified-Since` requests so re-runs only download what has changed.
+
+```bash
+# Run once to populate Pinecone (requires PINECONE_API_KEY + OPENAI_API_KEY in .env)
+uv run python -m rag.ingest
+
+# Re-resolve direct-PDF URLs from the TfL/GLA landing pages and rewrite src/rag/sources.json
+uv run python -m rag.ingest --refresh-urls
+
+# Bypass the ETag cache and re-download every PDF
+uv run python -m rag.ingest --force-refetch
+
+# Parse + embed only; skip the Pinecone upsert (sizing + smoke check)
+uv run python -m rag.ingest --dry-run
+```
+
+PDFs cache under `data/strategy_docs/` (gitignored). ETag/sha256 state lives in `data/cache/sources_state.json` (also gitignored). The first run downloads ~60 MB total; subsequent runs typically skip every doc unless TfL has published a new version.
+
 ## Status — work packages
 
 Project built as WPs organised into parallel tracks. Track labels indicate which directories a WP touches, so at most 2 agents work simultaneously without collision.

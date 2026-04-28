@@ -1,0 +1,23 @@
+[
+  {
+    "name": "TfL Business Plan",
+    "doc_id": "tfl_business_plan",
+    "landing_url": "https://tfl.gov.uk/corporate/publications-and-reports/business-plan",
+    "discovery_regex": "business-plan.*\\.pdf$",
+    "resolved_url": "https://content.tfl.gov.uk/2026-business-plan-acc.pdf"
+  },
+  {
+    "name": "Mayor's Transport Strategy",
+    "doc_id": "mts_2018",
+    "landing_url": "https://www.london.gov.uk/programmes-strategies/transport/our-vision-transport/mayors-transport-strategy-2018",
+    "discovery_regex": "mayors-transport-strategy-2018.*\\.pdf$",
+    "resolved_url": "https://www.london.gov.uk/sites/default/files/mayors-transport-strategy-2018.pdf"
+  },
+  {
+    "name": "TfL Annual Report",
+    "doc_id": "tfl_annual_report",
+    "landing_url": "https://tfl.gov.uk/corporate/publications-and-reports/annual-report",
+    "discovery_regex": "annual-report-and-statement-of-accounts.*\\.pdf$",
+    "resolved_url": "https://content.tfl.gov.uk/tfl-annual-report-and-statement-of-accounts-2024-25.pdf"
+  }
+]
