@@ -140,15 +140,29 @@ async def _fetch_one(
             headers=headers,
             follow_redirects=True,
         )
-        if response.status_code == 304 and target.exists():
-            sha = cached.get("sha256") or _sha256_of(target)
-            return FetchResult(
-                source=source,
-                local_path=target,
-                changed=False,
-                sha256=sha,
-                etag=cached.get("etag") or None,
-                last_modified=cached.get("last_modified") or None,
+        if response.status_code == 304:
+            if target.exists():
+                sha = cached.get("sha256") or _sha256_of(target)
+                return FetchResult(
+                    source=source,
+                    local_path=target,
+                    changed=False,
+                    sha256=sha,
+                    etag=cached.get("etag") or None,
+                    last_modified=cached.get("last_modified") or None,
+                )
+            # Cache headers said "unchanged" but the local PDF is gone
+            # (manual cleanup, broken volume, lost mount). The 304
+            # response has no body so writing it would yield a 0-byte
+            # file; re-issue the request without conditional headers.
+            logfire.warn(
+                "rag.fetch.cache_invalidated_local_file_missing",
+                doc_id=source.doc_id,
+                target=str(target),
+            )
+            response = await client.get(
+                str(source.resolved_url),
+                follow_redirects=True,
             )
         response.raise_for_status()
         target.write_bytes(response.content)

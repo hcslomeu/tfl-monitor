@@ -79,6 +79,14 @@ def _build_httpx_factory() -> Any:
     return lambda: httpx.AsyncClient(transport=transport)
 
 
+def _build_httpx_factory_returning_304() -> Any:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(304)
+
+    transport = httpx.MockTransport(handler)
+    return lambda: httpx.AsyncClient(transport=transport)
+
+
 def _build_fakes() -> tuple[_FakeOpenAI, _FakeClient, _FakeConverter, _FakeChunker]:
     openai_client = _FakeOpenAI()
     pinecone_client = _FakeClient(existing=["tfl-strategy-docs"])
@@ -241,6 +249,65 @@ def test_run_ingestion_same_url_skips_rollover_delete(tmp_path: Path) -> None:
     assert len(index.upsert_calls) == 1
 
 
+def test_run_ingestion_skips_parse_and_embed_when_unchanged(tmp_path: Path) -> None:
+    """HTTP 304 cache hit -> skip parse/embed/upsert (cost-leak fix).
+
+    Re-running ingestion against PDFs that haven't changed should be a
+    near-zero-cost operation: no OpenAI tokens consumed, no Pinecone
+    upserts issued. Stable ids would make the upsert harmless but still
+    burn embedding spend on every cron tick.
+    """
+    sources_path = tmp_path / "sources.json"
+    _seed_sources(sources_path)
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True)
+    # Pre-seed both the cache state AND the local PDF so the 304 path
+    # is the cache-valid branch (not the recovery branch).
+    target = data_dir / "sample.pdf"
+    target.write_bytes(_PDF_BYTES)
+    cache_path = tmp_path / "cache" / "sources_state.json"
+    cache_path.parent.mkdir(parents=True)
+    import hashlib as _hashlib
+
+    cache_path.write_text(
+        json.dumps(
+            {
+                "sample": {
+                    "resolved_url": "https://example.com/sample.pdf",
+                    "etag": '"abc"',
+                    "last_modified": "Wed, 21 Oct 2026 07:28:00 GMT",
+                    "sha256": _hashlib.sha256(_PDF_BYTES).hexdigest(),
+                    "fetched_at": "2026-04-01T00:00:00+00:00",
+                }
+            }
+        )
+    )
+
+    openai_client, pinecone_client, converter, chunker = _build_fakes()
+
+    upserted = asyncio.run(
+        _amain(
+            force_refetch=False,
+            dry_run=False,
+            refresh_urls=False,
+            sources_path=sources_path,
+            data_dir=data_dir,
+            cache_path=cache_path,
+            pinecone_factory=lambda _settings: pinecone_client,
+            openai_factory=lambda _settings: openai_client,
+            httpx_factory=_build_httpx_factory_returning_304(),
+            docling_converter=converter,
+            docling_chunker=chunker,
+        )
+    )
+
+    assert upserted == 0
+    index = pinecone_client.Index("tfl-strategy-docs")
+    # Skip-on-unchanged means upsert is never reached.
+    assert index.upsert_calls == []
+    assert index.delete_calls == []
+
+
 class _ExplodingChunker:
     """Chunker that raises mid-pipeline so we can verify partial-failure exit code."""
 
@@ -250,6 +317,7 @@ class _ExplodingChunker:
 
 def test_run_ingestion_aggregates_per_doc_failures_and_exits_nonzero(
     tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     sources_path = tmp_path / "sources.json"
     _seed_sources(sources_path)
@@ -265,17 +333,20 @@ def test_run_ingestion_aggregates_per_doc_failures_and_exits_nonzero(
             converter=converter,
             chunker=_ExplodingChunker(),  # type: ignore[arg-type]
         )
-    msg = str(excinfo.value)
-    assert "1 failure" in msg
-    assert "sample" in msg
-    assert "simulated parse failure" in msg
+    assert excinfo.value.code == 1
+    err = capsys.readouterr().err
+    assert "1 failure" in err
+    assert "sample" in err
+    assert "simulated parse failure" in err
     # Upsert never reached for the failing doc.
     index = pinecone_client.Index("tfl-strategy-docs")
     assert index.upsert_calls == []
 
 
 def test_run_ingestion_missing_pinecone_key_exits_2(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     monkeypatch.delenv("PINECONE_API_KEY", raising=False)
     sources_path = tmp_path / "sources.json"
@@ -292,7 +363,9 @@ def test_run_ingestion_missing_pinecone_key_exits_2(
             converter=converter,
             chunker=chunker,
         )
-    assert "RAG settings missing or invalid" in str(excinfo.value)
+    assert excinfo.value.code == 2
+    err = capsys.readouterr().err
+    assert "RAG settings missing or invalid" in err
 
 
 def test_run_ingestion_refresh_urls_rewrites_sources(tmp_path: Path) -> None:

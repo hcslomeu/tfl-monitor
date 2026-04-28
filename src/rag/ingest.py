@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -136,7 +137,8 @@ async def _amain(
     )
     if failures:
         details = "; ".join(f"{doc_id}: {err}" for doc_id, err in failures)
-        raise SystemExit(f"RAG ingestion finished with {len(failures)} failure(s): {details}")
+        sys.stderr.write(f"RAG ingestion finished with {len(failures)} failure(s): {details}\n")
+        raise SystemExit(1)
     return total_upserted
 
 
@@ -157,6 +159,16 @@ async def _ingest_one(
         changed=result.changed,
         dry_run=dry_run,
     ):
+        if not result.changed:
+            # HTTP 304 cache hit -> nothing new to embed/upsert. Stable
+            # ids + a populated namespace mean a re-run would only burn
+            # OpenAI tokens and issue redundant Pinecone upserts. Honour
+            # the idempotent-by-cost contract documented in the README.
+            logfire.info(
+                "rag.ingest.skipped_unchanged",
+                doc_id=result.source.doc_id,
+            )
+            return 0
         chunks: list[Chunk] = parse_pdf(
             doc_id=result.source.doc_id,
             doc_title=result.source.name,

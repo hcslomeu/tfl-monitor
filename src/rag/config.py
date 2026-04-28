@@ -8,6 +8,8 @@ defaults used by :mod:`rag.ingest`. Five fields total — well under the
 
 from __future__ import annotations
 
+import sys
+
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -41,4 +43,5 @@ def load_settings() -> RagSettings:
     try:
         return RagSettings()  # type: ignore[call-arg]
     except Exception as exc:  # noqa: BLE001 - boundary
-        raise SystemExit(f"RAG settings missing or invalid: {exc!s}") from None
+        sys.stderr.write(f"RAG settings missing or invalid: {exc!s}\n")
+        raise SystemExit(2) from None
