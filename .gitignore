@@ -23,3 +23,7 @@ dbt/.user.yml
 # Next.js
 web/.next/
 web/out/
+
+# RAG ingestion artefacts (TM-D4)
+data/strategy_docs/*.pdf
+data/cache/
