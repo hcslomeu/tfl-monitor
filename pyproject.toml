@@ -70,6 +70,19 @@ ignore_missing_imports = true
 follow_untyped_imports = true
 
 [[tool.mypy.overrides]]
+module = [
+    "langchain_anthropic",
+    "langchain_anthropic.*",
+    "langchain_core.*",
+    "langgraph",
+    "langgraph.*",
+    "llama_index",
+    "llama_index.*",
+]
+ignore_missing_imports = true
+follow_untyped_imports = true
+
+[[tool.mypy.overrides]]
 module = ["airflow", "airflow.*"]
 ignore_missing_imports = true
 follow_untyped_imports = true
