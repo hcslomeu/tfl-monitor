@@ -203,6 +203,77 @@ def test_run_ingestion_rollover_triggers_namespace_delete(tmp_path: Path) -> Non
     assert index.delete_calls == [{"delete_all": True, "namespace": "sample"}]
 
 
+def test_run_ingestion_same_url_skips_rollover_delete(tmp_path: Path) -> None:
+    """Identical resolved_url between runs → no namespace wipe (idempotent)."""
+    sources_path = tmp_path / "sources.json"
+    _seed_sources(sources_path)
+    cache_path = tmp_path / "cache" / "sources_state.json"
+    cache_path.parent.mkdir(parents=True)
+    cache_path.write_text(
+        json.dumps(
+            {
+                "sample": {
+                    "resolved_url": "https://example.com/sample.pdf",  # SAME url
+                    "etag": '"abc"',
+                    "last_modified": "Wed, 21 Oct 2026 07:28:00 GMT",
+                    "sha256": "deadbeef",
+                    "fetched_at": "2026-04-01T00:00:00+00:00",
+                }
+            }
+        )
+    )
+
+    openai_client, pinecone_client, converter, chunker = _build_fakes()
+    _run(
+        sources_path=sources_path,
+        data_dir=tmp_path / "data",
+        cache_path=cache_path,
+        pinecone_client=pinecone_client,
+        openai_client=openai_client,
+        converter=converter,
+        chunker=chunker,
+    )
+
+    index = pinecone_client.Index("tfl-strategy-docs")
+    # No delete fired — re-upserting onto stable ids overwrites in place.
+    assert index.delete_calls == []
+    # Upsert still happened.
+    assert len(index.upsert_calls) == 1
+
+
+class _ExplodingChunker:
+    """Chunker that raises mid-pipeline so we can verify partial-failure exit code."""
+
+    def chunk(self, _document: object) -> list[object]:
+        raise RuntimeError("simulated parse failure")
+
+
+def test_run_ingestion_aggregates_per_doc_failures_and_exits_nonzero(
+    tmp_path: Path,
+) -> None:
+    sources_path = tmp_path / "sources.json"
+    _seed_sources(sources_path)
+    openai_client, pinecone_client, converter, _ = _build_fakes()
+
+    with pytest.raises(SystemExit) as excinfo:
+        _run(
+            sources_path=sources_path,
+            data_dir=tmp_path / "data",
+            cache_path=tmp_path / "cache" / "sources_state.json",
+            pinecone_client=pinecone_client,
+            openai_client=openai_client,
+            converter=converter,
+            chunker=_ExplodingChunker(),  # type: ignore[arg-type]
+        )
+    msg = str(excinfo.value)
+    assert "1 failure" in msg
+    assert "sample" in msg
+    assert "simulated parse failure" in msg
+    # Upsert never reached for the failing doc.
+    index = pinecone_client.Index("tfl-strategy-docs")
+    assert index.upsert_calls == []
+
+
 def test_run_ingestion_missing_pinecone_key_exits_2(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

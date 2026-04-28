@@ -105,24 +105,38 @@ async def _amain(
     index = pinecone_client.Index(settings.pinecone_index)
 
     total_upserted = 0
+    failures: list[tuple[str, str]] = []
     for result in results:
-        upserted = await _ingest_one(
-            result=result,
-            previous_urls=previous_urls,
-            settings=settings,
-            openai_client=openai_client,
-            index=index,
-            dry_run=dry_run,
-            docling_converter=docling_converter,
-            docling_chunker=docling_chunker,
-        )
+        try:
+            upserted = await _ingest_one(
+                result=result,
+                previous_urls=previous_urls,
+                settings=settings,
+                openai_client=openai_client,
+                index=index,
+                dry_run=dry_run,
+                docling_converter=docling_converter,
+                docling_chunker=docling_chunker,
+            )
+        except Exception as exc:  # noqa: BLE001 - aggregate per-doc failures
+            logfire.error(
+                "rag.ingest.cycle_failed",
+                doc_id=result.source.doc_id,
+                error=repr(exc),
+            )
+            failures.append((result.source.doc_id, repr(exc)))
+            continue
         total_upserted += upserted
 
     logfire.info(
         "rag.ingest.done",
         total_upserted=total_upserted,
         dry_run=dry_run,
+        failures=len(failures),
     )
+    if failures:
+        details = "; ".join(f"{doc_id}: {err}" for doc_id, err in failures)
+        raise SystemExit(f"RAG ingestion finished with {len(failures)} failure(s): {details}")
     return total_upserted
 
 
@@ -220,17 +234,23 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--force-refetch",
         action="store_true",
-        help="Ignore cached ETag/Last-Modified and re-download.",
+        help="Ignore cached ETag/Last-Modified and re-download every PDF.",
     )
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Skip the Pinecone upsert step.",
+        help="Run fetch + parse + embed but skip the Pinecone upsert step.",
     )
     parser.add_argument(
         "--refresh-urls",
         action="store_true",
-        help="Re-resolve direct-PDF URLs from landing pages.",
+        help=(
+            "Re-scrape every landing page and rewrite the resolved direct-PDF "
+            "URL in src/rag/sources.json. Use this when TfL rolls the annual "
+            "URL stem (e.g. business-plan-2026 → business-plan-2027). The "
+            "subsequent download is still conditional via ETag, so unchanged "
+            "PDFs are 304'd."
+        ),
     )
     args = parser.parse_args(argv)
     run_ingestion(

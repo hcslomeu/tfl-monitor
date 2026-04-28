@@ -155,23 +155,38 @@ Bring it all down with `make down` (preserves data) or `make clean` (wipes volum
 
 ### RAG ingestion (TM-D4)
 
-Three TfL strategy PDFs (Business Plan, Mayor's Transport Strategy 2018, Annual Report) are fetched, parsed via Docling, embedded with OpenAI `text-embedding-3-small`, and upserted into the Pinecone serverless index `tfl-strategy-docs`. The fetcher follows landing pages on `tfl.gov.uk` and `london.gov.uk` to discover the current direct-PDF URL, then issues conditional `If-None-Match` / `If-Modified-Since` requests so re-runs only download what has changed.
+Three TfL strategy PDFs are fetched, parsed via Docling, embedded with OpenAI `text-embedding-3-small`, and upserted into the Pinecone serverless index `tfl-strategy-docs`. The fetcher follows the canonical landing pages to discover the current direct-PDF URL, then issues conditional `If-None-Match` / `If-Modified-Since` requests so re-runs only download what has changed.
+
+The three documents and their canonical landing pages (cite these, not the resolved CDN URLs):
+
+- [TfL Business Plan](https://tfl.gov.uk/corporate/publications-and-reports/business-plan)
+- [Mayor's Transport Strategy 2018](https://www.london.gov.uk/programmes-strategies/transport/our-vision-transport/mayors-transport-strategy-2018)
+- [TfL Annual Report and Statement of Accounts](https://tfl.gov.uk/corporate/publications-and-reports/annual-report)
+
+PDFs are TfL / GLA public publications used per their published terms. tfl-monitor stores a local copy under `data/strategy_docs/` (gitignored) for reproducibility but does not redistribute the PDFs.
 
 ```bash
 # Run once to populate Pinecone (requires PINECONE_API_KEY + OPENAI_API_KEY in .env)
 uv run python -m rag.ingest
 
-# Re-resolve direct-PDF URLs from the TfL/GLA landing pages and rewrite src/rag/sources.json
+# Re-scrape each landing page and rewrite the resolved direct-PDF URL in
+# src/rag/sources.json. Use this when TfL rolls the annual URL stem
+# (e.g. business-plan-2026 → business-plan-2027). The download is still
+# conditional via ETag — unchanged PDFs are 304'd.
 uv run python -m rag.ingest --refresh-urls
 
 # Bypass the ETag cache and re-download every PDF
 uv run python -m rag.ingest --force-refetch
 
-# Parse + embed only; skip the Pinecone upsert (sizing + smoke check)
+# Run fetch + parse + embed but skip the Pinecone upsert (sizing + smoke check)
 uv run python -m rag.ingest --dry-run
 ```
 
-PDFs cache under `data/strategy_docs/` (gitignored). ETag/sha256 state lives in `data/cache/sources_state.json` (also gitignored). The first run downloads ~60 MB total; subsequent runs typically skip every doc unless TfL has published a new version.
+If 1 of 3 documents fails its fetch / parse / embed / upsert cycle, the others still complete; the CLI then exits with a non-zero status so any future cron / GitHub Action surfaces the failure instead of swallowing it.
+
+PDFs cache under `data/strategy_docs/` (gitignored). ETag / sha256 state lives in `data/cache/sources_state.json` (also gitignored). The first run downloads ~60 MB total; subsequent runs typically skip every doc unless TfL has published a new version.
+
+**Cost estimate.** A full re-embedding of all three PDFs runs at well under £0.20 one-time at the current `text-embedding-3-small` price ($0.02 per 1M tokens). Conditional GETs and stable Pinecone ids mean steady-state runs incur near-zero embedding spend.
 
 ## Status — work packages
 
