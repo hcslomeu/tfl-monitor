@@ -18,6 +18,7 @@ import {
 	CardTitle,
 } from "@/components/ui/card";
 import { getStatusLive, type LineStatus } from "@/lib/api/status-live";
+import { ApiError } from "@/lib/api-client";
 
 const VALIDITY_FORMATTER = new Intl.DateTimeFormat("en-GB", {
 	hour: "2-digit",
@@ -61,7 +62,11 @@ export default async function NetworkNowPage() {
 	try {
 		lines = await getStatusLive();
 	} catch (err) {
-		errorDetail = err instanceof Error ? err.message : "Unknown error";
+		if (err instanceof ApiError) {
+			errorDetail = err.detail;
+		} else {
+			errorDetail = err instanceof Error ? err.message : "Unknown error";
+		}
 	}
 
 	return (

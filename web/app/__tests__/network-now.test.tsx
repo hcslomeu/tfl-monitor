@@ -108,4 +108,25 @@ describe("Network Now page", () => {
 		expect(screen.getByText(/live status unavailable/i)).toBeInTheDocument();
 		expect(screen.getByText(/warehouse offline/i)).toBeInTheDocument();
 	});
+
+	it("surfaces only the ApiError detail, not the technical message prefix", async () => {
+		getStatusLiveMock.mockRejectedValueOnce(
+			new ApiError(503, "warehouse offline"),
+		);
+
+		const ui = await NetworkNowPage();
+		render(ui);
+
+		expect(screen.queryByText(/tfl-monitor API/i)).not.toBeInTheDocument();
+	});
+
+	it("falls back to err.message for non-ApiError rejections", async () => {
+		getStatusLiveMock.mockRejectedValueOnce(new TypeError("network down"));
+
+		const ui = await NetworkNowPage();
+		render(ui);
+
+		expect(screen.getByRole("alert")).toBeInTheDocument();
+		expect(screen.getByText(/network down/i)).toBeInTheDocument();
+	});
 });

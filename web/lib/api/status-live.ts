@@ -16,9 +16,11 @@ export type LineStatus = components["schemas"]["LineStatus"];
  *
  * Calls `GET /api/v1/status/live` via the shared `apiFetch` helper,
  * which surfaces non-2xx responses as `ApiError` so the caller can
- * render a fallback. Response shape is locked by the `LineStatus`
- * schema in `contracts/openapi.yaml`.
+ * render a fallback. `cache: "no-store"` opts the request out of the
+ * Next.js Data Cache so server components re-fetch on every request
+ * instead of serving build-time HTML. Response shape is locked by the
+ * `LineStatus` schema in `contracts/openapi.yaml`.
  */
 export async function getStatusLive(): Promise<LineStatus[]> {
-	return apiFetch<LineStatus[]>("/api/v1/status/live");
+	return apiFetch<LineStatus[]>("/api/v1/status/live", { cache: "no-store" });
 }
