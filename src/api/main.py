@@ -9,24 +9,22 @@ and TM-D5) land. The shape of the API is fixed by
 
 from __future__ import annotations
 
-import logging
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from typing import Annotated, Any, NoReturn
 
+import logfire
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 
 from api.db import build_pool, fetch_live_status, fetch_reliability, fetch_status_history
 from api.observability import configure_observability
-from api.schemas import LineReliabilityResponse, LineStatusResponse
+from api.schemas import LineReliabilityResponse, LineStatusResponse, Problem
 
 MAX_HISTORY_WINDOW = timedelta(days=30)
-
-logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -40,18 +38,30 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """
     dsn = os.environ.get("DATABASE_URL")
     if not dsn:
-        logger.info("DATABASE_URL not set; API starting without a connection pool")
+        logfire.info(
+            "api_start_without_db_pool",
+            service="tfl-monitor-api",
+            database_url_configured=False,
+        )
         yield
         return
 
     pool = build_pool(dsn)
     await pool.open()
     app.state.db_pool = pool
+    logfire.info(
+        "api_db_pool_opened",
+        service="tfl-monitor-api",
+        database_url_configured=True,
+        pool_min_size=1,
+        pool_max_size=4,
+    )
     try:
         yield
     finally:
         await pool.close()
         app.state.db_pool = None
+        logfire.info("api_db_pool_closed", service="tfl-monitor-api")
 
 
 app = FastAPI(
@@ -86,15 +96,11 @@ def _not_implemented(detail: str) -> NoReturn:
 
 def _problem(status: int, title: str, detail: str) -> JSONResponse:
     """Build an RFC 7807 ``application/problem+json`` response."""
+    payload = Problem(type="about:blank", title=title, status=status, detail=detail)
     return JSONResponse(
         status_code=status,
         media_type="application/problem+json",
-        content={
-            "type": "about:blank",
-            "title": title,
-            "status": status,
-            "detail": detail,
-        },
+        content=payload.model_dump(exclude_none=True),
     )
 
 

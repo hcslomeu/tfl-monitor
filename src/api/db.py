@@ -69,23 +69,29 @@ LIMIT 10000
 # reliability_percent is the share of snapshots in that bucket. NULLIF on
 # the divisor cannot fire (the WHERE clause guarantees rows), but the CASE
 # keeps the SQL defensible if the predicate is ever loosened.
+# Window semantics: ``window=N`` covers the last N calendar days (UTC),
+# inclusive of today. ``current_date - (window - 1)`` keeps the bound
+# closed at the start of the window so ``window=1`` returns only today.
+# COALESCE guards reliability_percent against NULL when the window
+# contains snapshots but none at severity 10 (line in degraded service).
 RELIABILITY_AGG_SQL = """
 SELECT
     line_id,
     MIN(line_name) AS line_name,
     MIN(mode)      AS mode,
     SUM(snapshot_count)::int AS sample_size,
-    CASE WHEN SUM(snapshot_count) = 0 THEN 0
-         ELSE ROUND(
-             100.0
-             * SUM(snapshot_count) FILTER (WHERE status_severity = 10)
-             / SUM(snapshot_count),
-             1
-         )::float
-    END AS reliability_percent
+    COALESCE(
+        ROUND(
+            100.0
+            * SUM(snapshot_count) FILTER (WHERE status_severity = 10)
+            / NULLIF(SUM(snapshot_count), 0),
+            1
+        ),
+        0
+    )::float AS reliability_percent
 FROM analytics.mart_tube_reliability_daily
 WHERE line_id = %(line_id)s
-  AND calendar_date >= (current_date - %(window)s::int)
+  AND calendar_date >= (current_date - (%(window)s::int - 1))
 GROUP BY line_id
 """
 
@@ -95,7 +101,7 @@ SELECT status_severity::text AS severity,
        SUM(snapshot_count)::int AS count
 FROM analytics.mart_tube_reliability_daily
 WHERE line_id = %(line_id)s
-  AND calendar_date >= (current_date - %(window)s::int)
+  AND calendar_date >= (current_date - (%(window)s::int - 1))
 GROUP BY status_severity
 ORDER BY status_severity
 """
@@ -139,7 +145,7 @@ async def fetch_reliability(
         async with conn.cursor(row_factory=dict_row) as cur:
             await cur.execute(RELIABILITY_AGG_SQL, params)
             agg = await cur.fetchone()
-        if agg is None or agg["sample_size"] == 0:
+        if agg is None or not agg.get("sample_size"):
             return None
         async with conn.cursor(row_factory=dict_row) as cur:
             await cur.execute(RELIABILITY_HISTOGRAM_SQL, params)

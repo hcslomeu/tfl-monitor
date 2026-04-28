@@ -105,6 +105,19 @@ def test_zero_sample_size_returns_404(
     assert response.status_code == 404
 
 
+def test_null_sample_size_returns_404(
+    fake_pool_factory: Callable[..., Any], attach_pool: Callable[[Any], None]
+) -> None:
+    """``SUM`` returns ``NULL`` when no rows match; treat as no data."""
+    row = _agg(sample_size=0, pct=0.0)
+    row["sample_size"] = None
+    pool = fake_pool_factory([row])
+    attach_pool(pool)
+
+    response = TestClient(app).get("/api/v1/reliability/victoria")
+    assert response.status_code == 404
+
+
 def test_window_out_of_range_returns_422(attach_pool: Callable[[Any], None]) -> None:
     response_low = TestClient(app).get("/api/v1/reliability/victoria", params={"window": 0})
     response_high = TestClient(app).get("/api/v1/reliability/victoria", params={"window": 91})

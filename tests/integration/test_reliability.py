@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Iterator
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -105,8 +106,9 @@ def test_reliability_aggregate_and_histogram(cleanup_mart: None) -> None:
 def test_unknown_line_returns_404(cleanup_mart: None) -> None:
     from api.main import app
 
+    missing_line_id = f"no-such-line-{uuid4().hex}"
     with TestClient(app) as client:
-        response = client.get("/api/v1/reliability/no-such-line")
+        response = client.get(f"/api/v1/reliability/{missing_line_id}")
 
     assert response.status_code == 404
     assert response.headers["content-type"] == "application/problem+json"
