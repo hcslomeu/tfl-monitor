@@ -12,9 +12,9 @@ exposures:
   - name: api_status_live
     type: application
     url: https://tfl-monitor-api.example/api/v1/status/live
-    description: "Latest line-status snapshot per line."
+    description: "Latest line-status snapshot per line. Sourced from stg_line_status (snapshot grain) for current valid_from/valid_to/reason fields, not the daily mart."
     depends_on:
-      - ref('mart_tube_reliability_daily')
+      - ref('stg_line_status')
     owner:
       name: tfl-monitor-api
       email: ops@tfl-monitor.invalid
@@ -22,9 +22,9 @@ exposures:
   - name: api_status_history
     type: application
     url: https://tfl-monitor-api.example/api/v1/status/history
-    description: "Line-status timeseries over a configurable window."
+    description: "Line-status timeseries over a configurable window. Reads snapshot rows from stg_line_status filtered by ingested_at."
     depends_on:
-      - ref('mart_tube_reliability_daily')
+      - ref('stg_line_status')
     owner:
       name: tfl-monitor-api
       email: ops@tfl-monitor.invalid
@@ -43,8 +43,9 @@ exposures:
   - name: api_recent_disruptions
     type: application
     url: https://tfl-monitor-api.example/api/v1/disruptions/recent
-    description: "Recent disruptions feed grouped by line."
+    description: "Recent disruptions feed grouped by line. Snapshot-level fields (description, summary, affected_stops, created, last_update) come from stg_disruptions; mart_disruptions_daily provides the daily aggregate (count, max_severity)."
     depends_on:
+      - ref('stg_disruptions')
       - ref('mart_disruptions_daily')
     owner:
       name: tfl-monitor-api
