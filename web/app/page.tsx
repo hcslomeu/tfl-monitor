@@ -31,8 +31,27 @@ function formatWindow(line: LineStatus): string {
 	return `${from}–${to}`;
 }
 
+/**
+ * TfL brand-correct labels for each transport mode.
+ *
+ * The OpenAPI enum is kebab-case (`elizabeth-line`, `national-rail`, …);
+ * blindly replacing hyphens and using Tailwind `capitalize` produces
+ * `Elizabeth line` and `National rail`, which both miss the brand.
+ */
+const MODE_LABELS: Record<LineStatus["mode"], string> = {
+	tube: "Tube",
+	"elizabeth-line": "Elizabeth Line",
+	overground: "Overground",
+	dlr: "DLR",
+	bus: "Bus",
+	"national-rail": "National Rail",
+	"river-bus": "River Bus",
+	"cable-car": "Cable Car",
+	tram: "Tram",
+};
+
 function modeLabel(mode: LineStatus["mode"]): string {
-	return mode.replace(/-/g, " ");
+	return MODE_LABELS[mode];
 }
 
 export default async function NetworkNowPage() {
@@ -64,13 +83,11 @@ export default async function NetworkNowPage() {
 				data-testid="line-status-list"
 			>
 				{lines.map((line) => (
-					<Card key={line.line_id} size="sm">
+					<Card key={line.line_id}>
 						<CardHeader>
 							<CardTitle className="flex flex-wrap items-center gap-2">
 								<span>{line.line_name}</span>
-								<Badge variant="outline" className="capitalize">
-									{modeLabel(line.mode)}
-								</Badge>
+								<Badge variant="outline">{modeLabel(line.mode)}</Badge>
 							</CardTitle>
 							<CardDescription className="flex flex-wrap items-center gap-2">
 								<StatusBadge

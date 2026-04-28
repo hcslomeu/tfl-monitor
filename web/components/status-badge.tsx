@@ -5,8 +5,12 @@ import { cn } from "@/lib/utils";
  * Severity bands mirror TfL's status-severity scale (0..20).
  *
  * - 10 = "Good Service" → green/default tone.
- * - 7..9 = minor delays / part-closure → amber/secondary tone.
- * - <= 6 = severe delays, suspended, closed → red/destructive tone.
+ * - 7..9 = "Minor Delays" / "Part Closure" → amber/secondary tone.
+ * - <= 6 = severe delays / suspended / "Service Closed" → red/destructive
+ *   tone.
+ * - >= 11 = "Part Closed" / "Planned Closure" / "Service Closed" — the
+ *   higher half of the scale is *still* disruptive. Only severity 10 is
+ *   the good-service signal.
  */
 export type StatusBadgeProps = {
 	severity: number;
@@ -15,8 +19,8 @@ export type StatusBadgeProps = {
 };
 
 function tone(severity: number): "good" | "minor" | "severe" {
-	if (severity >= 10) return "good";
-	if (severity >= 7) return "minor";
+	if (severity === 10) return "good";
+	if (severity >= 7 && severity <= 9) return "minor";
 	return "severe";
 }
 
