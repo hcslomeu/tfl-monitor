@@ -268,6 +268,33 @@ async def test_reconnect_failure_is_swallowed_with_replay_scheduled(
     assert kafka.seeks == [(TopicPartition("line-status", 0), 11)]
 
 
+async def test_reconnect_swallows_non_operational_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def _no_sleep(_delay: float) -> None:
+        return None
+
+    monkeypatch.setattr(
+        "ingestion.consumers.line_status.asyncio.sleep",
+        _no_sleep,
+    )
+
+    event = _build_event()
+    kafka = _FakeKafka([_record_for(event, partition=0, offset=4)])
+    writer = _FakeWriter()
+    writer.fail_next = psycopg.OperationalError("db down")
+    # Driver-level glitch unrelated to OperationalError must not bubble
+    # out of _safe_reconnect; otherwise _schedule_replay never runs.
+    writer.reconnect_fail_next = TimeoutError("driver hung")
+
+    consumer = _make_consumer(kafka, writer)
+    inserted = await consumer.run_once()
+
+    assert inserted == 0
+    assert kafka.commit_count == 0
+    assert kafka.seeks == [(TopicPartition("line-status", 0), 4)]
+
+
 async def test_duplicate_returns_zero_rowcount_but_still_commits() -> None:
     event = _build_event()
     kafka = _FakeKafka([_record_for(event, offset=0)])

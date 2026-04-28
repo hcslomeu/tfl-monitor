@@ -182,13 +182,16 @@ class LineStatusConsumer:
     async def _safe_reconnect(self) -> None:
         """Reconnect the writer; swallow + back off if the DB stays down.
 
-        Replay is enforced by :meth:`_schedule_replay`, so the loop can
-        retry the same message on the next iteration even when the
-        reconnect itself fails.
+        Catches a broad ``Exception`` rather than just
+        :class:`psycopg.OperationalError` so a non-OperationalError raised
+        by the connection factory (timeouts, OS-level errors, driver
+        glitches) still leaves the caller free to schedule a replay and
+        keep the daemon alive. Replay is enforced by
+        :meth:`_schedule_replay`.
         """
         try:
             await self._writer.reconnect()
-        except psycopg.OperationalError as exc:
+        except Exception as exc:  # noqa: BLE001 - safety net keeps daemon alive
             logfire.warn(
                 "ingestion.line_status.reconnect_failed",
                 error=repr(exc),
