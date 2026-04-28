@@ -35,6 +35,7 @@ dev = [
     "dbt-postgres>=1.9",
     "openapi-spec-validator>=0.7",
     "taskipy>=1.14",
+    "apache-airflow>=2.10,<3.0",
 ]
 
 [build-system]
@@ -66,12 +67,18 @@ module = ["docling", "docling.*", "pinecone", "pinecone.*"]
 ignore_missing_imports = true
 follow_untyped_imports = true
 
+[[tool.mypy.overrides]]
+module = ["airflow", "airflow.*"]
+ignore_missing_imports = true
+follow_untyped_imports = true
+
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 asyncio_mode = "auto"
-addopts = "-m 'not integration'"
+addopts = "-m 'not integration and not airflow'"
 markers = [
     "integration: requires live services (Postgres, Kafka, etc.); opt in with -m integration",
+    "airflow: requires apache-airflow installed; opt in with -m airflow",
 ]
 
 [tool.taskipy.tasks]
@@ -81,6 +88,10 @@ test = "python -c \"import subprocess, sys; sys.exit(0 if subprocess.call(['pyte
 lint = "ruff check . && ruff format --check . && mypy src contracts"
 fmt = "ruff check --fix . && ruff format ."
 dbt-parse = "dbt parse --project-dir dbt --profiles-dir dbt --target ci"
+dbt-build = "dbt build --project-dir dbt --profiles-dir dbt --target dev"
+dbt-run = "dbt run --project-dir dbt --profiles-dir dbt --target dev"
+dbt-test = "dbt test --project-dir dbt --profiles-dir dbt --target dev"
+rag-ingest = "python -m rag.ingest"
 api = "uvicorn api.main:app --reload --app-dir src"
 init-topics = "docker compose --profile init up redpanda-init"
 ingest-line-status = "python -m ingestion.producers.line_status"

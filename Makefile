@@ -1,4 +1,4 @@
-.PHONY: help bootstrap up down clean check seed openapi-ts sync-dbt-sources consume-line-status consume-arrivals consume-disruptions
+.PHONY: help bootstrap up down clean check seed openapi-ts sync-dbt-sources consume-line-status consume-arrivals consume-disruptions airflow-test
 
 help:
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -48,3 +48,6 @@ consume-arrivals: ## Run arrivals consumer locally (host-side, against Compose R
 
 consume-disruptions: ## Run disruptions consumer locally (host-side, against Compose Redpanda + Postgres)
 	uv run task consume-disruptions
+
+airflow-test: ## Run airflow DAG-parse tests (requires apache-airflow installed)
+	uv run pytest -m airflow tests/airflow -v
