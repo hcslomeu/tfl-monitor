@@ -70,3 +70,147 @@ models:
         description: "UTC end of the validity window; strictly greater than valid_from."
         tests:
           - not_null
+
+  - name: stg_disruptions
+    description: |
+      Cleansed disruption records. One row per Kafka event; payload
+      JSONB unnested into typed columns. Defensively deduplicated on
+      event_id. affected_routes and affected_stops stay as JSONB
+      arrays so the downstream mart can fan out per impacted line /
+      stop.
+    columns:
+      - name: event_id
+        description: "Unique event identifier."
+        tests:
+          - not_null
+          - unique
+      - name: ingested_at
+        description: "UTC timestamp stamped by the producer at fetch time."
+        tests:
+          - not_null
+      - name: event_type
+        description: "Discriminator literal — always 'disruptions.snapshot'."
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["disruptions.snapshot"]
+      - name: source
+        description: "Origin of the event — always 'tfl-unified-api'."
+        tests:
+          - not_null
+      - name: disruption_id
+        description: "Stable SHA-256 disruption identifier (synthesised by the TfL normaliser)."
+        tests:
+          - not_null
+      - name: category
+        description: "DisruptionCategory enum string."
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values:
+                  - RealTime
+                  - PlannedWork
+                  - Information
+                  - Incident
+                  - Undefined
+      - name: category_description
+        description: "Human-readable category as published by TfL."
+        tests:
+          - not_null
+      - name: description
+        description: "Full disruption description."
+        tests:
+          - not_null
+      - name: summary
+        description: "Short disruption summary."
+        tests:
+          - not_null
+      - name: closure_text
+        description: "Closure text as published; null when empty upstream."
+      - name: severity
+        description: "Disruption severity scale (TfL-published, no fixed upper bound)."
+        tests:
+          - not_null
+      - name: created
+        description: "UTC timestamp when TfL first published the disruption (synthesised to ingest time by the normaliser when missing)."
+        tests:
+          - not_null
+      - name: last_update
+        description: "UTC timestamp of the latest TfL update (synthesised to ingest time by the normaliser when missing)."
+        tests:
+          - not_null
+      - name: affected_routes
+        description: "JSONB array of affected line ids."
+        tests:
+          - not_null
+      - name: affected_stops
+        description: "JSONB array of affected stop-point (NaPTAN) ids."
+        tests:
+          - not_null
+
+  - name: stg_arrivals
+    description: |
+      Cleansed arrival predictions. One row per Kafka event; payload
+      JSONB unnested into typed columns. Defensively deduplicated on
+      event_id.
+    columns:
+      - name: event_id
+        description: "Unique event identifier."
+        tests:
+          - not_null
+          - unique
+      - name: ingested_at
+        description: "UTC timestamp stamped by the producer at fetch time."
+        tests:
+          - not_null
+      - name: event_type
+        description: "Discriminator literal — always 'arrivals.snapshot'."
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["arrivals.snapshot"]
+      - name: source
+        description: "Origin of the event — always 'tfl-unified-api'."
+        tests:
+          - not_null
+      - name: arrival_id
+        description: "TfL prediction identifier."
+        tests:
+          - not_null
+      - name: station_id
+        description: "TfL stop-point (NaPTAN) identifier."
+        tests:
+          - not_null
+      - name: station_name
+        description: "Human-readable station name."
+        tests:
+          - not_null
+      - name: line_id
+        description: "TfL line identifier."
+        tests:
+          - not_null
+      - name: platform_name
+        description: "Platform label."
+        tests:
+          - not_null
+      - name: direction
+        description: "Travel direction (inbound / outbound / etc.)."
+        tests:
+          - not_null
+      - name: destination
+        description: "Headsign or terminating station."
+        tests:
+          - not_null
+      - name: expected_arrival
+        description: "Predicted arrival timestamp (UTC)."
+        tests:
+          - not_null
+      - name: time_to_station_seconds
+        description: "Seconds until predicted arrival at the stop."
+        tests:
+          - not_null
+      - name: vehicle_id
+        description: "Running number / vehicle identifier; null when TfL did not publish one."

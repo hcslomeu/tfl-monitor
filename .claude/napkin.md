@@ -32,6 +32,11 @@ recurring guidance only — not a session log.
    Skipping any one is how merge-blocker bugs leak in.
    Do instead: `uv run task lint && uv run task test && uv run bandit -r src --severity-level high && make check` — all four exit 0.
 
+6. **[2026-04-28] Resolve PR threads only where a fix was applied; rejected threads stay open**
+   For threads where you push back with a rationale instead of applying the suggestion, do NOT call `resolveReviewThread` — the human reviewer (the author) decides. Resolving a rejected thread reads as "I bypassed the review". The PR-level audit comment + the on-thread rationale reply are sufficient.
+   Override only on explicit team-lead green-light, e.g. to unblock a `required_review_thread_resolution: true` policy when the rejected thread is the last blocker. Even then, post the audit reply first, get the green-light, then resolve — never the other way round.
+   Do instead: after replying with rationale, leave the resolve to the author. Track unresolved count via `reviewThreads.nodes[] | select(.isResolved == false)` so you know whether the PR is merge-blocked.
+
 ## Shell & Command Reliability
 
 1. **[2026-04-26] Branch protection lives in rulesets, not classic API**

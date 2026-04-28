@@ -55,3 +55,143 @@ models:
           this row. Assumes a fixed 30 s producer cadence.
         tests:
           - not_null
+
+  - name: mart_tube_reliability_daily_summary
+    description: |
+      One-grain-above rollup of mart_tube_reliability_daily, per
+      (line_id, calendar_date UTC). Surfaces pct_good_service and
+      longest_disruption_window_minutes — KPIs the
+      mart_tube_reliability_daily grain (one row per severity) cannot
+      express directly.
+
+      pct_good_service is null when total_snapshots = 0; otherwise it
+      is bounded in [0, 1] (enforced by assert_pct_good_service_bounded).
+
+      longest_disruption_window_minutes derives from a gaps-and-islands
+      query over stg_line_status that finds the longest contiguous
+      run of status_severity != 10 within (line_id, calendar_date),
+      multiplied by the 30 s producer cadence.
+    columns:
+      - name: line_id
+        description: "TfL line identifier."
+        tests:
+          - not_null
+      - name: line_name
+        description: "Human-readable line name (denormalised)."
+        tests:
+          - not_null
+      - name: mode
+        description: "Transport mode (TransportMode enum string)."
+        tests:
+          - not_null
+      - name: calendar_date
+        description: "UTC calendar date derived from ingested_at."
+        tests:
+          - not_null
+      - name: total_snapshots
+        description: "Sum of snapshot_count across all severities for the (line, day)."
+        tests:
+          - not_null
+      - name: good_service_snapshots
+        description: "Count of snapshots with status_severity = 10."
+        tests:
+          - not_null
+      - name: pct_good_service
+        description: |
+          Ratio of good-service snapshots to total. Null when
+          total_snapshots = 0; otherwise in [0, 1] (enforced by the
+          singular test assert_pct_good_service_bounded).
+      - name: minutes_observed_estimate
+        description: "Sum of minutes_observed_estimate from the underlying daily mart."
+        tests:
+          - not_null
+      - name: longest_disruption_window_minutes
+        description: |
+          Length in minutes of the longest contiguous run of
+          status_severity != 10 within (line, day). 0 when the line
+          stayed in good service all day.
+        tests:
+          - not_null
+
+  - name: mart_disruptions_daily
+    description: |
+      Daily disruption KPIs per (calendar_date UTC, line_id). A
+      disruption affecting multiple lines fans out via the
+      affected_routes JSONB array — each impacted line gets its own
+      row.
+
+      ingested_at is the calendar bucket because the TfL normaliser
+      synthesises payload.created and payload.last_update to "now()"
+      when TfL omits them; using producer-stamped ingested_at keeps
+      the bucket monotonic.
+    columns:
+      - name: calendar_date
+        description: "UTC calendar date derived from ingested_at."
+        tests:
+          - not_null
+      - name: line_id
+        description: "TfL line identifier (one of the affected_routes)."
+        tests:
+          - not_null
+      - name: disruption_count
+        description: "Distinct disruption_ids that affected this line on this day."
+        tests:
+          - not_null
+      - name: distinct_categories
+        description: "Sorted text array of DisruptionCategory values seen for the (day, line)."
+        tests:
+          - not_null
+      - name: max_severity
+        description: "Maximum TfL-published severity seen for the (day, line)."
+        tests:
+          - not_null
+      - name: first_seen_at
+        description: "Earliest ingested_at for any affecting disruption."
+        tests:
+          - not_null
+      - name: last_seen_at
+        description: "Latest ingested_at for any affecting disruption."
+        tests:
+          - not_null
+
+  - name: mart_bus_metrics_daily
+    description: |
+      Daily bus-arrival prediction KPIs per (calendar_date UTC,
+      line_id, station_id). Bus lines only — joined against ref.lines
+      on mode = 'bus'. While ref.lines is empty (until TM-A2's
+      static-ingest DAG), the mart returns zero rows; once ref.lines
+      populates, the same SQL emits real KPIs without changes.
+
+      TfL does not publish actual departure events, so this mart
+      surfaces the prediction-side building blocks. The
+      /api/v1/bus/{stop_id}/punctuality endpoint composes a freshness
+      proxy on top of these columns.
+    columns:
+      - name: calendar_date
+        description: "UTC calendar date derived from ingested_at."
+        tests:
+          - not_null
+      - name: line_id
+        description: "TfL bus line identifier."
+        tests:
+          - not_null
+      - name: station_id
+        description: "TfL stop-point (NaPTAN) identifier."
+        tests:
+          - not_null
+      - name: prediction_count
+        description: "Total number of arrival predictions ingested for the triple."
+        tests:
+          - not_null
+      - name: distinct_vehicles
+        description: "Distinct vehicle_ids seen (null vehicle_ids excluded)."
+      - name: avg_time_to_station_seconds
+        description: "Average seconds-until-arrival across the day's predictions."
+      - name: min_time_to_station_seconds
+        description: "Minimum seconds-until-arrival."
+      - name: max_time_to_station_seconds
+        description: "Maximum seconds-until-arrival."
+      - name: first_predicted_arrival
+        description: "Earliest expected_arrival timestamp."
+      - name: last_predicted_arrival
+        description: "Latest expected_arrival timestamp."
