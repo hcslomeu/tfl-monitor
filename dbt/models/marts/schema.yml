@@ -1,0 +1,57 @@
+version: 2
+
+models:
+  - name: mart_tube_reliability_daily
+    description: |
+      Daily reliability KPIs per (line, calendar date UTC, status
+      severity). One row counts how many line-status snapshots arrived
+      for that triple, with first/last observation timestamps and a
+      coverage estimate in minutes (one snapshot ≈ 30 s, mirroring
+      LINE_STATUS_POLL_PERIOD_SECONDS).
+
+      To compute the daily "% time in good service" per line, sum
+      snapshot_count where status_severity = 10 and divide by the
+      sum across all severities for that (line_id, calendar_date).
+    columns:
+      - name: line_id
+        description: "TfL line identifier."
+        tests:
+          - not_null
+      - name: line_name
+        description: "Human-readable line name (denormalised from staging)."
+        tests:
+          - not_null
+      - name: mode
+        description: "Transport mode (TransportMode enum string)."
+        tests:
+          - not_null
+      - name: calendar_date
+        description: "UTC calendar date derived from ingested_at."
+        tests:
+          - not_null
+      - name: status_severity
+        description: "TfL severity code 0..20."
+        tests:
+          - not_null
+      - name: status_severity_description
+        description: "Human-readable status for the severity."
+        tests:
+          - not_null
+      - name: snapshot_count
+        description: "Count of line-status snapshots at this grain."
+        tests:
+          - not_null
+      - name: first_observed_at
+        description: "Earliest ingested_at seen for the triple."
+        tests:
+          - not_null
+      - name: last_observed_at
+        description: "Latest ingested_at seen for the triple."
+        tests:
+          - not_null
+      - name: minutes_observed_estimate
+        description: |
+          Estimated wall-clock minutes covered by the snapshots in
+          this row. Assumes a fixed 30 s producer cadence.
+        tests:
+          - not_null
