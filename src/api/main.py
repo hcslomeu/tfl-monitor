@@ -1,10 +1,9 @@
 """FastAPI entrypoint for the tfl-monitor API.
 
-Status and reliability endpoints (TM-D2) query Postgres via a shared
-``AsyncConnectionPool`` opened by the lifespan. Disruptions, bus, and
-chat endpoints stay stubbed at HTTP 501 until their owning WPs (TM-D3
-and TM-D5) land. The shape of the API is fixed by
-``contracts/openapi.yaml``.
+Status, reliability, disruptions, and bus endpoints query Postgres via
+a shared ``AsyncConnectionPool`` opened by the lifespan. Chat
+endpoints stay stubbed at HTTP 501 until TM-D5 lands. The shape of the
+API is fixed by ``contracts/openapi.yaml``.
 """
 
 from __future__ import annotations
@@ -20,9 +19,24 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 
-from api.db import build_pool, fetch_live_status, fetch_reliability, fetch_status_history
+from api.db import (
+    BUS_PUNCTUALITY_WINDOW_DAYS,
+    build_pool,
+    fetch_bus_punctuality,
+    fetch_live_status,
+    fetch_recent_disruptions,
+    fetch_reliability,
+    fetch_status_history,
+)
 from api.observability import configure_observability
-from api.schemas import LineReliabilityResponse, LineStatusResponse, Problem
+from api.schemas import (
+    BusPunctualityResponse,
+    DisruptionResponse,
+    LineReliabilityResponse,
+    LineStatusResponse,
+    Mode,
+    Problem,
+)
 
 MAX_HISTORY_WINDOW = timedelta(days=30)
 
@@ -171,19 +185,39 @@ async def get_line_reliability(
 @app.get(
     "/api/v1/disruptions/recent",
     operation_id="get_recent_disruptions",
-    response_model=None,
+    response_model=list[DisruptionResponse],
 )
-async def get_recent_disruptions() -> NoReturn:
-    _not_implemented("Not implemented — see TM-D3")
+async def get_recent_disruptions(
+    request: Request,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    mode: Annotated[Mode | None, Query()] = None,
+) -> list[DisruptionResponse] | Response:
+    pool = request.app.state.db_pool
+    if pool is None:
+        return _problem(503, "Service Unavailable", "Database pool is not available")
+    return await fetch_recent_disruptions(pool, limit=limit, mode=mode)
 
 
 @app.get(
     "/api/v1/bus/{stop_id}/punctuality",
     operation_id="get_bus_punctuality",
-    response_model=None,
+    response_model=BusPunctualityResponse,
 )
-async def get_bus_punctuality(stop_id: str) -> NoReturn:
-    _not_implemented("Not implemented — see TM-D3")
+async def get_bus_punctuality(
+    request: Request,
+    stop_id: str,
+) -> BusPunctualityResponse | Response:
+    pool = request.app.state.db_pool
+    if pool is None:
+        return _problem(503, "Service Unavailable", "Database pool is not available")
+    result = await fetch_bus_punctuality(pool, stop_id=stop_id, window=BUS_PUNCTUALITY_WINDOW_DAYS)
+    if result is None:
+        return _problem(
+            404,
+            "Not Found",
+            f"No punctuality data for stop {stop_id}",
+        )
+    return result
 
 
 @app.post("/api/v1/chat/stream", operation_id="post_chat_stream", response_model=None)
