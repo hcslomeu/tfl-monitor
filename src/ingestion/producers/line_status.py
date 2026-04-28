@@ -27,6 +27,7 @@ from uuid import UUID
 import logfire
 
 from contracts.schemas import LineStatusEvent
+from ingestion.observability import configure_logfire
 from ingestion.producers.kafka import KafkaEventProducer, KafkaProducerError
 from ingestion.tfl_client import TflClient, TflClientError, line_status_payloads
 
@@ -136,12 +137,7 @@ class LineStatusProducer:
 
 
 async def _amain() -> None:
-    logfire.configure(
-        service_name="tfl-monitor-ingestion",
-        service_version=os.getenv("APP_VERSION", "0.0.1"),
-        environment=os.getenv("ENVIRONMENT", "local"),
-        send_to_logfire="if-token-present",
-    )
+    configure_logfire()
     logfire.instrument_httpx()
 
     bootstrap = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "")

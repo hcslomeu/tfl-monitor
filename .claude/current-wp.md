@@ -1,1 +1,1 @@
-TM-B3 — line-status consumer to Postgres (next, depends on TM-B2 ✅ merged 2026-04-27 in #31)
+TM-B4 / TM-C2 / TM-D2 — author's call (TM-B3 ✅ 2026-04-28)

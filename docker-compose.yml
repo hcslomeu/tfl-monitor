@@ -88,6 +88,25 @@ services:
       APP_VERSION: ${APP_VERSION:-0.0.1}
     command: ["uv", "run", "python", "-m", "ingestion.producers.line_status"]
 
+  tfl-line-status-consumer:
+    build:
+      context: .
+      dockerfile: src/ingestion/Dockerfile
+    restart: unless-stopped
+    profiles: ["ingest"]
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tflmonitor}:${POSTGRES_PASSWORD:-change_me}@postgres:5432/${POSTGRES_DB:-tflmonitor}
+      LOGFIRE_TOKEN: ${LOGFIRE_TOKEN:-}
+      ENVIRONMENT: ${ENVIRONMENT:-local}
+      APP_VERSION: ${APP_VERSION:-0.0.1}
+    command: ["uv", "run", "python", "-m", "ingestion.consumers.line_status"]
+
   airflow-init:
     build: ./airflow
     restart: "no"
