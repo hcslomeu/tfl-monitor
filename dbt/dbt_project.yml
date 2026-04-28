@@ -4,7 +4,7 @@ config-version: 2
 
 profile: tfl_monitor
 
-model-paths: ["models"]
+model-paths: ["models", "sources"]
 seed-paths: ["seeds"]
 test-paths: ["tests"]
 analysis-paths: ["analyses"]

@@ -1,0 +1,72 @@
+version: 2
+
+models:
+  - name: stg_line_status
+    description: |
+      Cleansed line-status snapshots. One row per Kafka event; payload
+      JSONB unnested into typed columns. Defensively deduplicated on
+      event_id; sourced from raw.line_status (PK = event_id) so the
+      dedup is a no-op in steady state.
+    columns:
+      - name: event_id
+        description: "Unique event identifier (UUIDv4 from the producer)."
+        tests:
+          - not_null
+          - unique
+      - name: ingested_at
+        description: "UTC timestamp stamped by the producer at fetch time."
+        tests:
+          - not_null
+      - name: event_type
+        description: "Discriminator literal — always 'line-status.snapshot'."
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["line-status.snapshot"]
+      - name: source
+        description: "Origin of the event — always 'tfl-unified-api'."
+        tests:
+          - not_null
+      - name: line_id
+        description: "TfL line identifier (e.g. 'victoria')."
+        tests:
+          - not_null
+      - name: line_name
+        description: "Human-readable line name."
+        tests:
+          - not_null
+      - name: mode
+        description: "Transport mode (TransportMode enum string)."
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values:
+                  - tube
+                  - elizabeth-line
+                  - overground
+                  - dlr
+                  - bus
+                  - national-rail
+                  - river-bus
+                  - cable-car
+                  - tram
+      - name: status_severity
+        description: "TfL severity code 0..20 (10 = good service)."
+        tests:
+          - not_null
+      - name: status_severity_description
+        description: "Human-readable status (e.g. 'Good Service')."
+        tests:
+          - not_null
+      - name: reason
+        description: "Free-text disruption reason; null on healthy snapshots."
+      - name: valid_from
+        description: "UTC start of the status's validity window."
+        tests:
+          - not_null
+      - name: valid_to
+        description: "UTC end of the validity window; strictly greater than valid_from."
+        tests:
+          - not_null
