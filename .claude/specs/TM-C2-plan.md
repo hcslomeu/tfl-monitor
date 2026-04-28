@@ -24,10 +24,17 @@ in here as a **decision** unless a sub-phase note overrides it.
 - **D7 — Calendar bucket**: `date_trunc('day', ingested_at AT TIME ZONE
   'UTC')::date AS calendar_date`. Documented in `schema.yml`.
 - **D8 — Staging dedup idiom**: `row_number() OVER (PARTITION BY
-  event_id ORDER BY ingested_at)` filtered to `rn = 1`. Defensive — the
-  PK on `raw.line_status` already prevents duplicates.
+  event_id ORDER BY ingested_at DESC)` filtered to `rn = 1` —
+  "latest wins". Defensive — the PK on `raw.line_status` already
+  prevents duplicates, but DESC ordering matches the conventional
+  pattern and keeps the freshest row if a future re-ingestion path
+  ever introduces collisions.
 - **D9 — Staging incremental strategy**: `merge` on `unique_key =
-  'event_id'`, with an `is_incremental()` watermark on `ingested_at`.
+  'event_id'`, with an `is_incremental()` watermark on `ingested_at`
+  using a **5-minute lookback** (`>= max(ingested_at) - interval '5
+  minutes'`). The lookback absorbs late-arriving events (Kafka replay,
+  consumer restart, producer-clock blips); `merge` upserts on
+  `event_id` so reprocessed rows do not double-count.
 
 ## Summary
 
@@ -101,20 +108,25 @@ with source as (
         source,
         payload
     from {{ source('tfl', 'line_status') }}
+    where event_type = 'line-status.snapshot'
     {% if is_incremental() %}
-    where ingested_at > coalesce(
-        (select max(ingested_at) from {{ this }}),
-        '-infinity'::timestamptz
-    )
+      -- 5-minute lookback absorbs late-arriving events; merge on
+      -- event_id makes the reprocessing safe.
+      and ingested_at >= coalesce(
+          (select max(ingested_at) - interval '5 minutes' from {{ this }}),
+          '-infinity'::timestamptz
+      )
     {% endif %}
 ),
 
 deduped as (
+    -- "Latest wins" if a future re-ingestion path ever produces two
+    -- rows for the same event_id.
     select
         *,
         row_number() over (
             partition by event_id
-            order by ingested_at
+            order by ingested_at desc
         ) as _rn
     from source
 )
@@ -134,7 +146,6 @@ select
     (payload ->> 'valid_to')::timestamptz                              as valid_to
 from deduped
 where _rn = 1
-  and event_type = 'line-status.snapshot'
 ```
 
 Notes:

@@ -22,19 +22,25 @@ with source as (
     from {{ source('tfl', 'line_status') }}
     where event_type = 'line-status.snapshot'
     {% if is_incremental() %}
-      and ingested_at > coalesce(
-          (select max(ingested_at) from {{ this }}),
+      -- 5-minute lookback absorbs late-arriving events (Kafka replay,
+      -- consumer restart, producer-clock blips). Safe because
+      -- unique_key='event_id' + incremental_strategy='merge' upserts on
+      -- the natural key, so reprocessed rows do not double-count.
+      and ingested_at >= coalesce(
+          (select max(ingested_at) - interval '5 minutes' from {{ this }}),
           '-infinity'::timestamptz
       )
     {% endif %}
 ),
 
 deduped as (
+    -- "Latest wins" if a future re-ingestion path ever produces two
+    -- rows for the same event_id (the raw PK currently prevents this).
     select
         *,
         row_number() over (
             partition by event_id
-            order by ingested_at
+            order by ingested_at desc
         ) as _rn
     from source
 )

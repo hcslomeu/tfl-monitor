@@ -185,11 +185,11 @@ Built-in dbt tests cover most of what we need without `dbt_utils`:
 | stg | `not_null` on `event_id`, `line_id`, `status_severity`, `ingested_at` | matches the contract guarantees |
 | stg | `unique` on `event_id` | matches `raw.line_status` PK |
 | stg | `accepted_values` on `mode` | enum from `TransportMode` |
-| stg | `accepted_values` on `status_severity` | 0..20 bounded by Pydantic + `StatusSeverity` |
+| stg | `accepted_values` on `event_type` | locks the producer literal `"line-status.snapshot"` |
+| stg | singular test `assert_status_severity_known.sql` | enforces the TfL `0..20` severity bound without forcing every consumer to re-read the enum; chosen over `accepted_values` to demonstrate the singular-test idiom |
 | mart | `not_null` on `line_id`, `calendar_date`, `status_severity`, `snapshot_count` | grain integrity |
 | mart | `not_null` on `mode`, `line_name` | denormalised from staging |
-| mart | custom singular test `assert_mart_tube_reliability_daily_grain.sql` | composite uniqueness over `(line_id, calendar_date, status_severity)` — `dbt_utils.unique_combination_of_columns` would be cleaner, but adding `dbt_utils` violates YAGNI when one ~6-line SQL file does the job |
-| custom | singular test `assert_status_severity_known.sql` | mirrors `accepted_values`; demonstrates a custom test without forcing every consumer to re-read the enum |
+| mart | singular test `assert_mart_tube_reliability_daily_grain.sql` | composite uniqueness over `(line_id, calendar_date, status_severity)` — `dbt_utils.unique_combination_of_columns` would be cleaner, but adding `dbt_utils` violates YAGNI when one ~6-line SQL file does the job |
 
 Compose: `dbt/tests/` is a new directory; `dbt_project.yml` already
 points at `test-paths: ["tests"]` so it works out of the box.
