@@ -20,11 +20,12 @@ with source as (
         source,
         payload
     from {{ source('tfl', 'line_status') }}
+    where event_type = 'line-status.snapshot'
     {% if is_incremental() %}
-    where ingested_at > coalesce(
-        (select max(ingested_at) from {{ this }}),
-        '-infinity'::timestamptz
-    )
+      and ingested_at > coalesce(
+          (select max(ingested_at) from {{ this }}),
+          '-infinity'::timestamptz
+      )
     {% endif %}
 ),
 
@@ -53,4 +54,3 @@ select
     (payload ->> 'valid_to')::timestamptz                              as valid_to
 from deduped
 where _rn = 1
-  and event_type = 'line-status.snapshot'
