@@ -7,7 +7,7 @@
  * incremental tokens, tool-use status, and final/errored states.
  */
 
-import { type FormEvent, useRef, useState } from "react";
+import { type FormEvent, useState } from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -32,7 +32,9 @@ interface Message {
 }
 
 export function ChatView() {
-	const threadIdRef = useRef<string>(crypto.randomUUID());
+	// `useState` lazy initializer runs once per mount, even under React Strict
+	// Mode's double-render in dev. The id never changes — there is no setter.
+	const [threadId] = useState(() => crypto.randomUUID());
 	const [messages, setMessages] = useState<Message[]>([]);
 	const [input, setInput] = useState("");
 	const [busy, setBusy] = useState(false);
@@ -57,7 +59,7 @@ export function ChatView() {
 			let assistantContent = "";
 			let endedWithError = false;
 			for await (const frame of streamChat({
-				thread_id: threadIdRef.current,
+				thread_id: threadId,
 				message: trimmed,
 			})) {
 				if (frame.type === "token") {
