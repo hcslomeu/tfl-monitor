@@ -12,8 +12,8 @@ recurring guidance only — not a session log.
 
 ## Execution & Validation (Highest Priority)
 
-1. **[2026-04-26] `Agent` tool's `isolation: "worktree"` may NOT isolate physical paths**
-   Two parallel teammates spawned with `isolation: "worktree"` ended up sharing `/Users/humbertolomeu/tfl-monitor` and clobbering each other's `git checkout`. One teammate had to manually `git worktree add /tmp/<member-name>-worktree` to recover.
+1. **[2026-04-26 / re-confirmed 2026-04-29] `Agent` tool's `isolation: "worktree"` may NOT isolate physical paths**
+   Two parallel teammates spawned with `isolation: "worktree"` ended up sharing `/Users/humbertolomeu/tfl-monitor` and committing directly into the parent branch. Second occurrence on TM-D5 (PR #44): `data-layer` and `agent-core` agents serialised through the parent checkout (agent-core's `f107802` landed before data-layer's three commits) — the disjoint file sets saved the day, not the param. `git worktree list` confirms no extra worktree was ever created.
    Do instead: when dispatching ≥2 teammates in parallel, instruct each one in its prompt to run `git worktree add /tmp/<member-name>-worktree HEAD` as step 0 before any edits, OR dispatch them serially. Never trust `isolation: "worktree"` alone for multi-agent concurrency on this machine.
 
 2. **[2026-04-26] CodeRabbit posts new threads after every push (re-review)**
@@ -71,6 +71,10 @@ recurring guidance only — not a session log.
    Even with quotes, names like `claude.ai Linear` are rejected ("No MCP server found with name").
    Do instead: skip `claude mcp get` for spaced names; use `claude mcp list` for status and `ListMcpResourcesTool --server '<name>'` for resource enumeration.
 
+8. **[2026-04-29] Bundled rename + delete-remote git ops trip the sandbox**
+   `git branch -m old new && git push origin -u new && git push origin --delete old` is denied as a single shell call (the harness flags the destructive delete inside the chain). Even rerunning just the rename+push together still got refused with "Deleting the remote branch ..." even though no delete was in the command.
+   Do instead: split into separate `Bash` calls — first `git branch -m`, then `git push origin -u <new>`, leave the orphaned `origin/<old>` ref alone unless the user explicitly asks to delete (then run `git push origin --delete <old>` standalone with explicit user approval).
+
 ## Domain Behavior Guardrails
 
 1. **[2026-04-26] `required_review_thread_resolution: true` blocks merge until ALL threads resolved**
@@ -104,6 +108,10 @@ recurring guidance only — not a session log.
 8. **[2026-04-26] Python `hash()` is randomised per process — never use for persistent IDs**
    Hash randomisation salts each interpreter run; `hash("x")` differs between invocations.
    Do instead: `hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()[:N]` for stable digests.
+
+9. **[2026-04-29] `pydantic-ai>=1.75` required when `anthropic>=0.96`**
+   `anthropic 0.96` dropped/renamed the `UserLocation` symbol that `pydantic-ai 1.22` imports directly from the Anthropic provider. Lock resolved to two pydantic-ai versions (1.75 + 1.85) and crashed at agent compile time on the older one.
+   Do instead: when bumping the Anthropic SDK or adding any LangChain/LangGraph dep that pulls anthropic 0.96, also raise the `pydantic-ai>=` floor to `>=1.75` in `pyproject.toml` and run `uv lock` to confirm a single resolved version.
 
 ## User Directives
 
