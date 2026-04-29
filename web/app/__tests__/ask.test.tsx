@@ -45,15 +45,17 @@ describe("Ask page (TM-E3 chat view)", () => {
 	}
 
 	it("streams tokens into the assistant bubble after submit", async () => {
-		const fetchMock = vi.fn().mockResolvedValueOnce(
-			streamingResponse(
-				streamFrom(
-					'data: {"type":"token","content":"Hello "}\n\n',
-					'data: {"type":"token","content":"world"}\n\n',
-					'data: {"type":"end","content":""}\n\n',
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce(
+				streamingResponse(
+					streamFrom(
+						'data: {"type":"token","content":"Hello "}\n\n',
+						'data: {"type":"token","content":"world"}\n\n',
+						'data: {"type":"end","content":""}\n\n',
+					),
 				),
-			),
-		);
+			);
 		vi.stubGlobal("fetch", fetchMock);
 
 		render(<AskPage />);
@@ -61,7 +63,9 @@ describe("Ask page (TM-E3 chat view)", () => {
 		fireEvent.change(screen.getByLabelText(/message/i), {
 			target: { value: "hi there" },
 		});
-		fireEvent.submit(screen.getByLabelText(/message/i).closest("form")!);
+		const form = screen.getByLabelText(/message/i).closest("form");
+		if (!form) throw new Error("form not found");
+		fireEvent.submit(form);
 
 		const assistantBubble = await screen.findByText(/hello world/i);
 		expect(assistantBubble).toBeInTheDocument();
@@ -78,15 +82,17 @@ describe("Ask page (TM-E3 chat view)", () => {
 	});
 
 	it("renders an ephemeral status line while a tool frame is in flight", async () => {
-		const fetchMock = vi.fn().mockResolvedValueOnce(
-			streamingResponse(
-				streamFrom(
-					'data: {"type":"tool","content":"query_tube_status"}\n\n',
-					'data: {"type":"token","content":"Result"}\n\n',
-					'data: {"type":"end","content":""}\n\n',
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce(
+				streamingResponse(
+					streamFrom(
+						'data: {"type":"tool","content":"query_tube_status"}\n\n',
+						'data: {"type":"token","content":"Result"}\n\n',
+						'data: {"type":"end","content":""}\n\n',
+					),
 				),
-			),
-		);
+			);
 		vi.stubGlobal("fetch", fetchMock);
 
 		render(<AskPage />);
@@ -94,7 +100,9 @@ describe("Ask page (TM-E3 chat view)", () => {
 		fireEvent.change(screen.getByLabelText(/message/i), {
 			target: { value: "status?" },
 		});
-		fireEvent.submit(screen.getByLabelText(/message/i).closest("form")!);
+		const form = screen.getByLabelText(/message/i).closest("form");
+		if (!form) throw new Error("form not found");
+		fireEvent.submit(form);
 
 		await screen.findByText(/result/i);
 		expect(screen.queryByTestId("agent-status")).not.toBeInTheDocument();
@@ -114,7 +122,9 @@ describe("Ask page (TM-E3 chat view)", () => {
 		fireEvent.change(screen.getByLabelText(/message/i), {
 			target: { value: "anything" },
 		});
-		fireEvent.submit(screen.getByLabelText(/message/i).closest("form")!);
+		const form = screen.getByLabelText(/message/i).closest("form");
+		if (!form) throw new Error("form not found");
+		fireEvent.submit(form);
 
 		const alert = await screen.findByRole("alert");
 		expect(alert).toHaveTextContent(/agent unavailable/i);
@@ -122,14 +132,16 @@ describe("Ask page (TM-E3 chat view)", () => {
 	});
 
 	it("flags the assistant bubble when the stream ends with an error", async () => {
-		const fetchMock = vi.fn().mockResolvedValueOnce(
-			streamingResponse(
-				streamFrom(
-					'data: {"type":"token","content":"Partial "}\n\n',
-					'data: {"type":"end","content":"error"}\n\n',
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce(
+				streamingResponse(
+					streamFrom(
+						'data: {"type":"token","content":"Partial "}\n\n',
+						'data: {"type":"end","content":"error"}\n\n',
+					),
 				),
-			),
-		);
+			);
 		vi.stubGlobal("fetch", fetchMock);
 
 		render(<AskPage />);
@@ -137,7 +149,9 @@ describe("Ask page (TM-E3 chat view)", () => {
 		fireEvent.change(screen.getByLabelText(/message/i), {
 			target: { value: "go" },
 		});
-		fireEvent.submit(screen.getByLabelText(/message/i).closest("form")!);
+		const form = screen.getByLabelText(/message/i).closest("form");
+		if (!form) throw new Error("form not found");
+		fireEvent.submit(form);
 
 		await screen.findByText(/partial/i);
 

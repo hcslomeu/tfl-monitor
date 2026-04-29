@@ -19,12 +19,13 @@ import {
 	CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ApiError } from "@/lib/api-client";
 import { streamChat } from "@/lib/api/chat-stream";
+import { ApiError } from "@/lib/api-client";
 
 type Role = "user" | "assistant";
 
 interface Message {
+	id: string;
 	role: Role;
 	content: string;
 	errored?: boolean;
@@ -48,8 +49,8 @@ export function ChatView() {
 		setAgentStatus(null);
 		setMessages((prev) => [
 			...prev,
-			{ role: "user", content: trimmed },
-			{ role: "assistant", content: "" },
+			{ id: crypto.randomUUID(), role: "user", content: trimmed },
+			{ id: crypto.randomUUID(), role: "assistant", content: "" },
 		]);
 
 		try {
@@ -64,7 +65,9 @@ export function ChatView() {
 					setAgentStatus(null);
 					setMessages((prev) => {
 						const next = [...prev];
+						const last = next[next.length - 1];
 						next[next.length - 1] = {
+							...last,
 							role: "assistant",
 							content: assistantContent,
 						};
@@ -79,7 +82,9 @@ export function ChatView() {
 			if (endedWithError) {
 				setMessages((prev) => {
 					const next = [...prev];
+					const last = next[next.length - 1];
 					next[next.length - 1] = {
+						...last,
 						role: "assistant",
 						content: assistantContent || "Stream interrupted.",
 						errored: true,
@@ -136,7 +141,7 @@ export function ChatView() {
 								message.content === "";
 							return (
 								<li
-									key={index}
+									key={message.id}
 									data-role={message.role}
 									data-errored={message.errored ? "true" : undefined}
 									className="flex flex-col gap-1"
