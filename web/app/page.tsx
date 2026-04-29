@@ -71,10 +71,18 @@ export default async function NetworkNowPage() {
 
 	return (
 		<main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-6 px-6 py-12">
-			<header className="flex flex-col gap-1">
-				<h1 className="font-heading text-2xl font-semibold tracking-tight">
-					Network Now
-				</h1>
+			<header className="flex flex-col gap-2">
+				<div className="flex flex-wrap items-baseline justify-between gap-2">
+					<h1 className="font-heading text-2xl font-semibold tracking-tight">
+						Network Now
+					</h1>
+					<a
+						href="/ask"
+						className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+					>
+						Ask the agent →
+					</a>
+				</div>
 				<p className="text-sm text-muted-foreground">
 					Live operational status across the served TfL lines.
 				</p>
