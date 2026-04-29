@@ -76,4 +76,27 @@ describe("Ask page (TM-E3 chat view)", () => {
 			message: "hi there",
 		});
 	});
+
+	it("renders an ephemeral status line while a tool frame is in flight", async () => {
+		const fetchMock = vi.fn().mockResolvedValueOnce(
+			streamingResponse(
+				streamFrom(
+					'data: {"type":"tool","content":"query_tube_status"}\n\n',
+					'data: {"type":"token","content":"Result"}\n\n',
+					'data: {"type":"end","content":""}\n\n',
+				),
+			),
+		);
+		vi.stubGlobal("fetch", fetchMock);
+
+		render(<AskPage />);
+
+		fireEvent.change(screen.getByLabelText(/message/i), {
+			target: { value: "status?" },
+		});
+		fireEvent.submit(screen.getByLabelText(/message/i).closest("form")!);
+
+		await screen.findByText(/result/i);
+		expect(screen.queryByTestId("agent-status")).not.toBeInTheDocument();
+	});
 });
