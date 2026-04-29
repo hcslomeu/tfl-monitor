@@ -38,4 +38,14 @@ describe("SSEParser", () => {
 			{ type: "token", content: "Piccadilly" },
 		]);
 	});
+
+	it("buffers a partial frame and emits it after the boundary arrives", () => {
+		const parser = new SSEParser();
+
+		const first = parser.push(bytes('data: {"type":"token","cont'));
+		const second = parser.push(bytes('ent":"hello"}\n\n'));
+
+		expect(first).toEqual<Frame[]>([]);
+		expect(second).toEqual<Frame[]>([{ type: "token", content: "hello" }]);
+	});
 });
