@@ -99,4 +99,24 @@ describe("Ask page (TM-E3 chat view)", () => {
 		await screen.findByText(/result/i);
 		expect(screen.queryByTestId("agent-status")).not.toBeInTheDocument();
 	});
+
+	it("surfaces a service alert when the agent endpoint returns 503", async () => {
+		const fetchMock = vi.fn().mockResolvedValueOnce(
+			new Response(JSON.stringify({ detail: "agent unavailable" }), {
+				status: 503,
+				headers: { "content-type": "application/problem+json" },
+			}),
+		);
+		vi.stubGlobal("fetch", fetchMock);
+
+		render(<AskPage />);
+
+		fireEvent.change(screen.getByLabelText(/message/i), {
+			target: { value: "anything" },
+		});
+		fireEvent.submit(screen.getByLabelText(/message/i).closest("form")!);
+
+		expect(await screen.findByText(/agent unavailable/i)).toBeInTheDocument();
+		expect(screen.queryByTestId("conversation")).not.toBeInTheDocument();
+	});
 });
