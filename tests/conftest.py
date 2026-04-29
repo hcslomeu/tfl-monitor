@@ -97,3 +97,19 @@ def attach_pool() -> Iterator[Any]:
         yield _attach
     finally:
         app.state.db_pool = original
+
+
+@pytest.fixture
+def attach_agent() -> Iterator[Any]:
+    """Attach a fake agent to ``app.state.agent`` and restore on teardown."""
+    from api.main import app
+
+    original = getattr(app.state, "agent", None)
+
+    def _attach(agent: Any) -> None:
+        app.state.agent = agent
+
+    try:
+        yield _attach
+    finally:
+        app.state.agent = original
