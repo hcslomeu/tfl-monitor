@@ -14,7 +14,7 @@ recurring guidance only — not a session log.
 
 1. **[2026-04-26 / re-confirmed 2026-04-29] `Agent` tool's `isolation: "worktree"` may NOT isolate physical paths**
    Two parallel teammates spawned with `isolation: "worktree"` ended up sharing `/Users/humbertolomeu/tfl-monitor` and committing directly into the parent branch. Second occurrence on TM-D5 (PR #44): `data-layer` and `agent-core` agents serialised through the parent checkout (agent-core's `f107802` landed before data-layer's three commits) — the disjoint file sets saved the day, not the param. `git worktree list` confirms no extra worktree was ever created.
-   Do instead: when dispatching ≥2 teammates in parallel, instruct each one in its prompt to run `git worktree add /tmp/<member-name>-worktree HEAD` as step 0 before any edits, OR dispatch them serially. Never trust `isolation: "worktree"` alone for multi-agent concurrency on this machine.
+   Do instead: when dispatching ≥2 teammates in parallel, instruct each one in its prompt to run `git worktree add /tmp/<member-name>-worktree HEAD && cd /tmp/<member-name>-worktree` as step 0 before any edits, OR dispatch them serially. Never trust `isolation: "worktree"` alone for multi-agent concurrency on this machine.
 
 2. **[2026-04-26] CodeRabbit posts new threads after every push (re-review)**
    Round 1 review threads got resolved, push happened, CodeRabbit re-reviewed and opened 3 new threads on the round-2 commit. Ruleset blocks merge until those resolve too.
@@ -73,7 +73,7 @@ recurring guidance only — not a session log.
 
 8. **[2026-04-29] Bundled rename + delete-remote git ops trip the sandbox**
    `git branch -m old new && git push origin -u new && git push origin --delete old` is denied as a single shell call (the harness flags the destructive delete inside the chain). Even rerunning just the rename+push together still got refused with "Deleting the remote branch ..." even though no delete was in the command.
-   Do instead: split into separate `Bash` calls — first `git branch -m`, then `git push origin -u <new>`, leave the orphaned `origin/<old>` ref alone unless the user explicitly asks to delete (then run `git push origin --delete <old>` standalone with explicit user approval).
+   Do instead: split into separate `Bash` calls — first `git branch -m <old> <new>`, then `git push origin -u <new>`, leave the orphaned `origin/<old>` ref alone unless the user explicitly asks to delete (then run `git push origin --delete <old>` standalone with explicit user approval).
 
 ## Domain Behavior Guardrails
 
