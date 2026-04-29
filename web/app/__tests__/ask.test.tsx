@@ -116,7 +116,8 @@ describe("Ask page (TM-E3 chat view)", () => {
 		});
 		fireEvent.submit(screen.getByLabelText(/message/i).closest("form")!);
 
-		expect(await screen.findByText(/agent unavailable/i)).toBeInTheDocument();
+		const alert = await screen.findByRole("alert");
+		expect(alert).toHaveTextContent(/agent unavailable/i);
 		expect(screen.queryByTestId("conversation")).not.toBeInTheDocument();
 	});
 });
