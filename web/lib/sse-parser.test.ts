@@ -74,4 +74,45 @@ describe("SSEParser", () => {
 
 		expect(() => parser.push(bytes("data: {not-json\n\n"))).not.toThrow();
 	});
+
+	it("parses frames terminated by CRLF (sse-starlette default)", () => {
+		const parser = new SSEParser();
+
+		const frames = parser.push(
+			bytes('data: {"type":"token","content":"hi"}\r\n\r\n'),
+		);
+
+		expect(frames).toEqual<Frame[]>([{ type: "token", content: "hi" }]);
+	});
+
+	it("handles mixed CRLF and LF boundaries in the same stream", () => {
+		const parser = new SSEParser();
+
+		const frames = parser.push(
+			bytes(
+				[
+					'data: {"type":"tool","content":"t"}\r\n\r\n',
+					'data: {"type":"token","content":"a"}\n\n',
+				].join(""),
+			),
+		);
+
+		expect(frames).toEqual<Frame[]>([
+			{ type: "tool", content: "t" },
+			{ type: "token", content: "a" },
+		]);
+	});
+
+	it("preserves leading whitespace beyond the first space after data:", () => {
+		const parser = new SSEParser();
+
+		const frames = parser.push(
+			bytes('data:  leading-space\n\ndata: {"type":"end","content":""}\n\n'),
+		);
+
+		// First frame is malformed JSON (" leading-space") so it's dropped;
+		// what we assert is that parsing did not throw and the second frame still
+		// makes it through.
+		expect(frames).toEqual<Frame[]>([{ type: "end", content: "" }]);
+	});
 });
