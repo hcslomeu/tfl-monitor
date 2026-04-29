@@ -120,4 +120,30 @@ describe("Ask page (TM-E3 chat view)", () => {
 		expect(alert).toHaveTextContent(/agent unavailable/i);
 		expect(screen.queryByTestId("conversation")).not.toBeInTheDocument();
 	});
+
+	it("flags the assistant bubble when the stream ends with an error", async () => {
+		const fetchMock = vi.fn().mockResolvedValueOnce(
+			streamingResponse(
+				streamFrom(
+					'data: {"type":"token","content":"Partial "}\n\n',
+					'data: {"type":"end","content":"error"}\n\n',
+				),
+			),
+		);
+		vi.stubGlobal("fetch", fetchMock);
+
+		render(<AskPage />);
+
+		fireEvent.change(screen.getByLabelText(/message/i), {
+			target: { value: "go" },
+		});
+		fireEvent.submit(screen.getByLabelText(/message/i).closest("form")!);
+
+		await screen.findByText(/partial/i);
+
+		const assistantBubble = screen
+			.getByTestId("conversation")
+			.querySelector('[data-role="assistant"]');
+		expect(assistantBubble).toHaveAttribute("data-errored", "true");
+	});
 });
