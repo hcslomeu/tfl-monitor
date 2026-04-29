@@ -18,4 +18,24 @@ describe("SSEParser", () => {
 
 		expect(frames).toEqual<Frame[]>([{ type: "token", content: "hi" }]);
 	});
+
+	it("parses multiple frames delivered in a single chunk", () => {
+		const parser = new SSEParser();
+
+		const frames = parser.push(
+			bytes(
+				[
+					'data: {"type":"tool","content":"query_tube_status"}\n\n',
+					'data: {"type":"token","content":"The "}\n\n',
+					'data: {"type":"token","content":"Piccadilly"}\n\n',
+				].join(""),
+			),
+		);
+
+		expect(frames).toEqual<Frame[]>([
+			{ type: "tool", content: "query_tube_status" },
+			{ type: "token", content: "The " },
+			{ type: "token", content: "Piccadilly" },
+		]);
+	});
 });
