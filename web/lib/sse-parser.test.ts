@@ -48,4 +48,30 @@ describe("SSEParser", () => {
 		expect(first).toEqual<Frame[]>([]);
 		expect(second).toEqual<Frame[]>([{ type: "token", content: "hello" }]);
 	});
+
+	it("ignores SSE comment lines (e.g. EventSourceResponse pings)", () => {
+		const parser = new SSEParser();
+
+		const frames = parser.push(
+			bytes([": ping\n\n", 'data: {"type":"end","content":""}\n\n'].join("")),
+		);
+
+		expect(frames).toEqual<Frame[]>([{ type: "end", content: "" }]);
+	});
+
+	it("drops frames whose type is not token/tool/end", () => {
+		const parser = new SSEParser();
+
+		const frames = parser.push(
+			bytes('data: {"type":"unknown","content":"x"}\n\n'),
+		);
+
+		expect(frames).toEqual<Frame[]>([]);
+	});
+
+	it("drops frames with malformed JSON instead of throwing", () => {
+		const parser = new SSEParser();
+
+		expect(() => parser.push(bytes("data: {not-json\n\n"))).not.toThrow();
+	});
 });
