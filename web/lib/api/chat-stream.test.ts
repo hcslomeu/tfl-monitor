@@ -75,4 +75,39 @@ describe("streamChat", () => {
 			message: "hello",
 		});
 	});
+
+	it("throws ApiError when the API returns a non-2xx response", async () => {
+		fetchMock.mockResolvedValueOnce(
+			new Response(
+				JSON.stringify({
+					detail: "agent unavailable",
+					title: "503 Service Unavailable",
+				}),
+				{
+					status: 503,
+					headers: { "content-type": "application/problem+json" },
+				},
+			),
+		);
+
+		const generator = streamChat({ thread_id: "t-1", message: "hi" });
+
+		await expect(generator.next()).rejects.toBeInstanceOf(ApiError);
+	});
+
+	it("surfaces the RFC 7807 detail in ApiError.detail", async () => {
+		fetchMock.mockResolvedValueOnce(
+			new Response(JSON.stringify({ detail: "agent unavailable" }), {
+				status: 503,
+				headers: { "content-type": "application/problem+json" },
+			}),
+		);
+
+		const generator = streamChat({ thread_id: "t-1", message: "hi" });
+
+		await expect(generator.next()).rejects.toMatchObject({
+			status: 503,
+			detail: "agent unavailable",
+		});
+	});
 });
