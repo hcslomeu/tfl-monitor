@@ -110,4 +110,37 @@ describe("streamChat", () => {
 			detail: "agent unavailable",
 		});
 	});
+
+	it("propagates network failures so the caller can render a fallback", async () => {
+		fetchMock.mockRejectedValueOnce(new TypeError("network down"));
+
+		const generator = streamChat({ thread_id: "t-1", message: "hi" });
+
+		await expect(generator.next()).rejects.toThrow(/network down/);
+	});
+
+	it("buffers across chunks emitted by the stream reader", async () => {
+		fetchMock.mockResolvedValueOnce(
+			streamingResponse(
+				streamFrom(
+					'data: {"type":"token","cont',
+					'ent":"hello"}\n\n',
+					'data: {"type":"end","content":""}\n\n',
+				),
+			),
+		);
+
+		const collected: Frame[] = [];
+		for await (const frame of streamChat({
+			thread_id: "t-1",
+			message: "hi",
+		})) {
+			collected.push(frame);
+		}
+
+		expect(collected).toEqual<Frame[]>([
+			{ type: "token", content: "hello" },
+			{ type: "end", content: "" },
+		]);
+	});
 });
