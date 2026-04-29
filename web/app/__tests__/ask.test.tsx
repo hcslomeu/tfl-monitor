@@ -82,17 +82,18 @@ describe("Ask page (TM-E3 chat view)", () => {
 	});
 
 	it("renders an ephemeral status line while a tool frame is in flight", async () => {
-		const fetchMock = vi
-			.fn()
-			.mockResolvedValueOnce(
-				streamingResponse(
-					streamFrom(
-						'data: {"type":"tool","content":"query_tube_status"}\n\n',
-						'data: {"type":"token","content":"Result"}\n\n',
-						'data: {"type":"end","content":""}\n\n',
-					),
-				),
-			);
+		// Drive the stream in two phases so we can assert the status appears
+		// before the first token clears it. A plain `streamFrom(...)` enqueues
+		// every chunk synchronously and closes — by the time the consumer reads,
+		// the token has already overwritten the status, so the transient render
+		// is invisible. Manual controller lets us pause between chunks.
+		let controller!: ReadableStreamDefaultController<Uint8Array>;
+		const stream = new ReadableStream<Uint8Array>({
+			start(c) {
+				controller = c;
+			},
+		});
+		const fetchMock = vi.fn().mockResolvedValueOnce(streamingResponse(stream));
 		vi.stubGlobal("fetch", fetchMock);
 
 		render(<AskPage />);
@@ -103,6 +104,20 @@ describe("Ask page (TM-E3 chat view)", () => {
 		const form = screen.getByLabelText(/message/i).closest("form");
 		if (!form) throw new Error("form not found");
 		fireEvent.submit(form);
+
+		const enc = new TextEncoder();
+		controller.enqueue(
+			enc.encode('data: {"type":"tool","content":"query_tube_status"}\n\n'),
+		);
+
+		const status = await screen.findByTestId("agent-status");
+		expect(status).toHaveTextContent(/query_tube_status/);
+
+		controller.enqueue(
+			enc.encode('data: {"type":"token","content":"Result"}\n\n'),
+		);
+		controller.enqueue(enc.encode('data: {"type":"end","content":""}\n\n'));
+		controller.close();
 
 		await screen.findByText(/result/i);
 		expect(screen.queryByTestId("agent-status")).not.toBeInTheDocument();
