@@ -1,0 +1,167 @@
+site_name: tfl-monitor
+site_description: >-
+  A real-time data + AI engineering portfolio project — streaming TfL feeds
+  into a dbt-modelled warehouse, with a RAG agent over TfL strategy documents.
+site_author: Humberto Slomeu
+site_url: https://hcslomeu.github.io/tfl-monitor/
+
+repo_name: hcslomeu/tfl-monitor
+repo_url: https://github.com/hcslomeu/tfl-monitor
+edit_uri: edit/main/docs/
+
+copyright: Copyright &copy; 2026 Humberto Slomeu — MIT licence
+
+docs_dir: docs
+site_dir: site
+
+theme:
+  name: material
+  language: en
+  font:
+    text: Inter
+    code: JetBrains Mono
+  icon:
+    repo: fontawesome/brands/github
+    logo: material/train-variant
+  favicon: assets/favicon.svg
+  palette:
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: deep purple
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: deep purple
+      toggle:
+        icon: material/brightness-4
+        name: Switch to system preference
+  features:
+    - announce.dismiss
+    - content.action.edit
+    - content.action.view
+    - content.code.annotate
+    - content.code.copy
+    - content.code.select
+    - content.tabs.link
+    - content.tooltips
+    - navigation.footer
+    - navigation.indexes
+    - navigation.instant
+    - navigation.instant.prefetch
+    - navigation.instant.progress
+    - navigation.path
+    - navigation.sections
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.top
+    - navigation.tracking
+    - search.highlight
+    - search.share
+    - search.suggest
+    - toc.follow
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/hcslomeu
+      name: GitHub
+    - icon: fontawesome/brands/linkedin
+      link: https://www.linkedin.com/in/hcslomeu/
+      name: LinkedIn
+  generator: false
+  status:
+    new: Recently added
+    deprecated: Deprecated
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      toc_depth: 3
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.betterem
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.snippets:
+      check_paths: true
+      base_path:
+        - docs
+        - .
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+      slugify: !!python/object/apply:pymdownx.slugs.slugify
+        kwds:
+          case: lower
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+plugins:
+  - search:
+      separator: '[\s​\-_,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;|(?!\b)(?=[A-Z][a-z])'
+  - mermaid2:
+      version: 10.9.1
+  - glightbox:
+      touchNavigation: true
+      loop: false
+      effect: zoom
+      slide_effect: slide
+      width: 100%
+      height: auto
+      zoomable: true
+      draggable: true
+  - minify:
+      minify_html: true
+
+nav:
+  - Home: index.md
+  - Architecture:
+      - Overview: architecture.md
+      - Tech stack: stack.md
+      - Engineering principles: engineering.md
+      - Observability: observability.md
+  - Pipelines:
+      - pipelines/index.md
+      - Streaming ingestion: pipelines/ingestion.md
+      - dbt warehouse: pipelines/warehouse.md
+      - RAG ingestion: pipelines/rag.md
+      - LangGraph agent: pipelines/agent.md
+      - FastAPI surface: pipelines/api.md
+      - Next.js frontend: pipelines/frontend.md
+  - Operations:
+      - Deployment: deployment.md
+      - Roadmap: roadmap.md
+  - Reference:
+      - ADRs: adrs.md
+      - Glossary: glossary.md

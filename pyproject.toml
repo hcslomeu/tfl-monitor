@@ -39,6 +39,14 @@ dev = [
     "taskipy>=1.14",
     "apache-airflow>=2.10,<3.0",
 ]
+docs = [
+    "mkdocs>=1.6",
+    "mkdocs-material>=9.5",
+    "mkdocs-mermaid2-plugin>=1.2",
+    "mkdocs-glightbox>=0.4",
+    "mkdocs-minify-plugin>=0.8",
+    "pymdown-extensions>=10.0",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -116,3 +124,5 @@ ingest-arrivals = "python -m ingestion.producers.arrivals"
 consume-arrivals = "python -m ingestion.consumers.arrivals"
 ingest-disruptions = "python -m ingestion.producers.disruptions"
 consume-disruptions = "python -m ingestion.consumers.disruptions"
+docs-serve = "mkdocs serve --config-file mkdocs.yml --dev-addr 127.0.0.1:8001"
+docs-build = "mkdocs build --config-file mkdocs.yml --strict"
