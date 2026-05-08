@@ -78,7 +78,7 @@ Project-specific vocabulary and TfL-specific terms a reviewer might not know.
     output back to the model, terminates on a final assistant message.
 
 `Pydantic AI`
-:   Anthropic's typed LLM client; we use it inside one tool (`LineId`
+:   A typed Python agent framework from the Pydantic team; we use it inside one tool (`LineId`
     extraction with Haiku). LangGraph remains the main agent.
 
 `HybridChunker`

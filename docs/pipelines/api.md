@@ -1,6 +1,6 @@
 # FastAPI surface
 
-Six endpoints, all RFC 7807 errors, a single shared async psycopg pool, and
+Eight endpoints, all RFC 7807 errors, a single shared async psycopg pool, and
 **OpenAPI 3.1 as the contract** — the frontend regenerates types from it.
 
 ## Code map

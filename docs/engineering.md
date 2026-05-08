@@ -148,7 +148,7 @@ flowchart LR
 
 Every spec is a triple under `.claude/specs/`:
 
-```
+```text
 TM-XXX-research.md
 TM-XXX-plan.md
 TM-XXX-spec.md   (older WPs only — newer ones merge into the plan)

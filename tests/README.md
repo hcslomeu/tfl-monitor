@@ -72,7 +72,7 @@ CI runs the default suite + frontend Vitest in parallel jobs.
 
 The fixtures are deliberately **not** factory-style — they return concrete
 shapes the tests can assert on. Rebuilding fixtures from the live API uses
-[`scripts/fetch_tfl_samples.py`](../scripts).
+[`scripts/fetch_tfl_samples.py`](../scripts/fetch_tfl_samples.py).
 
 ## Conventions
 
