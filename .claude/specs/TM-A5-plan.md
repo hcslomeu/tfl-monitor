@@ -433,8 +433,8 @@ resource "aws_iam_role_policy" "bedrock" {
       Effect = "Allow"
       Action = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]
       Resource = [
-        "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0",
-        "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-haiku-20241022-v1:0",
+        "arn:aws:bedrock:${var.region}::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0",
+        "arn:aws:bedrock:${var.region}::foundation-model/anthropic.claude-3-5-haiku-20241022-v1:0",
       ]
     }]
   })
@@ -461,10 +461,22 @@ resource "aws_launch_template" "ec2" {
   instance_type = "t4g.small"
   iam_instance_profile { name = aws_iam_instance_profile.ec2.name }
   vpc_security_group_ids = [aws_security_group.ec2.id]
-  user_data = base64encode(file("${path.module}/userdata.sh"))
+  user_data = base64encode(templatefile("${path.module}/userdata.sh", {
+    github_owner = var.github_owner
+    github_repo  = var.github_repo
+    region       = var.region
+  }))
   block_device_mappings {
     device_name = "/dev/xvda"
     ebs { volume_size = 20; volume_type = "gp3"; delete_on_termination = false }
+    # NOTE (known limitation): delete_on_termination = false only prevents
+    # deletion when the instance terminates; it does NOT automatically
+    # reattach the same volume when ASG launches a replacement instance.
+    # For true data persistence across spot interruptions, a separate
+    # aws_ebs_volume + aws_volume_attachment resource (or a mount-by-tag
+    # script in userdata) is required. Deferred to Phase 2 — spot
+    # interruptions are infrequent for a portfolio-scope single-instance ASG,
+    # and the .env + docker volumes can be re-seeded via SSM in minutes.
   }
   instance_market_options {
     market_type = "spot"
@@ -567,14 +579,14 @@ TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" \
   -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
 INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" \
   http://169.254.169.254/latest/meta-data/instance-id)
-ALLOC_ID=$(aws ec2 describe-addresses --region us-east-1 \
+ALLOC_ID=$(aws ec2 describe-addresses --region ${region} \
   --filters "Name=tag:Project,Values=tfl-monitor" \
   --query 'Addresses[0].AllocationId' --output text)
-aws ec2 associate-address --region us-east-1 \
+aws ec2 associate-address --region ${region} \
   --instance-id "$INSTANCE_ID" --allocation-id "$ALLOC_ID"
 
 # Clone repo + bootstrap
-sudo -u ec2-user git clone https://github.com/${github_owner}/tfl-monitor.git /home/ec2-user/tfl-monitor
+sudo -u ec2-user git clone https://github.com/${github_owner}/${github_repo}.git /home/ec2-user/tfl-monitor
 echo "Awaiting manual .env paste via SSM Session Manager."
 ```
 
@@ -618,7 +630,7 @@ jobs:
           aws ssm send-command \
             --document-name "AWS-RunShellScript" \
             --targets "Key=tag:Name,Values=tfl-monitor" \
-            --parameters 'commands=["cd /home/ec2-user/tfl-monitor && git pull && docker compose -f infra/docker-compose.prod.yml pull && docker compose -f infra/docker-compose.prod.yml up -d"]'
+            --parameters 'commands=["cd /home/ec2-user/tfl-monitor && sudo -u ec2-user git pull && docker compose -f infra/docker-compose.prod.yml pull && docker compose -f infra/docker-compose.prod.yml up -d"]'
 ```
 
 #### 4.6 First-deploy sequence
