@@ -5,13 +5,13 @@ export type Mode = LineStatus["mode"];
 /**
  * TfL brand-correct labels for each transport mode.
  *
- * The OpenAPI enum is kebab-case (`elizabeth-line`, `national-rail`, …);
- * blindly replacing hyphens and using Tailwind `capitalize` produces
- * `Elizabeth line` and `National rail`, which both miss the brand.
+ * The OpenAPI enum is kebab-case (`elizabeth-line`, `national-rail`, …).
+ * `Elizabeth line` (lowercase 'l') and `National Rail` are correct per
+ * TfL brand guidelines.
  */
 export const MODE_LABELS: Record<Mode, string> = {
 	tube: "Tube",
-	"elizabeth-line": "Elizabeth Line",
+	"elizabeth-line": "Elizabeth line",
 	overground: "Overground",
 	dlr: "DLR",
 	bus: "Bus",

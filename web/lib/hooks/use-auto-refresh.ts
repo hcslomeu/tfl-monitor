@@ -13,15 +13,21 @@ export interface AutoRefreshState<T> {
  * latest snapshot.
  *
  * - Calls once on mount, then on each tick.
+ * - Passes an `AbortSignal` to the fetcher so in-flight requests can
+ *   be cancelled on unmount or when a newer tick supersedes them.
  * - Pauses while `document.visibilityState !== "visible"` and resumes
  *   when the tab becomes visible again (battery-friendly + avoids
- *   redundant requests for backgrounded tabs).
- * - Aborts the in-flight request on unmount and on each new tick.
+ *   redundant requests for backgrounded tabs). The mount-time check
+ *   also skips the initial fetch when the tab starts hidden.
+ * - Captures the controller in a local const inside `run` to prevent
+ *   race conditions where a stale resolution overwrites newer data.
+ * - Silently discards `AbortError` so cancellation never surfaces to
+ *   UI error state.
  * - Caller-supplied `fetcher` does not need to be memoised; the hook
  *   captures it through a ref so re-renders don't restart polling.
  */
 export function useAutoRefresh<T>(
-	fetcher: () => Promise<T>,
+	fetcher: (signal: AbortSignal) => Promise<T>,
 	intervalMs: number,
 ): AutoRefreshState<T> {
 	const [data, setData] = useState<T | null>(null);
@@ -40,15 +46,21 @@ export function useAutoRefresh<T>(
 
 		const run = async () => {
 			abort?.abort();
-			abort = new AbortController();
+			const controller = new AbortController();
+			abort = controller;
 			try {
-				const next = await fetcherRef.current();
-				if (cancelled) return;
+				const next = await fetcherRef.current(controller.signal);
+				if (cancelled || controller.signal.aborted) return;
 				setData(next);
 				setError(null);
 				setLastUpdated(new Date());
 			} catch (err) {
-				if (cancelled) return;
+				if (
+					cancelled ||
+					controller.signal.aborted ||
+					(err instanceof DOMException && err.name === "AbortError")
+				)
+					return;
 				setError(err instanceof Error ? err : new Error(String(err)));
 			}
 		};
@@ -74,7 +86,9 @@ export function useAutoRefresh<T>(
 			}
 		};
 
-		start();
+		if (document.visibilityState === "visible") {
+			start();
+		}
 		document.addEventListener("visibilitychange", handleVisibility);
 
 		return () => {
