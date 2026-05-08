@@ -227,7 +227,7 @@ export interface AutoRefreshState<T> {
  *   captures it through a ref so re-renders don't restart polling.
  */
 export function useAutoRefresh<T>(
-	fetcher: () => Promise<T>,
+	fetcher: (signal: AbortSignal) => Promise<T>,
 	intervalMs: number,
 ): AutoRefreshState<T> {
 	const [data, setData] = useState<T | null>(null);
@@ -248,13 +248,13 @@ export function useAutoRefresh<T>(
 			abort?.abort();
 			abort = new AbortController();
 			try {
-				const next = await fetcherRef.current();
+				const next = await fetcherRef.current(abort.signal);
 				if (cancelled) return;
 				setData(next);
 				setError(null);
 				setLastUpdated(new Date());
 			} catch (err) {
-				if (cancelled) return;
+				if (cancelled || (err instanceof DOMException && err.name === "AbortError")) return;
 				setError(err instanceof Error ? err : new Error(String(err)));
 			}
 		};
@@ -556,9 +556,53 @@ interface Pulse {
 	bySeverity: { severe: number; degraded: number; good: number };
 }
 
-const SEVERE = new Set([0, 1, 2, 3, 4, 5, 6, 16, 20]);
-const DEGRADED = new Set([7, 8, 9, 11, 12, 13, 14, 15, 17]);
-const GOOD = new Set([10, 18]);
+/** Named TfL severity codes (spec §9.5). */
+const TFL_SEVERITY = {
+	GOOD_SERVICE: 10,
+	PART_CLOSURE: 18,
+	MINOR_DELAYS: 9,
+	SEVERE_DELAYS: 8,
+	PART_SUSPENDED: 7,
+	SUSPENDED: 6,
+	PLANNED_CLOSURE: 5,
+	PART_WORKS: 4,
+	SPECIAL_SERVICE: 3,
+	REDUCED_SERVICE: 2,
+	BUS_SERVICE: 1,
+	CLOSED: 0,
+	ISSUES: 11,
+	NO_STEP_FREE: 12,
+	CHANGE_OF_FREQ: 13,
+	DIVERTED: 14,
+	NOT_RUNNING: 15,
+	RAIL_SUSP: 16,
+	INFORMATION: 17,
+	SPECIAL_CLOSING: 20,
+} as const;
+
+const SEVERE = new Set([
+	TFL_SEVERITY.CLOSED,
+	TFL_SEVERITY.BUS_SERVICE,
+	TFL_SEVERITY.REDUCED_SERVICE,
+	TFL_SEVERITY.SPECIAL_SERVICE,
+	TFL_SEVERITY.PART_WORKS,
+	TFL_SEVERITY.PLANNED_CLOSURE,
+	TFL_SEVERITY.SUSPENDED,
+	TFL_SEVERITY.RAIL_SUSP,
+	TFL_SEVERITY.SPECIAL_CLOSING,
+]);
+const DEGRADED = new Set([
+	TFL_SEVERITY.PART_SUSPENDED,
+	TFL_SEVERITY.SEVERE_DELAYS,
+	TFL_SEVERITY.MINOR_DELAYS,
+	TFL_SEVERITY.ISSUES,
+	TFL_SEVERITY.NO_STEP_FREE,
+	TFL_SEVERITY.CHANGE_OF_FREQ,
+	TFL_SEVERITY.DIVERTED,
+	TFL_SEVERITY.NOT_RUNNING,
+	TFL_SEVERITY.INFORMATION,
+]);
+const GOOD = new Set([TFL_SEVERITY.GOOD_SERVICE, TFL_SEVERITY.PART_CLOSURE]);
 
 function pulse(lines: LineStatus[]): Pulse {
 	const tube = lines.filter((l) => l.mode === "tube");
@@ -805,13 +849,15 @@ const ACTIVE_CATEGORIES: ReadonlySet<Disruption["category"]> = new Set([
 ]);
 
 export function HappeningNowCard({ disruptions }: HappeningNowCardProps) {
-	const active = disruptions
-		.filter((d) => ACTIVE_CATEGORIES.has(d.category))
-		.sort(
-			(a, b) =>
-				new Date(b.last_update ?? 0).getTime() -
-				new Date(a.last_update ?? 0).getTime(),
-		);
+	const active = useMemo(() => {
+		return disruptions
+			.filter((d) => ACTIVE_CATEGORIES.has(d.category))
+			.sort(
+				(a, b) =>
+					new Date(b.last_update ?? 0).getTime() -
+					new Date(a.last_update ?? 0).getTime(),
+			);
+	}, [disruptions]);
 
 	return (
 		<Card>
@@ -1247,6 +1293,24 @@ function formatLastUpdated(d: Date | null): string {
 	return SECONDS_FORMATTER.format(seconds, "second");
 }
 
+/**
+ * useTicker — forces a re-render on a fixed interval so that relative-time
+ * strings (e.g. "3 seconds ago") stay live between auto-refresh polls.
+ *
+ * Usage inside NetworkStatusCard:
+ *   useTicker(1_000); // re-render every second
+ *
+ * Implementation note: the auto-refresh poll fires every 30 s; without this
+ * ticker the "Updated X seconds ago" label would freeze between polls.
+ */
+function useTicker(intervalMs: number): void {
+	const [, setTick] = useState(0);
+	useEffect(() => {
+		const id = setInterval(() => setTick((n) => n + 1), intervalMs);
+		return () => clearInterval(id);
+	}, [intervalMs]);
+}
+
 export function NetworkStatusCard({
 	lines,
 	lastUpdated,
@@ -1257,8 +1321,13 @@ export function NetworkStatusCard({
 		setTab(readStoredTab());
 	}, []);
 
+	useTicker(1_000);
+
 	const active = TAB_ORDER.find((t) => t.id === tab) ?? TAB_ORDER[0];
-	const filtered = lines.filter((l) => active.modes.includes(l.mode));
+	const filtered = useMemo(
+		() => lines.filter((l) => active.modes.includes(l.mode)),
+		[lines, active],
+	);
 
 	function changeTab(next: string) {
 		const id = next as TabId;
