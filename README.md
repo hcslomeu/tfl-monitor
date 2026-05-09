@@ -1,79 +1,104 @@
 # tfl-monitor
 
-> A real-time data platform for Transport for London's network — streaming pipeline, dbt-modelled warehouse, and a RAG agent that answers questions about live operations and TfL strategy.
+> A real-time data + AI engineering portfolio: streaming Transport for London
+> feeds into a dbt-modelled warehouse, with a LangGraph agent that routes
+> between SQL over the warehouse and RAG over TfL strategy documents.
 
-🚧 **Under active development.** Live demo link coming with deployment (Phase 7).
+[![CI](https://github.com/hcslomeu/tfl-monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/hcslomeu/tfl-monitor/actions/workflows/ci.yml)
+[![docs](https://github.com/hcslomeu/tfl-monitor/actions/workflows/docs.yml/badge.svg)](https://hcslomeu.github.io/tfl-monitor/)
+[![python](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/)
+[![licence](https://img.shields.io/badge/licence-MIT-green.svg)](./LICENSE)
 
-- **Live demo**: 🚧 via TM-A5 + TM-E4
-- **Demo video**: 🚧 via TM-F1
-- **Architecture**: [`ARCHITECTURE.md`](./ARCHITECTURE.md)
-- **Setup**: [`SETUP.md`](./SETUP.md)
+🚧 **Under active deployment** — the codebase is feature-complete; TM-A5
+ships the AWS Bedrock + EC2 deploy.
+
+- 📚 **Documentation**: <https://hcslomeu.github.io/tfl-monitor/>
+- 🏛️ **Architecture**: [`ARCHITECTURE.md`](./ARCHITECTURE.md) ·
+  [docs/architecture](https://hcslomeu.github.io/tfl-monitor/architecture/)
+- 🧱 **Setup**: [`SETUP.md`](./SETUP.md)
+- ✅ **WP ledger**: [`PROGRESS.md`](./PROGRESS.md)
+- 🚀 **Live demo**: shipping with TM-A5 + TM-E4
+- 🎬 **Demo video**: shipping with TM-F1
 
 ---
 
 ## What this project is
 
-tfl-monitor ingests live feeds from the Transport for London Unified API — line status, arrivals, and disruptions across Tube, Elizabeth Line, Overground, and DLR — into a Kafka-backed streaming pipeline, transforms them into a dbt-modelled Postgres warehouse, and exposes a Next.js dashboard plus a conversational agent that can answer two different kinds of question:
+tfl-monitor ingests live feeds from the Transport for London Unified API —
+line status, arrivals, and disruptions across Tube, Elizabeth Line,
+Overground, and DLR — into a Kafka-backed streaming pipeline, transforms them
+into a dbt-modelled Postgres warehouse, and exposes a Next.js dashboard plus
+a conversational agent that can answer two different kinds of question:
 
-- **"Which Tube line had the worst reliability last week?"** — answered by an agent that writes SQL against the warehouse.
-- **"What's TfL's strategy for Piccadilly Line upgrades?"** — answered by RAG retrieval over TfL's Business Plan, the Mayor's Transport Strategy, and TfL's Annual Report.
+- **"Which Tube line had the worst reliability last week?"** — answered by an
+  agent that runs a typed query against the warehouse.
+- **"What's TfL's strategy for Piccadilly Line upgrades?"** — answered by RAG
+  retrieval over TfL's Business Plan, the Mayor's Transport Strategy, and
+  TfL's Annual Report.
 
-The agent routes between these two modes automatically.
+The agent routes between these two modes automatically and cites either the
+SQL rows or the exact document chunks it used.
 
 ## Why this project exists
 
-Portfolio project demonstrating **end-to-end data + AI engineering** on a realistic public dataset:
+A portfolio that demonstrates the **full data + AI engineering loop** on a
+realistic public dataset, not a CRUD demo or a notebook prototype:
 
 - Streaming ingestion that earns its Kafka broker (not a cron job in disguise)
 - A warehouse modelled properly in dbt with tests, documentation, and lineage
-- An AI agent that doesn't hallucinate because it's wired to real data and real documents
-- Everything deployed, observable, reproducible
+- An AI agent that doesn't hallucinate because it's wired to real data and
+  real documents
+- Production deployment for ~$6/month total, observable end-to-end
 
 ## Architecture at a glance
 
-```
+```text
 TfL Unified API ──polling──▶ Redpanda (Kafka) ──▶ Postgres (raw) ──▶ dbt ──▶ marts
-                                                                                │
-TfL strategy PDFs ──Docling──▶ embeddings ──▶ Pinecone                          │
-                                               │                                │
-                                               └───────┬────────────────────────┘
-                                                       ▼
-                                            LangGraph agent (SQL ↔ RAG)
-                                                       │
+                                                                               │
+TfL strategy PDFs ──Docling──▶ embeddings ──▶ Pinecone                         │
+                                              │                                │
+                                              └──────┬─────────────────────────┘
+                                                     ▼
+                                          LangGraph agent (SQL ↔ RAG)
+                                                     │
                                    FastAPI (SSE streaming) ◀┘
-                                             │
-                                             ▼
-                                    Next.js dashboard
+                                              │
+                                              ▼
+                                     Next.js dashboard
 
  Observability layered across the whole stack:
  • LangSmith   → LLM + agent traces (routing decisions, retrieval, tokens)
  • Logfire     → app + infra traces (FastAPI spans, Postgres queries, HTTP calls)
 ```
 
-Full diagram and component table in [`ARCHITECTURE.md`](./ARCHITECTURE.md).
+Full diagram with mermaid + per-pipeline walkthroughs in
+[the docs site](https://hcslomeu.github.io/tfl-monitor/architecture/).
 
 ## Tech stack
 
 | Layer | Choice | Reason |
-|---|---|---|
-| Streaming broker | Redpanda (Kafka-compatible) | Kafka API, single binary, same code local and in Redpanda Cloud |
-| Warehouse | PostgreSQL 16 | Simple, Supabase-compatible, fits the dataset |
-| Transformations | dbt-core + dbt-postgres | Tests, docs, lineage — the modern warehouse standard |
-| Batch orchestration | Apache Airflow 2.10+ | DAGs for static data ingest and nightly dbt rebuilds |
-| Ingestion | Python 3.12 + `httpx` + `aiokafka` | Async producers with retry, Pydantic-validated messages |
-| API | FastAPI + `sse-starlette` | Async, typed, great OpenAPI story |
-| Agent | LangGraph 1.x | Stateful graph with SQL tool and RAG tool |
-| Structured LLM calls | Pydantic AI | Type-safe extraction inside tools (not the main agent) |
-| RAG | LlamaIndex + Pinecone + Docling | Hybrid retrieval over TfL PDFs |
-| Validation | Pydantic v2 | Every data boundary in the system |
-| LLM observability | LangSmith | Traces every agent decision, tool call, retrieval |
-| App observability | Logfire | FastAPI, Postgres, HTTP — OpenTelemetry-native |
-| Frontend | Next.js 16 + shadcn/ui + claude.design | Server components, typed API client from OpenAPI |
-| Deploy | Railway + Vercel + Supabase + Redpanda Cloud + Pinecone | Free tiers where possible; ~£5/mo for Airflow on Railway |
+|-------|--------|--------|
+| Streaming broker | Redpanda (Kafka API) | Single binary, identical local ↔ prod |
+| Warehouse | PostgreSQL 16 / Supabase | JSONB-native, mature dbt adapter |
+| Transformations | dbt-core + dbt-postgres | Tests, docs, lineage as code |
+| Orchestration | Apache Airflow 2.10+ | LocalExecutor; portfolio-relevant skill |
+| Ingestion | `httpx` + `aiokafka` + Pydantic v2 | Async retry, typed events end-to-end |
+| API | FastAPI + `sse-starlette` | Async, typed, OpenAPI 3.1 auto-emitted |
+| Agent | LangGraph 1.x | Stateful graph with five typed tools |
+| Structured extraction | Pydantic AI | Tool-level typed LLM calls (Haiku normaliser) |
+| RAG | LlamaIndex + Pinecone + Docling | Conditional GET, namespace per document |
+| LLMs | Claude Sonnet 3.5 + Haiku 3.5 | Top-of-class tool calling |
+| LLM observability | LangSmith | Auto-instruments every node and tool call |
+| App observability | Logfire | OpenTelemetry-native FastAPI / Postgres / HTTP |
+| Frontend | Next.js 16 + shadcn/ui | Server components, Tailwind v4, Radix Nova |
+| Lint / format | Ruff (Python), Biome (TS) | Single tool per ecosystem |
+
+Full table — including the rejection rationale per choice — is in
+[`docs/stack`](https://hcslomeu.github.io/tfl-monitor/stack/).
 
 ## Engineering highlights
 
-### Contracts-first, enabling parallel agent work
+### Contracts-first parallelism
 
 Every cross-track interface lives in [`contracts/`](./contracts):
 
@@ -82,147 +107,176 @@ Every cross-track interface lives in [`contracts/`](./contracts):
 - Postgres DDL for every raw table
 - dbt `sources.yml` derived from the DDL
 
-The frontend generates TypeScript types from the OpenAPI spec. The ingestion layer serialises Pydantic models onto Kafka. dbt stages the raw tables into typed columns. Change the contract, regenerate everywhere — a single source of truth for the shape of the system.
+The frontend regenerates TypeScript types from the OpenAPI spec; the
+ingestion layer serialises Pydantic models onto Kafka; dbt stages the raw
+tables into typed columns. CI gates a bidirectional drift test across all
+four artefacts.
 
 ### Kafka earns its place
 
-TfL updates line status roughly every 30 seconds and disruptions continuously. At four polling endpoints with sub-minute cadence, Kafka gives us:
-
-- **Decoupling** — producers keep polling even if consumers are deploying
-- **Replay** — we can rewind topics to backfill a new consumer
-- **Fan-out** — multiple consumers (warehouse writer, live dashboard pusher, agent context hydrator) read the same topic
-
-A cron-to-Postgres pipeline would work; it would also lock us into a single consumer and lose history on restart.
+TfL updates line status every 30 seconds and disruptions continuously. Kafka
+gives us decoupling (producers keep polling while consumers redeploy),
+**replay** (rewinding a topic re-hydrates the warehouse), and **fan-out**
+(multiple consumer groups read the same topic). We exploit all three; we did
+not pay the cost of Kafka for its own sake.
 
 ### dbt over raw SQL
 
-Roughly 10 staging, intermediate, and mart models with dependencies; automatic tests for `unique`, `not_null`, and referential integrity; an auto-generated lineage graph; documentation that ships with the code. Raw SQL scripts would also work — until a second person needs to read the codebase.
+Around ten staging, intermediate, and mart models with dependencies; generic
+tests for `unique`, `not_null`, and referential integrity; eight singular
+tests for business invariants; auto-generated lineage and exposures wiring
+marts to the consuming endpoints.
 
 ### The agent routes between SQL and RAG
 
-A LangGraph agent exposes two tools:
-
-- `query_warehouse(sql: str)` — executes read-only SQL against a restricted role on the mart schema
-- `search_tfl_docs(query: str, top_k: int)` — hybrid (vector + BM25) retrieval over TfL strategy PDFs with reranking
-
-A router node inspects the question and picks the right tool. Answers cite either the SQL query and its rows, or the exact document chunks used. No hallucinations — or if there are, you can see exactly where they came from, traced end-to-end in LangSmith.
+A LangGraph `create_react_agent` exposes five typed tools — four wrap the
+warehouse-backed FastAPI fetchers (so there is one source of truth per
+query) and the fifth is a LlamaIndex retriever fanning out across the three
+Pinecone namespaces. Tool docstrings declare assumptions that reach the
+model (e.g. the documented bus-punctuality proxy). Every step is traced in
+LangSmith.
 
 ### Observability split
 
-Two hosted tools, zero self-hosted telemetry stack:
+Two hosted tools, zero self-hosted telemetry:
 
-- **LangSmith** — traces every LLM call, tool invocation, retrieval step. Answers: *why did the agent pick this tool?*, *which chunks made it into the prompt?*, *how many tokens did this cost?*
-- **Logfire** — instruments FastAPI, Postgres (`psycopg`), HTTP clients. Answers: *is my consumer keeping up?*, *why is this endpoint slow?*, *is TfL rate-limiting me?*
+- **LangSmith** answers *"why did the agent decide that?"*
+- **Logfire** answers *"why is this endpoint slow?"*
 
-Both free tiers cover this project. No Prometheus, no Grafana, no OpenTelemetry collector to babysit.
+Both ride on free tiers. No Prometheus / Grafana / OTel collector to babysit.
 
 ## Local development
 
-Prerequisites: Docker, `uv`, `pnpm`, `make`, `git`. Free TfL API key. Accounts on Pinecone, OpenAI, Anthropic, LangSmith, Logfire. See [`SETUP.md`](./SETUP.md) for the full setup.
+Prerequisites: Docker, `uv`, `pnpm`, `make`, `git`. Free TfL API key, plus
+accounts on Pinecone, OpenAI, Anthropic (or AWS Bedrock), LangSmith, Logfire.
+See [`SETUP.md`](./SETUP.md) for the full quick-start.
 
 ```bash
 git clone git@github.com:hcslomeu/tfl-monitor.git
 cd tfl-monitor
 cp .env.example .env
-# edit .env with your keys
+# fill in the keys you have
 
 make bootstrap        # install Python + Node deps
-make up               # start Postgres, Redpanda, Airflow, MinIO
+make up               # start Postgres, Redpanda, Airflow
 make seed             # load fixtures into local Postgres
-make check            # lint + tests + build
+make check            # lint + tests + build, both halves
+```
 
-# in separate terminals:
-uv run task api       # API on :8000
+In two more terminals:
+
+```bash
+uv run task api       # FastAPI on :8000
 pnpm --dir web dev    # dashboard on :3000
 ```
 
-Visit `http://localhost:3000`.
+Visit <http://localhost:3000>.
 
-Frontend tooling (delegated to `pnpm` — never npm or yarn):
+Tear it down with `make down` (preserves data) or `make clean` (wipes
+volumes).
+
+### Documentation site
+
+Local preview of the MkDocs Material site:
 
 ```bash
-pnpm --dir web lint   # Biome (sole linter/formatter)
-pnpm --dir web test   # Vitest + React Testing Library
-pnpm --dir web build  # Next.js production build
+uv sync --group docs
+uv run task docs-serve   # http://127.0.0.1:8001
 ```
 
-`make check` chains the Python and TypeScript gates for both halves of
-the codebase. See [`web/README.md`](./web/README.md) for the full
-frontend quickstart, including how to regenerate TS types from the
-OpenAPI contract.
+Build for offline review:
 
-Bring it all down with `make down` (preserves data) or `make clean` (wipes volumes).
+```bash
+uv run task docs-build
+open site/index.html
+```
+
+The site is published to GitHub Pages on every merge to `main` via
+`.github/workflows/docs.yml`.
 
 ### RAG ingestion (TM-D4)
 
-Three TfL strategy PDFs are fetched, parsed via Docling, embedded with OpenAI `text-embedding-3-small`, and upserted into the Pinecone serverless index `tfl-strategy-docs`. The fetcher follows the canonical landing pages to discover the current direct-PDF URL, then issues conditional `If-None-Match` / `If-Modified-Since` requests so re-runs only download what has changed.
-
-The three documents and their canonical landing pages (cite these, not the resolved CDN URLs):
-
-- [TfL Business Plan](https://tfl.gov.uk/corporate/publications-and-reports/business-plan)
-- [Mayor's Transport Strategy 2018](https://www.london.gov.uk/programmes-strategies/transport/our-vision-transport/mayors-transport-strategy-2018)
-- [TfL Annual Report and Statement of Accounts](https://tfl.gov.uk/corporate/publications-and-reports/annual-report)
-
-PDFs are TfL / GLA public publications used per their published terms. tfl-monitor stores a local copy under `data/strategy_docs/` (gitignored) for reproducibility but does not redistribute the PDFs.
+Three TfL strategy PDFs are fetched, parsed via Docling, embedded with OpenAI
+`text-embedding-3-small`, and upserted into the Pinecone serverless index
+`tfl-strategy-docs`. The fetcher follows the canonical landing pages to
+discover the current direct-PDF URL, then issues conditional
+`If-None-Match` / `If-Modified-Since` requests so re-runs only download what
+has changed.
 
 ```bash
-# Run once to populate Pinecone (requires PINECONE_API_KEY + OPENAI_API_KEY in .env)
-uv run python -m rag.ingest
-
-# Re-scrape each landing page and rewrite the resolved direct-PDF URL in
-# src/rag/sources.json. Use this when TfL rolls the annual URL stem
-# (e.g. business-plan-2026 → business-plan-2027). The download is still
-# conditional via ETag — unchanged PDFs are 304'd.
-uv run python -m rag.ingest --refresh-urls
-
-# Bypass the ETag cache and re-download every PDF
+uv run python -m rag.ingest                # default — only refetch what changed
+uv run python -m rag.ingest --refresh-urls # rewrite resolved PDF URLs
 uv run python -m rag.ingest --force-refetch
-
-# Run fetch + parse + embed but skip the Pinecone upsert (sizing + smoke check)
-uv run python -m rag.ingest --dry-run
+uv run python -m rag.ingest --dry-run      # skip Pinecone upsert
 ```
 
-If 1 of 3 documents fails its fetch / parse / embed / upsert cycle, the others still complete; the CLI then exits with a non-zero status so any future cron / GitHub Action surfaces the failure instead of swallowing it.
+Cost: a full re-embedding of all three PDFs runs at well under £0.20 one-time.
+Conditional GETs and stable Pinecone IDs mean steady-state runs incur
+near-zero spend.
 
-PDFs cache under `data/strategy_docs/` (gitignored). ETag / sha256 state lives in `data/cache/sources_state.json` (also gitignored). The first run downloads ~60 MB total; subsequent runs typically skip every doc unless TfL has published a new version.
+## Production deployment (TM-A5)
 
-**Cost estimate.** A full re-embedding of all three PDFs runs at well under £0.20 one-time at the current `text-embedding-3-small` price ($0.02 per 1M tokens). Conditional GETs and stable Pinecone ids mean steady-state runs incur near-zero embedding spend.
+| Layer | Host | $/mo |
+|-------|------|------|
+| Backend compute (FastAPI + ingestion + Airflow) | AWS EC2 t4g.small spot via ASG | ~3-4 |
+| LLM | AWS Bedrock (Claude Sonnet 3.5 + Haiku 3.5) | ~2-3 |
+| Postgres warehouse + Airflow metadata | Supabase free | 0 |
+| Kafka broker | Redpanda Cloud Serverless free | 0 |
+| Vector DB | Pinecone serverless free | 0 |
+| Frontend | Vercel hobby free | 0 |
+| HTTPS | DuckDNS subdomain + Caddy auto-LE | 0 |
+| Image registry | GHCR (public repo) | 0 |
+| Observability | Logfire + LangSmith free tiers | 0 |
+| **Steady-state target** | | **~$5-8** |
 
-## Status — work packages
+Full design and provisioning runbook in
+[`docs/deployment`](https://hcslomeu.github.io/tfl-monitor/deployment/) and
+[`.claude/specs/TM-A5-plan.md`](./.claude/specs/TM-A5-plan.md).
 
-Project built as WPs organised into parallel tracks. Track labels indicate which directories a WP touches, so at most 2 agents work simultaneously without collision.
+## Status
 
-| Phase | WP | Title | Track | Status |
-|---|---|---|---|---|
-| 0 | TM-000 | Contracts and scaffold | — | ⬜ |
-| 1 | TM-A1 | Docker Compose + Postgres + Redpanda + Airflow | A-infra | ⬜ |
-| 1 | TM-B1 | Async TfL client + fixtures | B-ingestion | ⬜ |
-| 2 | TM-C1 | dbt scaffold | C-dbt | ⬜ |
-| 2 | TM-D1 | FastAPI skeleton + Logfire wiring | D-api-agent | ⬜ |
-| 3 | TM-B2 | `line-status` producer | B-ingestion | ⬜ |
-| 3 | TM-B3 | `line-status` consumer | B-ingestion | ⬜ |
-| 3 | TM-C2 | dbt staging + first mart | C-dbt | ⬜ |
-| 3 | TM-D2 | Wire endpoints to Postgres | D-api-agent | ⬜ |
-| 3 | TM-E1a | Next.js scaffold + shadcn + Network Now (mocked) | E-frontend | ⬜ |
-| 3 | TM-E1b | Network Now wired to real `/status/live` | E-frontend | ⬜ |
-| 4 | TM-B4 | arrivals + disruptions topics | B-ingestion | ⬜ |
-| 4 | TM-C3 | Remaining marts + tests + exposures | C-dbt | ⬜ |
-| 4 | TM-D3 | Remaining endpoints | D-api-agent | ⬜ |
-| 4 | TM-E2 | Disruption Log view | E-frontend | ⬜ |
-| 5 | TM-A2 | Airflow DAGs | A-infra | ⬜ |
-| 5 | TM-D4 | RAG ingestion: Docling → Pinecone | D-api-agent | ⬜ |
-| 6 | TM-D5 | LangGraph agent (SQL + RAG + Pydantic AI) | D-api-agent | ⬜ |
-| 6 | TM-E3 | Chat view with SSE | E-frontend | ⬜ |
-| 7 | TM-A3 | Supabase provisioning | A-infra | ⬜ |
-| 7 | TM-A4 | Redpanda Cloud | A-infra | ⬜ |
-| 7 | TM-A5 | Railway deploy (Airflow + API + agent + workers) | A-infra | ⬜ |
-| 7 | TM-E4 | Vercel deploy | E-frontend | ⬜ |
-| 7 | TM-F1 | README polish + demo video + live URL | F-polish | ⬜ |
+Codebase is feature-complete; the deploy track is the last open work.
+Source of truth for the WP ledger is [`PROGRESS.md`](./PROGRESS.md), mirrored
+in the [docs roadmap](https://hcslomeu.github.io/tfl-monitor/roadmap/).
+
+| Phase | Title | Status |
+|-------|-------|--------|
+| 0 | Contracts and scaffold | ✅ |
+| 1-2 | Compose, scaffold, dbt + FastAPI skeleton, TfL client | ✅ |
+| 3 | line-status producer + consumer, first mart, `/status/live` + `/status/history` + `/reliability/{id}`, Network Now mock + wired | ✅ |
+| 4 | arrivals + disruptions topics, remaining marts + exposures, `/disruptions/recent` + `/bus/{id}/punctuality`, Disruption Log view | ✅ |
+| 5 | Airflow DAGs, RAG ingestion (Docling → Pinecone) | ✅ |
+| 6 | LangGraph agent + Pydantic AI normaliser, Chat view with SSE | ✅ |
+| 7 | AWS Bedrock + EC2 deploy, Vercel deploy, demo video, live URL | 🚧 |
+
+## Folder map
+
+```text
+tfl-monitor/
+├─ contracts/        # OpenAPI + Pydantic + DDL — single source of truth
+├─ src/
+│  ├─ api/           # FastAPI app + LangGraph agent + Pydantic AI extraction
+│  ├─ ingestion/     # Async TfL client + producers + consumers
+│  ├─ rag/           # Docling → OpenAI → Pinecone ingestion
+│  └─ agent/         # Legacy graph (kept for parity until TM-A5 collapse)
+├─ dbt/              # Staging + marts + tests + exposures
+├─ airflow/          # DAGs (dbt nightly, RAG weekly)
+├─ web/              # Next.js 16 + shadcn dashboard
+├─ tests/            # Pytest unit + integration suites
+├─ scripts/          # Fixture seeding + TfL sample fetcher
+├─ docs/             # MkDocs Material site (this README's expanded form)
+└─ .claude/          # ADRs + WP specs + napkin (coordination memory)
+```
+
+Each folder has its own `README.md` walking its purpose, contents, and
+gotchas — see the docs site for the curated walkthrough.
 
 ## Data sources and attribution
 
-- **TfL Unified API** — live operational feeds. Powered by TfL Open Data. Contains OS data © Crown copyright and database rights.
-- **TfL publications** — Mayor's Transport Strategy, TfL Business Plan, TfL Annual Report. Public documents used under their published terms.
+- **TfL Unified API** — live operational feeds. Powered by TfL Open Data.
+  Contains OS data © Crown copyright and database rights.
+- **TfL publications** — Mayor's Transport Strategy, TfL Business Plan, TfL
+  Annual Report. Public documents used under their published terms.
 
 No personal data is collected, stored, or processed by tfl-monitor.
 
@@ -232,4 +286,6 @@ MIT. See [`LICENSE`](./LICENSE).
 
 ## Author
 
-Built by [Humberto Slomeu](https://github.com/hcslomeu) — AI engineer available for hire. [LinkedIn](https://www.linkedin.com/in/hcslomeu/)
+Built by **[Humberto Slomeu](https://github.com/hcslomeu)** — AI engineer
+available for hire.
+[LinkedIn](https://www.linkedin.com/in/hcslomeu/)
