@@ -32,7 +32,12 @@ recurring guidance only — not a session log.
    Skipping any one is how merge-blocker bugs leak in.
    Do instead: `uv run task lint && uv run task test && uv run bandit -r src --severity-level high && make check` — all four exit 0.
 
-6. **[2026-04-28] Resolve PR threads only where a fix was applied; rejected threads stay open**
+6. **[2026-05-11] Stacked PRs: rebase + force-push after the parent merges**
+   PR #51 was opened with `base = feature/TM-E5-design-plan` (PR #48). When #48 squash-merged into `main`, GitHub flipped #51 to `mergeStateStatus: CONFLICTING` even after `gh pr edit --base main`, because #51 still carried the pre-squash commit of the plan doc that `main` now had under a different SHA.
+   Do instead: after the parent squash-merges, run `gh pr edit <child> --base main`, then in the child's worktree `git fetch origin && git rebase origin/main`. Expect a conflict on every file that was in both the parent and the child — resolve via `git rebase --skip` for commits that are 100% covered by the squash, or by manual conflict resolution for commits that introduced *additional* changes on top. Finish with `git push --force-with-lease` (never `--force`) — this requires explicit author auth in this repo (the hook denies otherwise).
+   Sanity check before merging: `gh pr view <child> --json mergeStateStatus -q .mergeStateStatus` must read `CLEAN` or `BLOCKED` (review-gated), never `DIRTY` / `CONFLICTING`.
+
+7. **[2026-04-28] Resolve PR threads only where a fix was applied; rejected threads stay open**
    For threads where you push back with a rationale instead of applying the suggestion, do NOT call `resolveReviewThread` — the human reviewer (the author) decides. Resolving a rejected thread reads as "I bypassed the review". The PR-level audit comment + the on-thread rationale reply are sufficient.
    Override only on explicit team-lead green-light, e.g. to unblock a `required_review_thread_resolution: true` policy when the rejected thread is the last blocker. Even then, post the audit reply first, get the green-light, then resolve — never the other way round.
    Do instead: after replying with rationale, leave the resolve to the author. Track unresolved count via `reviewThreads.nodes[] | select(.isResolved == false)` so you know whether the PR is merge-blocked.
@@ -71,7 +76,12 @@ recurring guidance only — not a session log.
    Even with quotes, names like `claude.ai Linear` are rejected ("No MCP server found with name").
    Do instead: skip `claude mcp get` for spaced names; use `claude mcp list` for status and `ListMcpResourcesTool --server '<name>'` for resource enumeration.
 
-8. **[2026-04-29] Bundled rename + delete-remote git ops trip the sandbox**
+8. **[2026-05-11] `gh pr merge --admin` is per-action gated by the hook — pre-confirm with the user**
+   Even after the user authorizes "merge all PRs", the harness hook will deny the *first* `gh pr merge --admin` call with reason: "Merging PR #N to default branch via --admin bypasses review and was not explicitly authorized". Generic "go ahead" / "run all the commands" is not enough — the denial requires an explicit, scoped acknowledgement of the `--admin` bypass.
+   Same applies to `git push --force-with-lease`: separate authorization, denied with reason "Force-push rewrites remote branch history (Git Destructive); user authorized merging PRs but not force-pushing." Treat `--admin` merge and `--force-with-lease` as two distinct authorizations.
+   Do instead: before the first `--admin` merge, ask explicitly e.g. "merge all PRs with `--admin`" and wait for the user to repeat the `--admin` keyword. For stacked-PR force-pushes, ask "authorize force-push" separately. Once authorized in-session, subsequent calls in the same session pass.
+
+9. **[2026-04-29] Bundled rename + delete-remote git ops trip the sandbox**
    `git branch -m old new && git push origin -u new && git push origin --delete old` is denied as a single shell call (the harness flags the destructive delete inside the chain). Even rerunning just the rename+push together still got refused with "Deleting the remote branch ..." even though no delete was in the command.
    Do instead: split into separate `Bash` calls — first `git branch -m <old> <new>`, then `git push origin -u <new>`, leave the orphaned `origin/<old>` ref alone unless the user explicitly asks to delete (then run `git push origin --delete <old>` standalone with explicit user approval).
 
