@@ -16,18 +16,24 @@ import {
 	getRecentDisruptions,
 } from "@/lib/api/disruptions-recent";
 import { getStatusLive, type LineStatus } from "@/lib/api/status-live";
+import { ApiError } from "@/lib/api-client";
 import { useAutoRefresh } from "@/lib/hooks/use-auto-refresh";
+
+function errorCopy(err: Error): string {
+	return err instanceof ApiError ? err.detail : err.message;
+}
 
 const STATUS_INTERVAL_MS = 30_000;
 const DISRUPTIONS_INTERVAL_MS = 300_000;
 
 export default function HomePage() {
 	const fetchStatus = useCallback(
-		(_signal: AbortSignal): Promise<LineStatus[]> => getStatusLive(),
+		(signal: AbortSignal): Promise<LineStatus[]> => getStatusLive(signal),
 		[],
 	);
 	const fetchDisruptions = useCallback(
-		(_signal: AbortSignal): Promise<Disruption[]> => getRecentDisruptions(),
+		(signal: AbortSignal): Promise<Disruption[]> =>
+			getRecentDisruptions(signal),
 		[],
 	);
 
@@ -66,7 +72,7 @@ export default function HomePage() {
 					{status.error ? (
 						<Alert role="alert">
 							<AlertTitle>Live status unavailable</AlertTitle>
-							<AlertDescription>{status.error.message}</AlertDescription>
+							<AlertDescription>{errorCopy(status.error)}</AlertDescription>
 						</Alert>
 					) : (
 						<NetworkStatusCard
@@ -79,7 +85,9 @@ export default function HomePage() {
 						{disruptions.error ? (
 							<Alert role="alert" className="md:col-span-2">
 								<AlertTitle>Disruptions unavailable</AlertTitle>
-								<AlertDescription>{disruptions.error.message}</AlertDescription>
+								<AlertDescription>
+									{errorCopy(disruptions.error)}
+								</AlertDescription>
 							</Alert>
 						) : (
 							<>
