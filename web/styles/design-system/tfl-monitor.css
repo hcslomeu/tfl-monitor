@@ -51,14 +51,14 @@
 .tfl-right-col {
   display: grid;
   grid-template-rows: subgrid;
-  grid-row: 1 / span 3;
+  grid-row: 2 / span 2;
   gap: var(--space-4);
   min-width: 0;
 }
 
-/* Right column: chat stack takes rows 2 & 3 as one flex container */
+/* Right column: chat stack spans both column rows as one flex container */
 .tfl-right-col .tfl-chat-stack {
-  grid-row: 2 / span 2;
+  grid-row: 1 / span 2;
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
@@ -124,6 +124,11 @@
   width: 100%; resize: none; border: none; outline: none; background: transparent;
   font-family: var(--font-body); font-size: 14px; color: #EEE9DE;
   line-height: 1.5; padding: 4px 0 10px; min-height: 44px;
+}
+.tfl-chatbox-ta:focus-visible {
+  outline: 2px solid var(--accent-display);
+  outline-offset: -2px;
+  border-radius: var(--radius-sm);
 }
 .tfl-chatbox-ta::placeholder { color: rgba(238,233,222,0.45); }
 .tfl-chatbox-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
@@ -279,6 +284,8 @@
 .tfl-news-body { font-family: var(--font-body); font-size: 12px; color: var(--ink-secondary); line-height: 1.45; }
 
 @media (max-width: 880px) {
-  .tfl-grid { grid-template-columns: 1fr; }
+  .tfl-grid { grid-template-columns: 1fr; grid-template-rows: auto; }
+  .tfl-left-col, .tfl-right-col { grid-row: auto; grid-template-rows: auto; }
+  .tfl-right-col .tfl-chat-stack { grid-row: auto; }
   .tfl-bus-row { grid-template-columns: 1fr; }
 }
