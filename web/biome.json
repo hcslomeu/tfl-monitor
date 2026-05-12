@@ -7,7 +7,7 @@
 	},
 	"files": {
 		"ignoreUnknown": false,
-		"includes": ["**", "!lib/types.ts"]
+		"includes": ["**", "!lib/types.ts", "!styles/design-system"]
 	},
 	"formatter": {
 		"enabled": true,
