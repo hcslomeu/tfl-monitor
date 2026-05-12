@@ -40,7 +40,7 @@ export function ComingUpCard({ disruptions }: ComingUpCardProps) {
 		<Card>
 			<CardHeader>
 				<CardTitle>📅 Coming up</CardTitle>
-				<CardDescription>Planned work · next 14 days</CardDescription>
+				<CardDescription>Planned work · upcoming</CardDescription>
 			</CardHeader>
 			<CardContent>
 				{upcoming.length === 0 ? (

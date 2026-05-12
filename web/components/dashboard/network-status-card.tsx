@@ -46,8 +46,14 @@ const VALID_TABS = new Set<TabId>(TAB_ORDER.map((t) => t.id));
 
 function readStoredTab(): TabId {
 	if (typeof window === "undefined") return "tube";
-	const stored = window.localStorage.getItem(STORAGE_KEY);
-	return stored && VALID_TABS.has(stored as TabId) ? (stored as TabId) : "tube";
+	try {
+		const stored = window.localStorage.getItem(STORAGE_KEY);
+		return stored && VALID_TABS.has(stored as TabId)
+			? (stored as TabId)
+			: "tube";
+	} catch {
+		return "tube";
+	}
 }
 
 const RELATIVE_FORMATTER = new Intl.RelativeTimeFormat("en", {
@@ -72,11 +78,7 @@ export function NetworkStatusCard({
 	lines,
 	lastUpdated,
 }: NetworkStatusCardProps) {
-	const [tab, setTab] = useState<TabId>("tube");
-
-	useEffect(() => {
-		setTab(readStoredTab());
-	}, []);
+	const [tab, setTab] = useState<TabId>(readStoredTab);
 
 	useTicker(1_000);
 

@@ -50,18 +50,18 @@ describe("<NetworkPulseTile>", () => {
 
 	it("buckets severities into red/amber/green tally with TfL boundaries", () => {
 		const lines = [
-			line({ line_id: "a", mode: "tube", status_severity: 0 }),
-			line({ line_id: "b", mode: "tube", status_severity: 6 }),
-			line({ line_id: "c", mode: "tube", status_severity: 9 }),
-			line({ line_id: "d", mode: "tube", status_severity: 10 }),
-			line({ line_id: "e", mode: "tube", status_severity: 18 }),
-			line({ line_id: "f", mode: "tube", status_severity: 19 }),
+			line({ line_id: "a", mode: "tube", status_severity: 0 }), // severe (Closed)
+			line({ line_id: "b", mode: "tube", status_severity: 6 }), // severe (Suspended)
+			line({ line_id: "c", mode: "tube", status_severity: 9 }), // degraded (Minor Delays)
+			line({ line_id: "d", mode: "tube", status_severity: 10 }), // good (Good Service)
+			line({ line_id: "e", mode: "tube", status_severity: 18 }), // degraded (Part Closure)
+			line({ line_id: "f", mode: "tube", status_severity: 19 }), // other (unmapped)
 		];
 		render(<NetworkPulseTile lines={lines} />);
 
 		expect(screen.getByLabelText(/severe lines: 2/i)).toBeInTheDocument();
-		expect(screen.getByLabelText(/degraded lines: 1/i)).toBeInTheDocument();
-		expect(screen.getByLabelText(/good lines: 2/i)).toBeInTheDocument();
+		expect(screen.getByLabelText(/degraded lines: 2/i)).toBeInTheDocument();
+		expect(screen.getByLabelText(/good lines: 1/i)).toBeInTheDocument();
 	});
 
 	it("renders zero-state when no lines are reported", () => {

@@ -1,5 +1,7 @@
 "use client";
 
+import { useMemo } from "react";
+
 import { Card } from "@/components/ui/card";
 import type { LineStatus } from "@/lib/api/status-live";
 
@@ -10,7 +12,12 @@ interface NetworkPulseTileProps {
 interface Pulse {
 	tube: { good: number; total: number };
 	all: { good: number; total: number };
-	bySeverity: { severe: number; degraded: number; good: number };
+	bySeverity: {
+		severe: number;
+		degraded: number;
+		good: number;
+		other: number;
+	};
 }
 
 const TFL_SEVERITY = {
@@ -51,6 +58,7 @@ const DEGRADED = new Set<number>([
 	TFL_SEVERITY.PART_SUSPENDED,
 	TFL_SEVERITY.SEVERE_DELAYS,
 	TFL_SEVERITY.MINOR_DELAYS,
+	TFL_SEVERITY.PART_CLOSURE,
 	TFL_SEVERITY.ISSUES,
 	TFL_SEVERITY.NO_STEP_FREE,
 	TFL_SEVERITY.CHANGE_OF_FREQ,
@@ -58,10 +66,7 @@ const DEGRADED = new Set<number>([
 	TFL_SEVERITY.NOT_RUNNING,
 	TFL_SEVERITY.INFORMATION,
 ]);
-const GOOD = new Set<number>([
-	TFL_SEVERITY.GOOD_SERVICE,
-	TFL_SEVERITY.PART_CLOSURE,
-]);
+const GOOD = new Set<number>([TFL_SEVERITY.GOOD_SERVICE]);
 
 function pulse(lines: LineStatus[]): Pulse {
 	const tube = lines.filter((l) => l.mode === "tube");
@@ -71,21 +76,23 @@ function pulse(lines: LineStatus[]): Pulse {
 	let severe = 0;
 	let degraded = 0;
 	let good = 0;
+	let other = 0;
 	for (const l of lines) {
 		if (SEVERE.has(l.status_severity)) severe += 1;
 		else if (DEGRADED.has(l.status_severity)) degraded += 1;
 		else if (GOOD.has(l.status_severity)) good += 1;
+		else other += 1;
 	}
 
 	return {
 		tube: { good: goodTube, total: tube.length },
 		all: { good: goodAll, total: lines.length },
-		bySeverity: { severe, degraded, good },
+		bySeverity: { severe, degraded, good, other },
 	};
 }
 
 export function NetworkPulseTile({ lines }: NetworkPulseTileProps) {
-	const p = pulse(lines);
+	const p = useMemo(() => pulse(lines), [lines]);
 	const allPct =
 		p.all.total > 0 ? Math.round((p.all.good / p.all.total) * 1000) / 10 : 0;
 

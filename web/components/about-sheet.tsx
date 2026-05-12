@@ -40,7 +40,7 @@ export function AboutSheet() {
 							className="underline underline-offset-4"
 							href="https://github.com/hcslomeu/tfl-monitor"
 							target="_blank"
-							rel="noreferrer"
+							rel="noopener noreferrer"
 						>
 							Source on GitHub →
 						</a>
