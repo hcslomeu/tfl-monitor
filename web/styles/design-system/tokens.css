@@ -1,0 +1,324 @@
+/* ============================================================================
+   Humberto Lomeu — Design System tokens
+   Light-first. Editorial portfolio + dense product surfaces share these tokens.
+
+   Font families are wired via next/font in app/layout.tsx — the CSS variables
+   --font-display, --font-body, --font-mono, --font-wordmark are populated by
+   next/font and re-exposed by globals.css.
+   ============================================================================ */
+
+:root {
+  /* ---------- Palette: light-first ----------------------------------- */
+  --canvas:            #EEE9DE; /* warm cream — primary background */
+  --canvas-elevated:   #E5DFD0; /* slightly darker cream — sections, cards */
+  --surface-warm:      #FDFBF7; /* near-white tint — input fields, raised */
+  --surface-pure:      #FFFFFF; /* pure white — for the brightest highlights */
+
+  --ink-primary:       #1A1714; /* near-black on cream, ~14:1, AAA */
+  --ink-secondary:     #5A5247; /* warm muted brown-grey, ~6.2:1, AA */
+  --ink-tertiary:      #8A8174; /* metadata, ~4.6:1, AA-large only */
+
+  --accent-primary:    #BD5934; /* warm rusty orange — body links + CTAs */
+  --accent-display:    #FF8933; /* bright orange — DISPLAY-SIZE ONLY (24px+) */
+  --accent-soft:       #F4DDC4; /* muted warm tint — callouts, highlight blocks */
+
+  --footer-canvas:     #121212; /* near-black — deliberate hard cut */
+  --footer-ink:        #EEE9DE; /* cream text on black */
+  --footer-muted:      #8A8174; /* secondary text on black, ~5.4:1 */
+
+  /* Semantic — retuned for AA on light bg */
+  --success:           #1F7A4D;
+  --danger:            #B33024;
+  --warning:           #B5760E;
+
+  /* Hairline borders: ink-primary at low opacity */
+  --border-default:    rgba(26, 23, 20, 0.08);
+  --border-strong:     rgba(26, 23, 20, 0.16);
+  --border-footer:     rgba(238, 233, 222, 0.12);
+
+  /* ---------- Type: fluid modular scale ------------------------------
+     1.25 mobile, 1.333 desktop. Base 16px → 18px.                       */
+  --step--2: clamp(0.69rem,  0.66rem + 0.18vw, 0.75rem);
+  --step--1: clamp(0.83rem,  0.79rem + 0.22vw, 0.94rem);
+  --step-0:  clamp(1rem,     0.95rem + 0.28vw, 1.125rem);   /* body */
+  --step-1:  clamp(1.25rem,  1.18rem + 0.4vw,  1.5rem);     /* h4 / large body */
+  --step-2:  clamp(1.563rem, 1.45rem + 0.59vw, 2rem);       /* h3 */
+  --step-3:  clamp(1.953rem, 1.78rem + 0.86vw, 2.667rem);   /* h2 */
+  --step-4:  clamp(2.441rem, 2.18rem + 1.27vw, 3.555rem);   /* h1 */
+  --step-5:  clamp(3.052rem, 2.66rem + 1.86vw, 4.74rem);    /* hero h1 */
+  --step-6:  clamp(3.815rem, 3.25rem + 2.7vw, 6.32rem);     /* display */
+
+  /* ---------- Type: tracking + leading ------------------------------- */
+  --track-display: -0.02em;
+  --track-body:    -0.005em;
+  --track-mono:    0;
+  --leading-prose: 1.6;
+  --leading-ui:    1.45;
+  --leading-tight: 1.1;
+
+  /* ---------- Spacing: 4pt base, 8pt rhythm -------------------------- */
+  --space-1:  0.25rem;  /*  4 */
+  --space-2:  0.5rem;   /*  8 */
+  --space-3:  0.75rem;  /* 12 */
+  --space-4:  1rem;     /* 16 */
+  --space-5:  1.5rem;   /* 24 */
+  --space-6:  2rem;     /* 32 */
+  --space-7:  3rem;     /* 48 */
+  --space-8:  4rem;     /* 64 */
+  --space-9:  6rem;     /* 96 — section py editorial */
+  --space-10: 8rem;     /* 128 — hero py editorial */
+  --space-11: 12rem;    /* 192 */
+
+  /* ---------- Radii --------------------------------------------------- */
+  --radius-none:   0;
+  --radius-sm:     0.375rem;  /* 6  — chips inside dense UI */
+  --radius-md:     0.75rem;   /* 12 — default cards, buttons */
+  --radius-lg:     1.25rem;   /* 20 — large cards */
+  --radius-chat:   1.75rem;   /* 28 — signature chatbox */
+  --radius-full:   9999px;
+
+  /* ---------- Shadows: warm-tinted, two-step ------------------------- */
+  --shadow-card:        0 1px 2px rgba(26, 23, 20, 0.04),
+                        0 4px 12px rgba(26, 23, 20, 0.04);
+  --shadow-card-hover:  0 2px 4px rgba(26, 23, 20, 0.06),
+                        0 12px 32px rgba(26, 23, 20, 0.08);
+  --shadow-floating:    0 8px 24px rgba(26, 23, 20, 0.08),
+                        0 24px 64px rgba(26, 23, 20, 0.06);
+
+  /* ---------- Motion -------------------------------------------------- */
+  --ease-default: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-chat:    cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast:     150ms;
+  --dur-base:     250ms;
+  --dur-slow:     400ms;
+  --dur-press:    80ms;
+
+  /* ---------- Layout containers -------------------------------------- */
+  --container-prose:   64rem;  /* portfolio editorial */
+  --container-product: 80rem;  /* dense product chrome */
+}
+
+/* ============================================================================
+   Semantic element styles — drop these in any page that imports the system.
+   ============================================================================ */
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  background: var(--canvas);
+  color: var(--ink-primary);
+  font-family: var(--font-body);
+  font-size: var(--step-0);
+  line-height: var(--leading-prose);
+  letter-spacing: var(--track-body);
+  margin: 0;
+  font-feature-settings: 'ss01', 'cv11';
+}
+
+/* ---------- Headings -------------------------------------------------- */
+h1, h2, h3, h4 {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: var(--track-display);
+  line-height: var(--leading-tight);
+  color: var(--ink-primary);
+  margin: 0 0 var(--space-4) 0;
+  text-wrap: balance;
+}
+
+h1 { font-size: var(--step-4); font-weight: 400; }
+h2 { font-size: var(--step-3); font-weight: 400; }
+h3 { font-size: var(--step-2); font-weight: 400; }
+h4 { font-size: var(--step-1); font-weight: 400; }
+
+/* Hero h1 — Editorial New regular, large */
+.hero-h1,
+h1.hero {
+  font-size: var(--step-5);
+  font-weight: 400;
+}
+
+/* Editorial italic emphasis — wrap the phrase you want italicised */
+.hero-h1 em, h1 em, h2 em, .display em { font-style: italic; font-weight: 400; }
+
+/* Display — biggest, only used for editorial set-pieces */
+.display {
+  font-family: var(--font-display);
+  font-size: var(--step-6);
+  font-weight: 400;
+  letter-spacing: var(--track-display);
+  line-height: 1;
+  color: var(--ink-primary);
+}
+
+/* ---------- Body & prose --------------------------------------------- */
+p {
+  margin: 0 0 var(--space-4) 0;
+  text-wrap: pretty;
+  max-width: 65ch;
+}
+
+.lede {
+  font-size: var(--step-1);
+  color: var(--ink-secondary);
+  line-height: 1.45;
+  max-width: 50ch;
+}
+
+small, .meta {
+  font-size: var(--step--1);
+  color: var(--ink-tertiary);
+}
+
+/* ---------- Links ----------------------------------------------------- */
+a {
+  color: var(--accent-primary);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+  text-decoration-color: color-mix(in oklch, var(--accent-primary) 50%, transparent);
+  transition: color var(--dur-fast) var(--ease-default),
+              text-decoration-color var(--dur-fast) var(--ease-default);
+}
+a:hover { color: var(--accent-display); text-decoration-color: var(--accent-display); }
+
+/* Editorial inline link inside dark prose — looks closer to body color */
+.link-quiet {
+  color: var(--ink-primary);
+  text-decoration-color: var(--accent-primary);
+}
+.link-quiet:hover { color: var(--accent-primary); }
+
+/* ---------- Mono / code ---------------------------------------------- */
+code, kbd, samp, .mono {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  letter-spacing: var(--track-mono);
+}
+code {
+  background: var(--surface-warm);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  padding: 0.05em 0.35em;
+}
+
+/* ---------- Selection ------------------------------------------------- */
+::selection { background: var(--accent-soft); color: var(--ink-primary); }
+
+/* ---------- Focus ring ------------------------------------------------ */
+:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* ---------- Buttons (base) ------------------------------------------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0.625rem 1.125rem;
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: var(--step-0);
+  letter-spacing: var(--track-body);
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background var(--dur-fast) var(--ease-default),
+              color var(--dur-fast) var(--ease-default),
+              transform var(--dur-press) var(--ease-default),
+              box-shadow var(--dur-fast) var(--ease-default),
+              border-color var(--dur-fast) var(--ease-default);
+}
+.btn:active { transform: scale(0.98); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
+
+.btn-primary {
+  background: var(--accent-primary);
+  color: var(--surface-warm);
+}
+.btn-primary:hover { background: var(--accent-display); color: var(--canvas); }
+
+.btn-secondary {
+  background: var(--surface-warm);
+  color: var(--ink-primary);
+  border-color: var(--border-default);
+}
+.btn-secondary:hover { border-color: var(--ink-primary); }
+
+.btn-ghost {
+  background: transparent;
+  color: var(--ink-primary);
+}
+.btn-ghost:hover { color: var(--accent-primary); }
+
+/* ---------- Cards ----------------------------------------------------- */
+.card {
+  background: var(--surface-warm);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--space-5);
+  box-shadow: var(--shadow-card);
+  transition: transform var(--dur-fast) var(--ease-default),
+              box-shadow var(--dur-fast) var(--ease-default),
+              border-color var(--dur-fast) var(--ease-default);
+}
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-card-hover);
+  border-color: color-mix(in oklch, var(--accent-primary) 30%, transparent);
+}
+
+/* ---------- Chips / pills -------------------------------------------- */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0.375rem 0.75rem;
+  background: var(--canvas-elevated);
+  color: var(--ink-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-full);
+  font-size: var(--step--1);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-default),
+              color var(--dur-fast) var(--ease-default);
+}
+.chip:hover { background: var(--accent-soft); color: var(--ink-primary); }
+
+/* ---------- Floating nav --------------------------------------------- */
+.floating-nav {
+  position: sticky;
+  top: 1.5rem;
+  z-index: 50;
+  margin: 1.5rem auto;
+  max-width: 52rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(247, 243, 234, 0.78);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-full);
+  box-shadow: var(--shadow-floating);
+}
+
+/* ---------- Footer ---------------------------------------------------- */
+.footer {
+  background: var(--footer-canvas);
+  color: var(--footer-ink);
+  padding: var(--space-9) var(--space-6);
+}
+.footer .meta { color: var(--footer-muted); }
+.footer a { color: var(--footer-ink); text-decoration-color: rgba(238,233,222,0.4); }
+.footer a:hover { color: var(--accent-display); }
+
+/* ---------- Density modes -------------------------------------------- */
+.density-editorial { --section-py: var(--space-9); --hero-py: var(--space-10); }
+.density-product   { --section-py: var(--space-5); --hero-py: var(--space-6); }

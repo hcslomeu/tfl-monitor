@@ -1,0 +1,284 @@
+/* TFL Monitor surface — dense product, builds on tokens.css */
+
+.tfl-app { min-height: 100vh; }
+
+.tfl-nav {
+  position: sticky; top: 1rem; z-index: 50;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 2rem;
+  width: fit-content;
+  max-width: 72rem;
+  margin: 1rem auto 0;
+  padding: 4px 22px;
+  background: rgba(230, 230, 230, 0.82);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--border-default);
+  border-radius: 9999px;
+  box-shadow: var(--shadow-floating);
+  height: 38px;
+}
+.tfl-nav-side { display: flex; align-items: center; gap: 14px; }
+.tfl-brand {
+  font-family: var(--font-wordmark);
+  font-weight: 900;
+  font-size: 15px;
+  letter-spacing: -0.03em;
+  color: var(--ink-primary);
+  line-height: 1;
+}
+.tfl-nav-divider { width: 1px; height: 16px; background: var(--border-strong); }
+.tfl-nav-iconbtn {
+  width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 9999px; color: var(--ink-secondary);
+  background: transparent; border: none; cursor: pointer;
+  transition: color var(--dur-fast), background var(--dur-fast);
+}
+.tfl-nav-iconbtn:hover { color: var(--accent-primary); background: rgba(255,255,255,0.65); }
+.tfl-nav-sep { display: flex; align-items: center; gap: 8px; }
+.tfl-nav-sep-line { width: 14px; height: 1px; background: var(--border-strong); }
+.tfl-nav-sep-label {
+  font-family: var(--font-mono); font-size: 9px;
+  text-transform: uppercase; letter-spacing: 0.18em;
+  color: var(--ink-tertiary);
+}
+.tfl-nav-summary { display: flex; align-items: center; gap: 12px; font-family: var(--font-mono); font-size: 11px; }
+.tfl-nav-summary .seg { display: flex; align-items: center; gap: 5px; color: var(--ink-secondary); white-space: nowrap; }
+.tfl-nav-summary .seg .pill { width: 7px; height: 7px; border-radius: 9999px; }
+.tfl-nav-summary .clock { color: var(--ink-tertiary); }
+
+/* ---------- Left column: line list → buses → news ----------------- */
+.tfl-left-col,
+.tfl-right-col {
+  display: grid;
+  grid-template-rows: subgrid;
+  grid-row: 1 / span 3;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+/* Right column: chat stack takes rows 2 & 3 as one flex container */
+.tfl-right-col .tfl-chat-stack {
+  grid-row: 2 / span 2;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-height: 0;
+}
+.tfl-right-col .tfl-chat-stack .tfl-chat-card { flex: 1 1 auto; min-height: 0; }
+.tfl-right-col .tfl-chat-stack .tfl-chatbox { flex: 0 0 auto; }
+
+/* ---------- Chat (dark composer — matches portfolio + alphawhale) - */
+/* ---------- Chat stack: transcript card + dark composer --------- */
+.tfl-chat-card { background: var(--surface-warm); display: flex; flex-direction: column; min-height: 0; }
+.tfl-chat-card-h {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-default);
+}
+.tfl-chat-card-h h4 { font-family: var(--font-body); font-size: 13px; font-weight: 600; margin: 0; color: var(--ink-primary); }
+.tfl-chat-card-h .meta { font-family: var(--font-mono); font-size: 10px; color: var(--ink-tertiary); }
+.tfl-chat-transcript {
+  padding: var(--space-4);
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.tfl-msg { display: flex; align-items: flex-start; gap: 10px; }
+.tfl-msg-user { justify-content: flex-end; }
+.tfl-msg-bot  { justify-content: flex-start; }
+.tfl-msg-avatar {
+  width: 22px; height: 22px; border-radius: 9999px; flex: 0 0 22px;
+  background: var(--accent-soft);
+  position: relative;
+}
+.tfl-msg-avatar::before {
+  content: ''; position: absolute; inset: 6px;
+  background: var(--accent-primary);
+  clip-path: polygon(50% 0, 60% 40%, 100% 50%, 60% 60%, 50% 100%, 40% 60%, 0 50%, 40% 40%);
+}
+.tfl-msg-bubble {
+  font-family: var(--font-body); font-size: 13.5px; line-height: 1.5;
+  padding: 8px 12px; border-radius: 12px; max-width: 78%;
+  color: var(--ink-primary);
+}
+.tfl-msg-user .tfl-msg-bubble { background: var(--canvas-elevated); border-bottom-right-radius: 4px; }
+.tfl-msg-bot  .tfl-msg-bubble { background: transparent; padding: 0; max-width: none; color: var(--ink-secondary); }
+.tfl-msg-bot  .tfl-msg-bubble code,
+.tfl-msg-bot  .tfl-msg-bubble .mono { background: var(--canvas-elevated); }
+
+/* ---------- Composer (dark — separate card) -------------------- */
+.tfl-chatbox {
+  background: #1A1714; color: #EEE9DE;
+  border-radius: var(--radius-md);
+  padding: 6px 14px 6px;
+  border: 1px solid #2A2724;
+  box-shadow: var(--shadow-card-hover);
+}
+.tfl-chatbox .tfl-chatbox-ta { min-height: 22px; padding: 2px 0 4px; font-size: 13px; }
+.tfl-chatbox .tfl-chatbox-row { gap: 6px; }
+.tfl-chatbox .tfl-chip-sm { padding: 2px 8px; font-size: 10.5px; }
+.tfl-chatbox .tfl-chat-iconbtn { width: 22px; height: 22px; }
+.tfl-chatbox .tfl-chatbox-send { width: 24px; height: 24px; }
+.tfl-chatbox-ta {
+  width: 100%; resize: none; border: none; outline: none; background: transparent;
+  font-family: var(--font-body); font-size: 14px; color: #EEE9DE;
+  line-height: 1.5; padding: 4px 0 10px; min-height: 44px;
+}
+.tfl-chatbox-ta::placeholder { color: rgba(238,233,222,0.45); }
+.tfl-chatbox-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.tfl-chatbox-l { display: flex; gap: 6px; flex-wrap: wrap; }
+.tfl-chatbox-r { display: flex; gap: 6px; align-items: center; }
+.tfl-chip-sm {
+  font-family: var(--font-body); font-size: 11px; padding: 4px 10px;
+  border-radius: 9999px; background: transparent; color: #EEE9DE;
+  border: 1px solid rgba(238,233,222,0.2); cursor: pointer; white-space: nowrap;
+  transition: background var(--dur-fast), border-color var(--dur-fast), color var(--dur-fast);
+}
+.tfl-chip-sm:hover { background: rgba(238,233,222,0.08); border-color: var(--accent-primary); color: var(--accent-display); }
+.tfl-chat-iconbtn {
+  width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 9999px; background: transparent; color: rgba(238,233,222,0.6);
+  border: none; cursor: pointer; transition: color var(--dur-fast), background var(--dur-fast);
+}
+.tfl-chat-iconbtn:hover { color: #EEE9DE; background: rgba(238,233,222,0.08); }
+.tfl-chatbox-send {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px;
+  background: var(--accent-display); color: #1A1714;
+  border: none; border-radius: 9999px; cursor: pointer;
+  transition: background var(--dur-fast), transform var(--dur-press);
+}
+.tfl-chatbox-send:hover { background: #FFA15B; }
+.tfl-chatbox-send:active { transform: scale(0.94); }
+
+.tfl-grid {
+  max-width: 80rem; margin: 0 auto;
+  padding: var(--space-4) var(--space-5) var(--space-7);
+  display: grid; grid-template-columns: 1fr 1fr;
+  grid-template-rows: auto 1fr auto;
+  gap: var(--space-4);
+  align-items: stretch;
+}
+.tfl-pageh { grid-column: 1 / -1; padding-bottom: var(--space-2); }
+.tfl-pageh h1 { font-family: var(--font-display); font-size: var(--step-3); margin: 0 0 8px; letter-spacing: -0.02em; }
+.tfl-pageh .meta { font-family: var(--font-mono); font-size: 11px; color: var(--ink-tertiary); }
+
+.tfl-card {
+  background: var(--surface-warm);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+}
+.tfl-card-h {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-default);
+}
+.tfl-card-h h4 { font-family: var(--font-body); font-size: 13px; font-weight: 600; margin: 0; color: var(--ink-primary); }
+.tfl-card-h .meta { font-family: var(--font-mono); font-size: 10px; color: var(--ink-tertiary); }
+
+/* ---------- Line list ---------------------------------------------- */
+.tfl-line-list { display: flex; flex-direction: column; }
+.tfl-line {
+  display: grid; grid-template-columns: 4px 1fr auto;
+  align-items: center; gap: 12px;
+  padding: 8px var(--space-4);
+  border-bottom: 1px solid var(--border-default);
+  cursor: pointer;
+  transition: background var(--dur-fast);
+}
+.tfl-line-name-wrap { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.tfl-line:last-child { border-bottom: none; }
+.tfl-line:hover, .tfl-line.active { background: var(--canvas-elevated); }
+.tfl-line-stripe { width: 4px; height: 22px; border-radius: 2px; }
+.tfl-line-name { font-family: var(--font-body); font-weight: 500; font-size: 14px; color: var(--ink-primary); line-height: 1.2; }
+.tfl-line-updated { font-family: var(--font-mono); font-size: 10px; color: var(--ink-tertiary); }
+.tfl-line-status {
+  font-family: var(--font-body); font-size: 11px; font-weight: 500;
+  padding: 3px 9px; border-radius: 9999px;
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.tfl-line-status .dot { width: 6px; height: 6px; border-radius: 9999px; }
+.tfl-good { background: color-mix(in oklch, #1F7A4D 12%, var(--surface-warm)); color: var(--success); }
+.tfl-good .dot { background: var(--success); }
+.tfl-minor { background: color-mix(in oklch, #B5760E 14%, var(--surface-warm)); color: var(--warning); }
+.tfl-minor .dot { background: var(--warning); }
+.tfl-severe { background: color-mix(in oklch, #B33024 14%, var(--surface-warm)); color: var(--danger); }
+.tfl-severe .dot { background: var(--danger); }
+.tfl-suspended { background: var(--ink-primary); color: var(--surface-warm); }
+.tfl-suspended .dot { background: var(--surface-warm); }
+
+/* ---------- Detail ------------------------------------------------- */
+.tfl-detail-h {
+  padding: var(--space-5);
+  border-bottom: 1px solid var(--border-default);
+  display: flex; align-items: flex-start; gap: var(--space-4);
+}
+.tfl-detail-stripe { width: 6px; align-self: stretch; border-radius: 3px; }
+.tfl-detail-name { font-family: var(--font-display); font-size: var(--step-2); letter-spacing: -0.02em; line-height: 1.05; margin: 0; color: var(--ink-primary); font-weight: 500; }
+.tfl-detail-sub { font-family: var(--font-mono); font-size: 11px; color: var(--ink-tertiary); margin-top: 6px; }
+
+.tfl-disruption { padding: var(--space-4) var(--space-5); }
+.tfl-disruption .summary { color: var(--danger); font-weight: 500; margin-bottom: var(--space-3); font-size: 14px; }
+.tfl-disruption p { font-size: 14px; color: var(--ink-secondary); line-height: 1.55; max-width: none; margin-bottom: var(--space-3); }
+
+.tfl-stations {
+  padding: var(--space-4) var(--space-5);
+  border-top: 1px solid var(--border-default);
+}
+.tfl-stations h5 { font-family: var(--font-mono); font-size: 11px; color: var(--ink-tertiary); margin: 0 0 var(--space-3); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 500; }
+.tfl-stations ul { list-style: none; padding: 0; margin: 0; }
+.tfl-stations li {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 0; font-family: var(--font-body); font-size: 13px;
+  color: var(--ink-primary); border-bottom: 1px dashed var(--border-default);
+}
+.tfl-stations li:last-child { border-bottom: none; }
+.tfl-stations li .code { font-family: var(--font-mono); font-size: 10px; color: var(--ink-tertiary); margin-left: auto; }
+
+.tfl-detail-foot {
+  padding: var(--space-3) var(--space-5);
+  border-top: 1px solid var(--border-default);
+  display: flex; justify-content: space-between;
+  font-family: var(--font-mono); font-size: 11px; color: var(--ink-tertiary);
+}
+
+/* ---------- Bus banner (now inside left column, narrower) ---------- */
+.tfl-bus-row {
+  display: grid; grid-template-columns: 1fr 1fr;
+  border-top: 1px solid var(--border-default);
+}
+.tfl-bus-cell {
+  padding: var(--space-3) var(--space-4);
+  border-right: 1px solid var(--border-default);
+  border-bottom: 1px solid var(--border-default);
+  display: flex; flex-direction: column; gap: 4px;
+}
+.tfl-bus-cell:nth-child(2n) { border-right: none; }
+.tfl-bus-cell:nth-last-child(-n+2) { border-bottom: none; }
+.tfl-bus-route { font-family: var(--font-mono); font-size: 14px; font-weight: 500; color: var(--ink-primary); }
+.tfl-bus-text  { font-family: var(--font-body); font-size: 12px; color: var(--ink-secondary); line-height: 1.4; }
+
+/* ---------- News & reports ---------------------------------------- */
+.tfl-news { display: flex; flex-direction: column; }
+.tfl-news-list { list-style: none; margin: 0; padding: 0; flex: 1; display: flex; flex-direction: column; }
+.tfl-news-list li {
+  display: grid; grid-template-columns: 52px 1fr;
+  gap: 12px;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-default);
+  flex: 1;
+  align-items: flex-start;
+}
+.tfl-news-list li:last-child { border-bottom: none; }
+.tfl-news-list li.is-empty { color: var(--ink-tertiary); }
+.tfl-news-placeholder { font-family: var(--font-mono); font-size: 11px; color: var(--ink-tertiary); padding-top: 2px; }
+.tfl-news-time { font-family: var(--font-mono); font-size: 11px; color: var(--ink-tertiary); padding-top: 2px; }
+.tfl-news-title { font-family: var(--font-body); font-size: 13px; font-weight: 500; color: var(--ink-primary); margin-bottom: 2px; }
+.tfl-news-body { font-family: var(--font-body); font-size: 12px; color: var(--ink-secondary); line-height: 1.45; }
+
+@media (max-width: 880px) {
+  .tfl-grid { grid-template-columns: 1fr; }
+  .tfl-bus-row { grid-template-columns: 1fr; }
+}

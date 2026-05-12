@@ -32,3 +32,9 @@ data/cache/
 # MkDocs build output
 site/
 .cache/
+
+# Design system source materials (claude.design exports — copied into web/ as needed)
+Humberto Lomeu Design System/
+Humberto Lomeu Design System.zip
+london_transport_monitor_logo.svg
+
