@@ -1,136 +1,99 @@
-/**
- * Network Now — landing view.
- *
- * Reads live operational status from the FastAPI `/status/live`
- * handler via `getStatusLive()`. TM-E1b wires the real call;
- * `apiFetch` surfaces non-2xx responses as `ApiError`, which the
- * page catches to render a fallback alert.
- */
+"use client";
 
-import { StatusBadge } from "@/components/status-badge";
+import { ExternalLink } from "lucide-react";
+import { useCallback } from "react";
+
+import { AboutSheet } from "@/components/about-sheet";
+import { ChatPanel } from "@/components/dashboard/chat-panel";
+import { ComingUpCard } from "@/components/dashboard/coming-up-card";
+import { HappeningNowCard } from "@/components/dashboard/happening-now-card";
+import { NetworkPulseTile } from "@/components/dashboard/network-pulse-tile";
+import { NetworkStatusCard } from "@/components/dashboard/network-status-card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
-	Card,
-	CardContent,
-	CardDescription,
-	CardHeader,
-	CardTitle,
-} from "@/components/ui/card";
+	type Disruption,
+	getRecentDisruptions,
+} from "@/lib/api/disruptions-recent";
 import { getStatusLive, type LineStatus } from "@/lib/api/status-live";
-import { ApiError } from "@/lib/api-client";
+import { useAutoRefresh } from "@/lib/hooks/use-auto-refresh";
 
-const VALIDITY_FORMATTER = new Intl.DateTimeFormat("en-GB", {
-	hour: "2-digit",
-	minute: "2-digit",
-	timeZone: "Europe/London",
-});
+const STATUS_INTERVAL_MS = 30_000;
+const DISRUPTIONS_INTERVAL_MS = 300_000;
 
-function formatWindow(line: LineStatus): string {
-	const from = VALIDITY_FORMATTER.format(new Date(line.valid_from));
-	const to = VALIDITY_FORMATTER.format(new Date(line.valid_to));
-	return `${from}–${to}`;
-}
+export default function HomePage() {
+	const fetchStatus = useCallback(
+		(_signal: AbortSignal): Promise<LineStatus[]> => getStatusLive(),
+		[],
+	);
+	const fetchDisruptions = useCallback(
+		(_signal: AbortSignal): Promise<Disruption[]> => getRecentDisruptions(),
+		[],
+	);
 
-/**
- * TfL brand-correct labels for each transport mode.
- *
- * The OpenAPI enum is kebab-case (`elizabeth-line`, `national-rail`, …);
- * blindly replacing hyphens and using Tailwind `capitalize` produces
- * `Elizabeth line` and `National rail`, which both miss the brand.
- */
-const MODE_LABELS: Record<LineStatus["mode"], string> = {
-	tube: "Tube",
-	"elizabeth-line": "Elizabeth Line",
-	overground: "Overground",
-	dlr: "DLR",
-	bus: "Bus",
-	"national-rail": "National Rail",
-	"river-bus": "River Bus",
-	"cable-car": "Cable Car",
-	tram: "Tram",
-};
-
-function modeLabel(mode: LineStatus["mode"]): string {
-	return MODE_LABELS[mode];
-}
-
-export default async function NetworkNowPage() {
-	let lines: LineStatus[] | null = null;
-	let errorDetail: string | null = null;
-
-	try {
-		lines = await getStatusLive();
-	} catch (err) {
-		if (err instanceof ApiError) {
-			errorDetail = err.detail;
-		} else {
-			errorDetail = err instanceof Error ? err.message : "Unknown error";
-		}
-	}
+	const status = useAutoRefresh(fetchStatus, STATUS_INTERVAL_MS);
+	const disruptions = useAutoRefresh(fetchDisruptions, DISRUPTIONS_INTERVAL_MS);
 
 	return (
-		<main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-6 px-6 py-12">
-			<header className="flex flex-col gap-2">
-				<div className="flex flex-wrap items-baseline justify-between gap-2">
+		<main className="mx-auto max-w-screen-2xl px-6 py-6">
+			<header className="mb-6 flex items-center justify-between">
+				<div>
 					<h1 className="font-heading text-2xl font-semibold tracking-tight">
-						Network Now
+						tfl-monitor
 					</h1>
-					<a
-						href="/ask"
-						className="text-sm font-medium text-primary underline-offset-4 hover:underline"
-					>
-						Ask the agent →
-					</a>
+					<p className="text-sm text-muted-foreground">
+						London transport pulse
+					</p>
 				</div>
-				<p className="text-sm text-muted-foreground">
-					Live operational status across the served TfL lines.
-				</p>
+				<div className="flex items-center gap-2">
+					<Button asChild variant="ghost" size="sm">
+						<a
+							href="https://github.com/hcslomeu/tfl-monitor"
+							target="_blank"
+							rel="noopener noreferrer"
+							aria-label="GitHub repository"
+						>
+							<ExternalLink className="size-4" />
+							<span>GitHub</span>
+						</a>
+					</Button>
+					<AboutSheet />
+				</div>
 			</header>
 
-			{errorDetail ? (
-				<Alert role="alert">
-					<AlertTitle>Live status unavailable</AlertTitle>
-					<AlertDescription>{errorDetail}</AlertDescription>
-				</Alert>
-			) : lines && lines.length === 0 ? (
-				<Alert>
-					<AlertTitle>No lines reported</AlertTitle>
-					<AlertDescription>
-						The API returned no line-status rows in the freshness window.
-					</AlertDescription>
-				</Alert>
-			) : (
-				<section
-					aria-label="Line statuses"
-					className="flex flex-col gap-3"
-					data-testid="line-status-list"
-				>
-					{(lines ?? []).map((line) => (
-						<Card key={line.line_id}>
-							<CardHeader>
-								<CardTitle className="flex flex-wrap items-center gap-2">
-									<span>{line.line_name}</span>
-									<Badge variant="outline">{modeLabel(line.mode)}</Badge>
-								</CardTitle>
-								<CardDescription className="flex flex-wrap items-center gap-2">
-									<StatusBadge
-										severity={line.status_severity}
-										description={line.status_severity_description}
-									/>
-									<span aria-hidden>·</span>
-									<span>{formatWindow(line)} (Europe/London)</span>
-								</CardDescription>
-							</CardHeader>
-							{line.reason ? (
-								<CardContent className="text-sm text-muted-foreground">
-									{line.reason}
-								</CardContent>
-							) : null}
-						</Card>
-					))}
+			<div className="grid grid-cols-1 gap-6 lg:grid-cols-[2fr_1fr]">
+				<section className="flex flex-col gap-4">
+					{status.error ? (
+						<Alert role="alert">
+							<AlertTitle>Live status unavailable</AlertTitle>
+							<AlertDescription>{status.error.message}</AlertDescription>
+						</Alert>
+					) : (
+						<NetworkStatusCard
+							lines={status.data ?? []}
+							lastUpdated={status.lastUpdated}
+						/>
+					)}
+
+					<div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+						{disruptions.error ? (
+							<Alert role="alert" className="md:col-span-2">
+								<AlertTitle>Disruptions unavailable</AlertTitle>
+								<AlertDescription>{disruptions.error.message}</AlertDescription>
+							</Alert>
+						) : (
+							<>
+								<HappeningNowCard disruptions={disruptions.data ?? []} />
+								<ComingUpCard disruptions={disruptions.data ?? []} />
+							</>
+						)}
+					</div>
+
+					<NetworkPulseTile lines={status.data ?? []} />
 				</section>
-			)}
+
+				<ChatPanel />
+			</div>
 		</main>
 	);
 }
