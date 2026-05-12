@@ -46,6 +46,10 @@ recurring guidance only — not a session log.
    Override only on explicit team-lead green-light, e.g. to unblock a `required_review_thread_resolution: true` policy when the rejected thread is the last blocker. Even then, post the audit reply first, get the green-light, then resolve — never the other way round.
    Do instead: after replying with rationale, leave the resolve to the author. Track unresolved count via `reviewThreads.nodes[] | select(.isResolved == false)` so you know whether the PR is merge-blocked.
 
+9. **[2026-05-13] Codex (`chatgpt-codex-connector[bot]`) reviews each PR in vacuum — expect P1 flags on intentional intermediate states in stacked PRs**
+   On PR #57 (TM-E4 Phase 2: strip Tailwind/shadcn), Codex flagged the deliberate `app/page.tsx` stub as a P1 "functional regression that breaks production behavior". The stub is required by the TM-E4 spec because Phase 2 deletes the components `page.tsx` imports; Phase 5 rewrites the page with the new composition. Codex has no view of the multi-phase plan and reads each commit as a standalone artifact. CodeRabbit + Gemini both returned "no actionable comments" on the same PR, confirming the finding is Codex-specific reasoning, not consensus.
+   Do instead: when assessing Codex P1/P2 findings on a stacked-PR phase, cross-reference the spec phase before fixing. If the flag points at intentional WIP/regression documented in the PR body and spec §5 phase plan, mark as "skip — intentional intermediate state" in the `/review-pr` summary with a one-line spec citation. Do NOT respond on the thread (Codex is bot-driven, no human reads the rationale); the PR-level audit comment is enough. The other reviewers will silently re-evaluate on the next phase's PR and the regression will be self-resolved when Phase N rewrites the stub.
+
 ## Shell & Command Reliability
 
 1. **[2026-04-26] Branch protection lives in rulesets, not classic API**
