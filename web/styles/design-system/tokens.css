@@ -185,7 +185,10 @@ a {
   transition: color var(--dur-fast) var(--ease-default),
               text-decoration-color var(--dur-fast) var(--ease-default);
 }
-a:hover { color: var(--accent-display); text-decoration-color: var(--accent-display); }
+a:hover {
+  color: color-mix(in oklch, var(--accent-primary) 85%, black);
+  text-decoration-color: var(--accent-display);
+}
 
 /* Editorial inline link inside dark prose — looks closer to body color */
 .link-quiet {
@@ -244,7 +247,10 @@ code {
   background: var(--accent-primary);
   color: var(--surface-warm);
 }
-.btn-primary:hover { background: var(--accent-display); color: var(--canvas); }
+.btn-primary:hover {
+  background: color-mix(in oklch, var(--accent-primary) 85%, black);
+  color: var(--surface-warm);
+}
 
 .btn-secondary {
   background: var(--surface-warm);
