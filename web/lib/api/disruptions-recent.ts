@@ -20,8 +20,11 @@ export type Disruption = components["schemas"]["Disruption"];
  * serving build-time HTML. Response shape is locked by the
  * `Disruption` schema in `contracts/openapi.yaml`.
  */
-export async function getRecentDisruptions(): Promise<Disruption[]> {
+export async function getRecentDisruptions(
+	signal?: AbortSignal,
+): Promise<Disruption[]> {
 	return apiFetch<Disruption[]>("/api/v1/disruptions/recent", {
 		cache: "no-store",
+		signal,
 	});
 }

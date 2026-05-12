@@ -14,6 +14,13 @@ const nextConfig: NextConfig = {
 	async headers() {
 		return [{ source: "/(.*)", headers: securityHeaders }];
 	},
+	async redirects() {
+		return [
+			{ source: "/disruptions", destination: "/", permanent: true },
+			{ source: "/reliability", destination: "/", permanent: true },
+			{ source: "/ask", destination: "/", permanent: true },
+		];
+	},
 };
 
 export default nextConfig;

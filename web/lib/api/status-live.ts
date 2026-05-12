@@ -21,6 +21,11 @@ export type LineStatus = components["schemas"]["LineStatus"];
  * instead of serving build-time HTML. Response shape is locked by the
  * `LineStatus` schema in `contracts/openapi.yaml`.
  */
-export async function getStatusLive(): Promise<LineStatus[]> {
-	return apiFetch<LineStatus[]>("/api/v1/status/live", { cache: "no-store" });
+export async function getStatusLive(
+	signal?: AbortSignal,
+): Promise<LineStatus[]> {
+	return apiFetch<LineStatus[]>("/api/v1/status/live", {
+		cache: "no-store",
+		signal,
+	});
 }

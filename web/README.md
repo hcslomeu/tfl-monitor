@@ -1,8 +1,9 @@
 # web/
 
-Next.js 16 dashboard for tfl-monitor — three views (Network Now, Disruption
-Log, Ask), all server components by default, types regenerated from the
-OpenAPI contract.
+Next.js 16 dashboard for tfl-monitor — single-page `/` collapses live network
+status, active and upcoming disruptions, a network-pulse tile, and the agent
+chat into one client-side dashboard. Types regenerated from the OpenAPI
+contract.
 
 ## Stack
 
@@ -19,20 +20,22 @@ OpenAPI contract.
 
 ```text
 web/
-├─ app/                      # App Router routes
-│  ├─ page.tsx               # Network Now (/)
-│  ├─ disruptions/page.tsx   # Disruption Log
-│  └─ ask/page.tsx           # ChatView host
+├─ app/                       # App Router routes
+│  ├─ page.tsx                # One-pager orchestrator (/)
+│  └─ __tests__/page.test.tsx # Integration test
 ├─ components/
-│  ├─ chat-view.tsx          # SSE-streaming chat
-│  └─ ui/                    # shadcn primitives
+│  ├─ chat-view.tsx           # SSE-streaming chat
+│  ├─ about-sheet.tsx         # Header "About" sheet
+│  ├─ dashboard/              # Four dashboard cards + ChatPanel
+│  └─ ui/                     # shadcn primitives
 ├─ lib/
-│  ├─ api/                   # Server-side fetchers
-│  ├─ sse-parser.ts          # 60-line stateful SSE parser
-│  └─ types.ts               # generated — do not edit
-├─ __tests__/                # Vitest specs
-├─ next.config.ts            # Security headers
-└─ biome.json                # Single config for lint + format
+│  ├─ api/                    # Client-side fetchers
+│  ├─ hooks/use-auto-refresh.ts # Visibility-aware polling
+│  ├─ labels.ts               # MODE_LABELS (TfL-brand)
+│  ├─ sse-parser.ts           # 60-line stateful SSE parser
+│  └─ types.ts                # generated — do not edit
+├─ next.config.ts             # Security headers + 308 redirects
+└─ biome.json                 # Single config for lint + format
 ```
 
 ## Quickstart
@@ -48,13 +51,21 @@ pnpm --dir web build          # Next production build
 `make check` at the repo root chains lint + test + build for both Python and
 TypeScript.
 
-## Views and wiring
+## Surface and wiring
 
-| Route | Endpoint | Highlights |
-|-------|----------|------------|
-| `/` | `/api/v1/status/live` | Empty / error states via `Alert role="alert"`; fetcher catches `ApiError` |
-| `/disruptions` | `/api/v1/disruptions/recent` | Per-disruption Card, category-tone badge, closure callout |
-| `/ask` | `/api/v1/chat/stream` (POST SSE) | Token bubbles, ephemeral "Using tool …" status, mid-stream error flag |
+The page is a single client component (`app/page.tsx`) that mounts two
+`useAutoRefresh` polls — `/api/v1/status/live` every 30 s and
+`/api/v1/disruptions/recent` every 5 min — and fans the data into:
+
+| Surface | Source | Highlights |
+|---------|--------|------------|
+| `<NetworkStatusCard>` | live status | Mode tabs (Tube / Elizabeth / Overground / DLR / Tram·River·Cable / Bus) persisted in `localStorage` |
+| `<HappeningNowCard>` | recent disruptions | RealTime + Incident only, sort `last_update DESC`, destructive Alert on closure |
+| `<ComingUpCard>` | recent disruptions | PlannedWork only, sort `created ASC`, cap 5 |
+| `<NetworkPulseTile>` | live status | Severe / degraded / good / other tally with TfL-correct semantics |
+| `<ChatPanel>` | `/api/v1/chat/stream` (POST SSE) | Sticky aside on `lg+`, FAB-triggered Drawer on `<lg` |
+
+Legacy `/disruptions`, `/reliability`, `/ask` issue permanent 308 redirects to `/`.
 
 Each fetcher imports its operation type from `lib/types.ts` so the response
 shape is end-to-end typed:
@@ -85,28 +96,19 @@ generation and `diff`s against the committed file — drift fails the build.
 
 ## Tests
 
-54 specs across:
-
-- **SSE parser** — single frame, multi-frame chunk, partial chunk buffering,
-  ping comments, unknown-type drop, malformed-JSON survival.
-- **Fetchers** — URL/headers/body assertions, RFC 7807 surfacing, network
-  failure propagation, multi-chunk reader buffering.
-- **Pages** — happy path, empty state, error state, RTL queries scoped via
-  `findByRole("alert")` to disambiguate title/description.
-- **ChatView** — empty shell, streaming tokens, tool-status lifecycle,
-  503 alert + conversation rollback, mid-stream `end:error` flagging via
-  `data-errored`.
-
-`web/__tests__/setup.ts` initialises `jsdom` and stubs `fetch` per test via
-`vi.stubGlobal`.
+68 specs across SSE parser, fetchers, dashboard cards, ChatView, and the
+`/` integration test. `vitest.setup.ts` patches jsdom with an in-memory
+`localStorage` / `sessionStorage` (Node 25 ships a native `localStorage`
+that requires `--localstorage-file`) and stubs `window.matchMedia` for
+vaul (drawer primitive).
 
 ## Status
 
 Feature-complete:
 
 - TM-E1a: scaffold, security headers, shadcn primitives, Vitest suite.
-- TM-E1b: Network Now wired to live `/status/live`.
-- TM-E2: Disruption Log view.
-- TM-E3: Chat view with SSE.
-- TM-E4 (next): Vercel deploy, `NEXT_PUBLIC_API_URL` pointing at the EC2
-  HTTPS endpoint.
+- TM-E1b: live status fetcher wired to `/api/v1/status/live`.
+- TM-E2: disruption view (folded into TM-E5).
+- TM-E3: ChatView with SSE.
+- TM-E5: one-pager — four dashboard cards + sticky chat panel + drawer fallback.
+- TM-E4 (next): Vercel deploy, `NEXT_PUBLIC_API_URL` pointing at the prod API.
