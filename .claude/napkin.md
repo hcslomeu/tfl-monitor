@@ -20,24 +20,28 @@ recurring guidance only — not a session log.
    Round 1 review threads got resolved, push happened, CodeRabbit re-reviewed and opened 3 new threads on the round-2 commit. Ruleset blocks merge until those resolve too.
    Do instead: plan ≥2 review-fix rounds per PR. Brief teammates that "review-fix → push → CodeRabbit re-runs → expect more threads" is the normal flow, not anomaly.
 
-3. **[2026-04-26] Post PR-level decision summary BEFORE resolving threads**
+3. **[2026-05-12] AI reviewers re-flag stale comments at the latest commit_id — verify file state before re-fixing**
+   On PR #56 round 2, Gemini's first-round comments (textarea outline, mobile grid) came back attached to the *new* commit `9cb1b15` with shifted line numbers, even though both were already fixed in that same commit. Without checking the file, `/review-pr` reads them as fresh findings and triggers a wasted second round.
+   Do instead: after a push, when fetching inline comments, always `Read` the cited `path:line` and confirm the issue still exists in current code before applying any change. If the fix already landed in a prior commit on the branch, mark the comment "Already Addressed" in the review summary and skip. Distinguishes genuinely new findings (e.g. CodeRabbit's `--accent-display` contrast comment that surfaced only after the first fix landed) from stale references to closed issues.
+
+4. **[2026-04-26] Post PR-level decision summary BEFORE resolving threads**
    Before calling `resolveReviewThread`, comment on the PR with `Applied / Rejected with rationale / Already addressed` matrix. Audit trail beats "all green, no explanation" pattern.
    Do instead: template at https://github.com/hcslomeu/tfl-monitor/pull/27#issuecomment-4322119719. Reuse for every review round.
 
-4. **[2026-04-26] `gh pr update-branch` triggers fresh CI + may unresolve nothing — but unblocks BEHIND state**
+5. **[2026-04-26] `gh pr update-branch` triggers fresh CI + may unresolve nothing — but unblocks BEHIND state**
    PR after merge of base PR shows `mergeStateStatus: BEHIND`. Direct merge fails. `gh pr update-branch <num>` rebases on main; CI re-runs; threads stay resolved (good).
    Do instead: `gh pr update-branch N && gh pr checks N --watch --required && gh pr merge N --squash --delete-branch`.
 
-5. **[2026-04-26] Verification gate before every push: lint + test + bandit + make check**
+6. **[2026-04-26] Verification gate before every push: lint + test + bandit + make check**
    Skipping any one is how merge-blocker bugs leak in.
    Do instead: `uv run task lint && uv run task test && uv run bandit -r src --severity-level high && make check` — all four exit 0.
 
-6. **[2026-05-11] Stacked PRs: rebase + force-push after the parent merges**
+7. **[2026-05-11] Stacked PRs: rebase + force-push after the parent merges**
    PR #51 was opened with `base = feature/TM-E5-design-plan` (PR #48). When #48 squash-merged into `main`, GitHub flipped #51 to `mergeStateStatus: CONFLICTING` even after `gh pr edit --base main`, because #51 still carried the pre-squash commit of the plan doc that `main` now had under a different SHA.
    Do instead: after the parent squash-merges, run `gh pr edit <child> --base main`, then in the child's worktree `git fetch origin && git rebase origin/main`. Expect a conflict on every file that was in both the parent and the child — resolve via `git rebase --skip` for commits that are 100% covered by the squash, or by manual conflict resolution for commits that introduced *additional* changes on top. Finish with `git push --force-with-lease` (never `--force`) — this requires explicit author auth in this repo (the hook denies otherwise).
    Sanity check before merging: `gh pr view <child> --json mergeStateStatus -q .mergeStateStatus` must read `CLEAN` or `BLOCKED` (review-gated), never `DIRTY` / `CONFLICTING`.
 
-7. **[2026-04-28] Resolve PR threads only where a fix was applied; rejected threads stay open**
+8. **[2026-04-28] Resolve PR threads only where a fix was applied; rejected threads stay open**
    For threads where you push back with a rationale instead of applying the suggestion, do NOT call `resolveReviewThread` — the human reviewer (the author) decides. Resolving a rejected thread reads as "I bypassed the review". The PR-level audit comment + the on-thread rationale reply are sufficient.
    Override only on explicit team-lead green-light, e.g. to unblock a `required_review_thread_resolution: true` policy when the rejected thread is the last blocker. Even then, post the audit reply first, get the green-light, then resolve — never the other way round.
    Do instead: after replying with rationale, leave the resolve to the author. Track unresolved count via `reviewThreads.nodes[] | select(.isResolved == false)` so you know whether the PR is merge-blocked.
