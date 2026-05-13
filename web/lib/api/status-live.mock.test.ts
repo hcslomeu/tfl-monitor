@@ -32,7 +32,7 @@ describe("getStatusLive — USE_MOCKS branch", () => {
 
 		const elizabeth = lines.find((line) => line.line_id === "elizabeth");
 		expect(elizabeth?.mode).toBe("elizabeth-line");
-		expect(elizabeth?.status_severity_description).toBe("Severe Delays");
+		expect(elizabeth?.status_severity_description).toBe("Severe delays");
 
 		const dlr = lines.find((line) => line.line_id === "dlr");
 		expect(dlr?.mode).toBe("dlr");

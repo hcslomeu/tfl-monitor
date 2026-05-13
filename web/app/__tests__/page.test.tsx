@@ -94,7 +94,7 @@ describe("HomePage", () => {
 		expect(await screen.findByText("Elizabeth line")).toBeInTheDocument();
 
 		expect(
-			await screen.findByText("London transport — at a glance"),
+			await screen.findByText(/What is the next train leaving Baker Street/),
 		).toBeInTheDocument();
 
 		const goodPill = await screen.findByText(/1 good/);

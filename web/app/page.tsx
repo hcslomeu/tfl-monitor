@@ -7,7 +7,6 @@ import { ChatPanel } from "@/components/dashboard/chat-panel";
 import { LineDetail } from "@/components/dashboard/line-detail";
 import { LineGrid } from "@/components/dashboard/line-grid";
 import { NewsReports } from "@/components/dashboard/news-reports";
-import { PageHead } from "@/components/dashboard/page-head";
 import { TopNav } from "@/components/dashboard/top-nav";
 import { getRecentDisruptions } from "@/lib/api/disruptions-recent";
 import { getStatusLive } from "@/lib/api/status-live";
@@ -19,6 +18,7 @@ import {
 } from "@/lib/dashboard/adapt";
 import { useAutoRefresh } from "@/lib/hooks/use-auto-refresh";
 import { MOCK_BUSES } from "@/lib/mocks/buses";
+import { MOCK_CHAT_SEED } from "@/lib/mocks/chat";
 import { MOCK_NEWS } from "@/lib/mocks/news";
 
 const REFRESH_INTERVAL_MS = 30_000;
@@ -33,17 +33,6 @@ function formatLondonClock(date: Date | null): string {
 		timeZoneName: "short",
 	});
 	return `${time} · live`;
-}
-
-function formatRefreshedLabel(date: Date | null): string {
-	if (!date) return "awaiting first refresh";
-	return date.toLocaleTimeString("en-GB", {
-		hour: "2-digit",
-		minute: "2-digit",
-		second: "2-digit",
-		timeZone: "Europe/London",
-		timeZoneName: "short",
-	});
 }
 
 export default function HomePage() {
@@ -84,17 +73,11 @@ export default function HomePage() {
 	}, [disruptions.data, selectedLine]);
 
 	const clockLabel = formatLondonClock(status.lastUpdated);
-	const refreshedLabel = formatRefreshedLabel(status.lastUpdated);
 
 	return (
-		<>
+		<div className="tfl-app">
 			<TopNav summary={counts} clockLabel={clockLabel} repoUrl={REPO_URL} />
 			<main className="tfl-grid">
-				<PageHead
-					lineCount={lineSummaries.length}
-					lastRefreshedLabel={refreshedLabel}
-					refreshIntervalSeconds={REFRESH_INTERVAL_MS / 1000}
-				/>
 				<div className="tfl-left-col">
 					<LineGrid
 						lines={lineSummaries}
@@ -108,9 +91,9 @@ export default function HomePage() {
 					{selectedLine ? (
 						<LineDetail line={selectedLine} disruption={selectedDisruption} />
 					) : null}
-					<ChatPanel />
+					<ChatPanel initialMessages={MOCK_CHAT_SEED} />
 				</div>
 			</main>
-		</>
+		</div>
 	);
 }

@@ -79,11 +79,28 @@ function lineIdForCode(code: string): string | undefined {
 }
 
 /**
+ * Render a "updated Xm/Xh ago" label from an ISO timestamp relative
+ * to `now`. Falls back to "updated just now" for sub-minute deltas
+ * and to the raw `valid_from` string for unparseable inputs.
+ */
+export function relativeUpdatedLabel(validFromIso: string, now: Date): string {
+	const validFrom = new Date(validFromIso);
+	if (Number.isNaN(validFrom.getTime())) return "updated just now";
+	const deltaMs = Math.max(0, now.getTime() - validFrom.getTime());
+	const minutes = Math.floor(deltaMs / 60_000);
+	if (minutes < 1) return "updated just now";
+	if (minutes < 60) return `updated ${minutes}m ago`;
+	const hours = Math.floor(minutes / 60);
+	return `updated ${hours}h ago`;
+}
+
+/**
  * Convert a list of backend `LineStatus` rows into the view-model
  * shape `LineGrid` and `TopNav` consume. Colour and short code are
  * looked up from the static line registry.
  */
 export function lineStatusesToSummaries(lines: LineStatus[]): LineSummary[] {
+	const now = new Date();
 	return lines.map((line) => {
 		const meta = metaFor(line.line_id);
 		return {
@@ -92,7 +109,7 @@ export function lineStatusesToSummaries(lines: LineStatus[]): LineSummary[] {
 			color: meta.color,
 			status: severityToBucket(line.status_severity),
 			statusText: line.status_severity_description,
-			updatedLabel: "updated just now",
+			updatedLabel: relativeUpdatedLabel(line.valid_from, now),
 		};
 	});
 }
