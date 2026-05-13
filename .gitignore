@@ -39,3 +39,10 @@ Humberto Lomeu Design System/
 Humberto Lomeu Design System.zip
 london_transport_monitor_logo.svg
 
+# Playwright MCP artefacts (local browser snapshots, not source)
+.playwright-mcp/
+desktop-ground-truth.png
+mobile-700.png
+post-fix-desktop.png
+snapshot-*.md
+

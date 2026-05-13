@@ -17,15 +17,14 @@ export type LineStatus = components["schemas"]["LineStatus"];
 
 type Mode = LineStatus["mode"];
 
-const BUCKET_TO_SEVERITY: Record<
-	StatusBucket,
-	{ severity: number; description: string }
-> = {
-	good: { severity: 10, description: "Good Service" },
-	minor: { severity: 9, description: "Minor Delays" },
-	severe: { severity: 6, description: "Severe Delays" },
-	suspended: { severity: 1, description: "Suspended" },
+const BUCKET_TO_SEVERITY: Record<StatusBucket, number> = {
+	good: 10,
+	minor: 9,
+	severe: 6,
+	suspended: 1,
 };
+
+const MOCK_UPDATED_AGO_MS = 2 * 60_000;
 
 const CODE_TO_MODE: Record<string, Mode> = {
 	ELZ: "elizabeth-line",
@@ -51,20 +50,18 @@ const CODE_TO_LINE_ID: Record<string, string> = {
 };
 
 function lineSummaryToLineStatus(line: LineSummary, now: Date): LineStatus {
-	const { severity, description } = BUCKET_TO_SEVERITY[line.status];
-	const start = new Date(now);
-	start.setUTCHours(0, 0, 0, 0);
-	const end = new Date(now);
-	end.setUTCHours(23, 59, 59, 0);
+	const validFrom = new Date(now.getTime() - MOCK_UPDATED_AGO_MS);
+	const validTo = new Date(now);
+	validTo.setUTCHours(23, 59, 59, 0);
 	return {
 		line_id: CODE_TO_LINE_ID[line.code] ?? line.code.toLowerCase(),
 		line_name: line.name,
 		mode: CODE_TO_MODE[line.code] ?? "tube",
-		status_severity: severity,
-		status_severity_description: description,
+		status_severity: BUCKET_TO_SEVERITY[line.status],
+		status_severity_description: line.statusText,
 		reason: null,
-		valid_from: start.toISOString(),
-		valid_to: end.toISOString(),
+		valid_from: validFrom.toISOString(),
+		valid_to: validTo.toISOString(),
 	};
 }
 
