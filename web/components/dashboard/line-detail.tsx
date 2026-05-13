@@ -25,8 +25,9 @@ export function LineDetail({ line, disruption }: LineDetailProps) {
 				<>
 					<div className="tfl-disruption">
 						<div className="summary">{disruption.headline}</div>
-						{disruption.body.map((paragraph) => (
-							<p key={paragraph}>{paragraph}</p>
+						{disruption.body.map((paragraph, index) => (
+							// biome-ignore lint/suspicious/noArrayIndexKey: disruption body is a static prop with stable ordering; the index disambiguates duplicate paragraph strings that React would otherwise collide on.
+							<p key={`${index}-${paragraph}`}>{paragraph}</p>
 						))}
 					</div>
 					{disruption.stations.length > 0 && (

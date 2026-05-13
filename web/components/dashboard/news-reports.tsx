@@ -17,11 +17,13 @@ export function NewsReports({ items, slotCount = 3 }: NewsReportsProps) {
 		<section className="tfl-card tfl-news">
 			<div className="tfl-card-h">
 				<h4>News &amp; reports from TfL</h4>
-				<span className="meta">{filled.length} today</span>
+				<span className="meta">{items.length} today</span>
 			</div>
 			<ul className="tfl-news-list">
 				{slots.map((slot, index) => {
-					const key = slot ? `${slot.time}-${slot.title}` : `empty-${index}`;
+					const key = slot
+						? `${slot.time}-${slot.title}-${index}`
+						: `empty-${index}`;
 					return (
 						<li key={key} className={slot ? "" : "is-empty"}>
 							<span className="tfl-news-time">{slot ? slot.time : ""}</span>

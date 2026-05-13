@@ -22,4 +22,17 @@ describe("NewsReports", () => {
 		expect(screen.getByText(/1 today/)).toBeInTheDocument();
 		expect(screen.getAllByText(/No further updates/)).toHaveLength(2);
 	});
+
+	it("reports the full item count in the meta label even when slots truncate", () => {
+		const items = Array.from({ length: 5 }, (_, i) => ({
+			time: `0${i}:00`,
+			title: `Report ${i}`,
+			body: `Body ${i}`,
+		}));
+
+		render(<NewsReports items={items} slotCount={3} />);
+
+		expect(screen.getByText(/5 today/)).toBeInTheDocument();
+		expect(screen.queryByText(/3 today/)).not.toBeInTheDocument();
+	});
 });
