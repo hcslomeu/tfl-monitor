@@ -95,39 +95,43 @@ recurring guidance only — not a session log.
 
 ## Domain Behavior Guardrails
 
-1. **[2026-04-26] `required_review_thread_resolution: true` blocks merge until ALL threads resolved**
+1. **[2026-05-14] CSS subgrid with N children > declared tracks silently overlaps cells (Chromium)**
+   When `grid-template-rows: subgrid` allocates M tracks and the container has N>M auto-placed children, Chromium does NOT auto-create implicit tracks; the extras stack into the last row, hiding earlier siblings — no warning, no console error, lint and tests stay green. PR #62 surfaced this when `tfl_monitor.css` (verbatim claude.design export) declared `.tfl-left-col, .tfl-right-col { grid-template-rows: subgrid; grid-row: 2 / span 2 }` (2 tracks) with 3 children → `NewsReports` rendered on top of `BusBanner` invisibly. Same effect on right col with `.tfl-right-col .tfl-chat-stack { grid-row: 1 / span 2 }` hiding `LineDetail` behind the chat-card body. Diagnosis required `getBoundingClientRect` via Playwright `browser_evaluate` to see two siblings reporting the same `y`+`h`.
+   Do instead: when porting a design-system CSS that uses subgrid, audit child count vs declared row-span before shipping (`document.querySelector('.tfl-left-col').children.length` vs `getComputedStyle(...).gridTemplateRows`). If mismatched, switch the column to plain `display: flex; flex-direction: column` (PR #62's fix). Don't trust visual parity in Storybook/canvas alone — the canvas may have been authored at a different child count and never re-rendered against the final one.
+
+2. **[2026-04-26] `required_review_thread_resolution: true` blocks merge until ALL threads resolved**
    `mergeable: true, mergeable_state: blocked` even when CI is fully green and `required_approving_review_count: 0`. The blocker is unresolved threads.
    Do instead: always re-query unresolved count after fixes (`reviewThreads.nodes[] | select(.isResolved == false)`) and resolve every one before retrying merge.
 
-2. **[2026-04-26] `bandit -r src` ≠ HIGH-only — needs `--severity-level high`**
+3. **[2026-04-26] `bandit -r src` ≠ HIGH-only — needs `--severity-level high`**
    Without the flag, all severities are reported, polluting "no findings" assertions.
    Do instead: always invoke `uv run bandit -r src --severity-level high`. CI's `.github/workflows/ci.yml` already does this; specs and gates must match.
 
-3. **[2026-04-26] Test/source imports use `ingestion.foo` (no `src.` prefix)**
+4. **[2026-04-26] Test/source imports use `ingestion.foo` (no `src.` prefix)**
    `pyproject.toml` has `pythonpath = ["src"]`. Using `from src.ingestion.foo import X` AND `from ingestion.foo import X` in different files makes mypy strict raise "Source file found twice under different module names".
    Do instead: pick one — `from ingestion.tfl_client.client import TflClient` (matches existing `from api.main import app` pattern). Document this in module docstrings if helpful.
 
-4. **[2026-04-26] `.claude/specs/` is meta, not a code track — bundling across WPs is OK**
+5. **[2026-04-26] `.claude/specs/` is meta, not a code track — bundling across WPs is OK**
    Codex flags cross-track spec files as P1 scope violation, but AGENTS.md §1 lists track directories as `src/`, `dbt/`, `web/`, `tests/`, `airflow/`, `contracts/` — not `.claude/`.
    Do instead: bundle Phase A research+plan files into the first PR of a multi-WP batch so worktrees branched off main inherit them. Defend via PR-level reply with the AGENTS.md track-list excerpt.
 
-5. **[2026-04-26] Linear↔GitHub integration aligns IDs**
+6. **[2026-04-26] Linear↔GitHub integration aligns IDs**
    Linear team identifier `TM` produces issues TM-2, TM-3, … and the GitHub mirror assigns matching `gh issue` numbers. `Closes TM-N` in PR body auto-transitions on merge.
    Do instead: cross-reference `gh issue list` once per session to confirm WP↔Linear mapping (TM-000=TM-2, TM-A1=TM-3, TM-B1=TM-4, TM-C1=TM-5, TM-D1=TM-6, etc.).
 
-6. **[2026-04-26] TM-000 over-delivered scope of TM-C1 and parts of TM-D1**
+7. **[2026-04-26] TM-000 over-delivered scope of TM-C1 and parts of TM-D1**
    Always run a research pass against the spec's stated AC before treating a WP as net-new work. The dbt scaffold + FastAPI 501 stubs + Logfire wiring landed in TM-000.
    Do instead: Phase 1 research first; if AC already met, propose "close as already-delivered" with a docs-only PR plus any missing safety nets (e.g. drift tests, parametrised 501 lock, prod CORS origin).
 
-7. **[2026-04-26] Synthetic IDs need full-fidelity input fields**
+8. **[2026-04-26] Synthetic IDs need full-fidelity input fields**
    `_synthetic_disruption_id` initially hashed only `category + description + affected_routes`; TfL emits multiple records sharing description but differing in `type` / `closureText`. Hash must include all disambiguating fields.
    Do instead: when designing synthetic keys against lossy upstream data, include every field that could legitimately distinguish two records. Add a regression test against a real fixture proving distinct rows produce distinct keys.
 
-8. **[2026-04-26] Python `hash()` is randomised per process — never use for persistent IDs**
+9. **[2026-04-26] Python `hash()` is randomised per process — never use for persistent IDs**
    Hash randomisation salts each interpreter run; `hash("x")` differs between invocations.
    Do instead: `hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()[:N]` for stable digests.
 
-9. **[2026-04-29] `pydantic-ai>=1.75` required when `anthropic>=0.96`**
+10. **[2026-04-29] `pydantic-ai>=1.75` required when `anthropic>=0.96`**
    `anthropic 0.96` dropped/renamed the `UserLocation` symbol that `pydantic-ai 1.22` imports directly from the Anthropic provider. Lock resolved to two pydantic-ai versions (1.75 + 1.85) and crashed at agent compile time on the older one.
    Do instead: when bumping the Anthropic SDK or adding any LangChain/LangGraph dep that pulls anthropic 0.96, also raise the `pydantic-ai>=` floor to `>=1.75` in `pyproject.toml` and run `uv lock` to confirm a single resolved version.
 
