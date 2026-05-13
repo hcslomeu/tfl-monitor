@@ -16,6 +16,7 @@ import {
 	lineStatusesToSummaries,
 	summarizeCounts,
 } from "@/lib/dashboard/adapt";
+import { USE_MOCKS } from "@/lib/env";
 import { useAutoRefresh } from "@/lib/hooks/use-auto-refresh";
 import { MOCK_BUSES } from "@/lib/mocks/buses";
 import { MOCK_CHAT_SEED } from "@/lib/mocks/chat";
@@ -91,7 +92,7 @@ export default function HomePage() {
 					{selectedLine ? (
 						<LineDetail line={selectedLine} disruption={selectedDisruption} />
 					) : null}
-					<ChatPanel initialMessages={MOCK_CHAT_SEED} />
+					<ChatPanel initialMessages={USE_MOCKS ? MOCK_CHAT_SEED : undefined} />
 				</div>
 			</main>
 		</div>

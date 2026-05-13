@@ -81,7 +81,8 @@ function lineIdForCode(code: string): string | undefined {
 /**
  * Render a "updated Xm/Xh ago" label from an ISO timestamp relative
  * to `now`. Falls back to "updated just now" for sub-minute deltas
- * and to the raw `valid_from` string for unparseable inputs.
+ * and for unparseable inputs (graceful UI degradation — surfacing a
+ * raw ISO string in the line-grid badge would look broken).
  */
 export function relativeUpdatedLabel(validFromIso: string, now: Date): string {
 	const validFrom = new Date(validFromIso);
@@ -97,10 +98,14 @@ export function relativeUpdatedLabel(validFromIso: string, now: Date): string {
 /**
  * Convert a list of backend `LineStatus` rows into the view-model
  * shape `LineGrid` and `TopNav` consume. Colour and short code are
- * looked up from the static line registry.
+ * looked up from the static line registry. `now` is injected so the
+ * function stays deterministic under test and can share a clock with
+ * the rest of the dashboard.
  */
-export function lineStatusesToSummaries(lines: LineStatus[]): LineSummary[] {
-	const now = new Date();
+export function lineStatusesToSummaries(
+	lines: LineStatus[],
+	now: Date = new Date(),
+): LineSummary[] {
 	return lines.map((line) => {
 		const meta = metaFor(line.line_id);
 		return {
