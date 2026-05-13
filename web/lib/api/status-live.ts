@@ -33,6 +33,23 @@ const CODE_TO_MODE: Record<string, Mode> = {
 	OVG: "overground",
 };
 
+const CODE_TO_LINE_ID: Record<string, string> = {
+	BAK: "bakerloo",
+	CEN: "central",
+	CIR: "circle",
+	DIS: "district",
+	ELZ: "elizabeth",
+	HAM: "hammersmith-city",
+	JUB: "jubilee",
+	MET: "metropolitan",
+	NTH: "northern",
+	PIC: "piccadilly",
+	VIC: "victoria",
+	WAT: "waterloo-city",
+	DLR: "dlr",
+	OVG: "london-overground",
+};
+
 function lineSummaryToLineStatus(line: LineSummary, now: Date): LineStatus {
 	const { severity, description } = BUCKET_TO_SEVERITY[line.status];
 	const start = new Date(now);
@@ -40,7 +57,7 @@ function lineSummaryToLineStatus(line: LineSummary, now: Date): LineStatus {
 	const end = new Date(now);
 	end.setUTCHours(23, 59, 59, 0);
 	return {
-		line_id: line.code.toLowerCase(),
+		line_id: CODE_TO_LINE_ID[line.code] ?? line.code.toLowerCase(),
 		line_name: line.name,
 		mode: CODE_TO_MODE[line.code] ?? "tube",
 		status_severity: severity,
