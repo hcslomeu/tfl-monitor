@@ -41,7 +41,8 @@ const LINE_META_BY_ID: Record<string, LineMeta> = {
 	"london-overground": { code: "OVG", color: "#EE7C0E" },
 };
 
-const FALLBACK_META: LineMeta = { code: "TFL", color: "#5A6A77" };
+const UNKNOWN_CODE_PREFIX = "UNK:";
+const FALLBACK_COLOR = "#5A6A77";
 
 const LINE_ID_BY_CODE: Record<string, string> = Object.fromEntries(
 	Object.entries(LINE_META_BY_ID).map(([id, { code }]) => [code, id]),
@@ -64,7 +65,17 @@ export function severityToBucket(severity: number): StatusBucket {
 }
 
 function metaFor(lineId: string): LineMeta {
-	return LINE_META_BY_ID[lineId] ?? FALLBACK_META;
+	const known = LINE_META_BY_ID[lineId];
+	if (known) return known;
+	return { code: `${UNKNOWN_CODE_PREFIX}${lineId}`, color: FALLBACK_COLOR };
+}
+
+function lineIdForCode(code: string): string | undefined {
+	const known = LINE_ID_BY_CODE[code];
+	if (known) return known;
+	return code.startsWith(UNKNOWN_CODE_PREFIX)
+		? code.slice(UNKNOWN_CODE_PREFIX.length)
+		: undefined;
 }
 
 /**
@@ -126,7 +137,7 @@ export function disruptionForLine(
 	disruptions: Disruption[],
 	summary: LineSummary,
 ): Disruption | undefined {
-	const lineId = LINE_ID_BY_CODE[summary.code];
+	const lineId = lineIdForCode(summary.code);
 	if (!lineId) return undefined;
 	return disruptions.find((d) => d.affected_routes.includes(lineId));
 }

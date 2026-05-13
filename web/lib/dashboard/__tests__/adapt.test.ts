@@ -82,15 +82,52 @@ describe("lineStatusesToSummaries", () => {
 		expect(summaries[1].name).toBe("Waterloo & City");
 	});
 
-	it("falls back to a neutral meta when the line id is unknown", () => {
+	it("prefixes unknown line ids so unrelated rows don't collide on a shared fallback code", () => {
 		const summaries = lineStatusesToSummaries([
 			{
 				...SAMPLE_LINES[0],
 				line_id: "totally-new-line",
 				line_name: "Mystery",
 			},
+			{
+				...SAMPLE_LINES[0],
+				line_id: "another-new-line",
+				line_name: "Other",
+			},
 		]);
-		expect(summaries[0]).toMatchObject({ code: "TFL", color: "#5A6A77" });
+		expect(summaries[0]).toMatchObject({
+			code: "UNK:totally-new-line",
+			color: "#5A6A77",
+		});
+		expect(summaries[1]).toMatchObject({
+			code: "UNK:another-new-line",
+			color: "#5A6A77",
+		});
+		expect(summaries[0].code).not.toBe(summaries[1].code);
+	});
+
+	it("resolves disruptions for unknown lines via the UNK: prefix", () => {
+		const summaries = lineStatusesToSummaries([
+			{
+				...SAMPLE_LINES[0],
+				line_id: "mystery-line",
+				line_name: "Mystery",
+			},
+		]);
+		const disruption: Disruption = {
+			disruption_id: "MYST-001",
+			category: "RealTime",
+			category_description: "Real Time",
+			description: "Mystery delays",
+			summary: "Mystery delays",
+			affected_routes: ["mystery-line"],
+			affected_stops: [],
+			closure_text: "",
+			severity: 6,
+			created: "2026-05-13T16:58:00Z",
+			last_update: "2026-05-13T17:42:00Z",
+		};
+		expect(disruptionForLine([disruption], summaries[0])).toBe(disruption);
 	});
 });
 
