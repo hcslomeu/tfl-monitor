@@ -30,19 +30,20 @@ function formatLondonClock(date: Date | null): string {
 		hour: "2-digit",
 		minute: "2-digit",
 		timeZone: "Europe/London",
+		timeZoneName: "short",
 	});
-	return `${time} BST · live`;
+	return `${time} · live`;
 }
 
 function formatRefreshedLabel(date: Date | null): string {
 	if (!date) return "awaiting first refresh";
-	const time = date.toLocaleTimeString("en-GB", {
+	return date.toLocaleTimeString("en-GB", {
 		hour: "2-digit",
 		minute: "2-digit",
 		second: "2-digit",
 		timeZone: "Europe/London",
+		timeZoneName: "short",
 	});
-	return `${time} BST`;
 }
 
 export default function HomePage() {
@@ -58,7 +59,13 @@ export default function HomePage() {
 	const [selectedCode, setSelectedCode] = useState<string | null>(null);
 
 	useEffect(() => {
-		if (selectedCode || lineSummaries.length === 0) return;
+		if (lineSummaries.length === 0) return;
+		if (
+			selectedCode &&
+			lineSummaries.some((line) => line.code === selectedCode)
+		) {
+			return;
+		}
 		const preferred =
 			lineSummaries.find((line) => line.status === "severe") ??
 			lineSummaries[0];

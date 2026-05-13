@@ -91,7 +91,7 @@ describe("HomePage", () => {
 			await screen.findByText(/Tube, Overground, DLR/),
 		).toBeInTheDocument();
 
-		expect(await screen.findByText("Elizabeth line line")).toBeInTheDocument();
+		expect(await screen.findByText("Elizabeth line")).toBeInTheDocument();
 
 		expect(
 			await screen.findByText("London transport — at a glance"),

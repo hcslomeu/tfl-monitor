@@ -59,9 +59,27 @@ describe("lineStatusesToSummaries", () => {
 		});
 		expect(elizabeth).toMatchObject({
 			code: "ELZ",
+			name: "Elizabeth",
 			color: "#6950A1",
 			status: "severe",
 		});
+	});
+
+	it("strips trailing ' line' so downstream components don't duplicate it", () => {
+		const summaries = lineStatusesToSummaries([
+			{
+				...SAMPLE_LINES[0],
+				line_id: "elizabeth",
+				line_name: "Elizabeth line",
+			},
+			{
+				...SAMPLE_LINES[0],
+				line_id: "waterloo-city",
+				line_name: "Waterloo & City",
+			},
+		]);
+		expect(summaries[0].name).toBe("Elizabeth");
+		expect(summaries[1].name).toBe("Waterloo & City");
 	});
 
 	it("falls back to a neutral meta when the line id is unknown", () => {
@@ -118,7 +136,7 @@ describe("disruptionForLine + disruptionToSnapshot", () => {
 			{ name: "940GZZLUHBN", code: "940GZZLUHBN" },
 		]);
 		expect(snapshot.sourceLabel).toBe("Source: TfL Unified API");
-		expect(snapshot.reportedAtLabel).toMatch(/BST$/);
-		expect(snapshot.updatedAtLabel).toMatch(/BST$/);
+		expect(snapshot.reportedAtLabel).toMatch(/\d{2}:\d{2}/);
+		expect(snapshot.updatedAtLabel).toMatch(/\d{2}:\d{2}/);
 	});
 });

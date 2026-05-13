@@ -43,6 +43,14 @@ const LINE_META_BY_ID: Record<string, LineMeta> = {
 
 const FALLBACK_META: LineMeta = { code: "TFL", color: "#5A6A77" };
 
+const LINE_ID_BY_CODE: Record<string, string> = Object.fromEntries(
+	Object.entries(LINE_META_BY_ID).map(([id, { code }]) => [code, id]),
+);
+
+function stripTrailingLine(name: string): string {
+	return name.replace(/\s*line$/i, "").trim();
+}
+
 /**
  * Project a TfL `status_severity` integer onto the four display
  * buckets the dashboard uses. Mirrors the inverse of
@@ -69,7 +77,7 @@ export function lineStatusesToSummaries(lines: LineStatus[]): LineSummary[] {
 		const meta = metaFor(line.line_id);
 		return {
 			code: meta.code,
-			name: line.line_name,
+			name: stripTrailingLine(line.line_name),
 			color: meta.color,
 			status: severityToBucket(line.status_severity),
 			statusText: line.status_severity_description,
@@ -100,6 +108,7 @@ function formatLondonTime(iso: string): string {
 			hour: "2-digit",
 			minute: "2-digit",
 			timeZone: "Europe/London",
+			timeZoneName: "short",
 		});
 	} catch {
 		return iso;
@@ -117,9 +126,7 @@ export function disruptionForLine(
 	disruptions: Disruption[],
 	summary: LineSummary,
 ): Disruption | undefined {
-	const lineId = Object.keys(LINE_META_BY_ID).find(
-		(id) => LINE_META_BY_ID[id].code === summary.code,
-	);
+	const lineId = LINE_ID_BY_CODE[summary.code];
 	if (!lineId) return undefined;
 	return disruptions.find((d) => d.affected_routes.includes(lineId));
 }
@@ -142,9 +149,9 @@ export function disruptionToSnapshot(d: Disruption): DisruptionSnapshot {
 	return {
 		headline: d.summary,
 		body,
-		reportedAtLabel: `${formatLondonTime(d.created)} BST`,
+		reportedAtLabel: formatLondonTime(d.created),
 		stations,
 		sourceLabel: "Source: TfL Unified API",
-		updatedAtLabel: `${formatLondonTime(d.last_update)} BST`,
+		updatedAtLabel: formatLondonTime(d.last_update),
 	};
 }
