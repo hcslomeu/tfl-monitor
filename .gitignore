@@ -14,6 +14,7 @@ build/
 .claude/worktrees/
 .claude/scheduled_tasks.lock
 .superpowers/
+.vscode/
 
 # dbt
 dbt/target/
