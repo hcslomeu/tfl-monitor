@@ -29,7 +29,7 @@ TfL strategy PDFs ──Docling──▶ embeddings ──▶ Pinecone          
 | Ingestion | `src/ingestion/consumers` | Python 3.12 | Consumes topics, writes JSONB rows into `raw.*` |
 | Warehouse | Postgres 16 | Docker (local) / Supabase (prod) | Schemas: `raw`, `ref`, `analytics` |
 | Transform | dbt-core + dbt-postgres | CLI | Staging / intermediate / marts under `dbt/models/` |
-| Orchestration | Airflow 2.10 (dev only) / host cron (prod) | Docker (local) / Lightsail host cron (prod) | LocalExecutor for DAG development; production replaces Airflow with `/etc/cron.d/tfl-monitor` running `dbt run --target prod` against the `api` container (see ADR 006) |
+| Orchestration | Airflow 2.10 (dev only) / host cron (prod) | Docker (local) / Lightsail host cron (prod) | LocalExecutor for DAG development; production replaces Airflow with `/etc/cron.d/tfl-monitor` running `dbt build --target prod` against the `api` container (see ADR 006). `dbt build` gates downstream models on test pass instead of running tests separately. |
 | API | FastAPI + sse-starlette | Python 3.12 | OpenAPI 3.1 contract in `contracts/openapi.yaml` |
 | Agent | LangGraph 1.x + Pydantic AI | Python 3.12 | Two tools: `query_warehouse`, `search_tfl_docs` |
 | RAG | LlamaIndex + Pinecone + Docling | Python 3.12 | Hybrid retrieval over TfL strategy PDFs |

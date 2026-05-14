@@ -45,8 +45,10 @@ host.
    (`api`, `producers`, `consumers`). Airflow is **removed from
    production**: its scheduler + webserver consume ~700 MB of
    constant baseline RAM on a 1.9 GB host, which OOMs the box once
-   tfl-monitor lands alongside alpha-whale. Periodic work (`dbt run`)
-   becomes a host cron entry that shells into the api container.
+   tfl-monitor lands alongside alpha-whale. Periodic work
+   (`dbt build` — models + tests + snapshots gated together so a
+   failing test stops bad data from cascading downstream) becomes a
+   host cron entry that shells into the api container.
    Airflow stays in the local dev compose for the portfolio narrative
    (DAG screenshots, ADR 003 history).
 5. **Reverse proxy / TLS.** A single shared Caddy stack at
@@ -101,8 +103,8 @@ host.
     recovery story; a host outage takes both tenants down.
   - Airflow is dev-only. Operators wanting a DAG visualisation in
     production must SSH in and re-create the daemons by hand, which
-    we accept because the production work — periodic `dbt run` — is
-    a single cron entry.
+    we accept because the production work — periodic `dbt build` —
+    is a single cron entry.
   - Scoped IAM user with keys in `.env` is weaker than an instance
     role. Mitigated by repo-level secret hygiene + scoped action
     policy (`bedrock:InvokeModel*` on the two model ARNs only).

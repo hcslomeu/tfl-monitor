@@ -5,9 +5,10 @@ Date: 2026-04-22
 
 > **Superseded.** TM-A5 removed Airflow from production entirely
 > (RAM budget on the shared Lightsail box does not fit Airflow's
-> ~700 MB constant baseline). Periodic `dbt run` is invoked by host
-> cron via `scripts/cron-dbt-run.sh`. Airflow stays in the local dev
-> compose for the portfolio narrative. See ADR 006 §Decision #4.
+> ~700 MB constant baseline). Periodic `dbt build` is invoked by
+> host cron via `scripts/cron-dbt-run.sh`. Airflow stays in the
+> local dev compose for the portfolio narrative. See ADR 006
+> §Decision #4.
 
 ## Context
 

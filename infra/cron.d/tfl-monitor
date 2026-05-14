@@ -4,8 +4,9 @@
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-# dbt run every 6 hours (the wrapper script invokes `dbt run`, not
-# `dbt build` — keep the comment honest). Cron user must own
+# dbt build every 6 hours — `dbt build` runs models + tests +
+# snapshots + seeds in DAG order with test gating, so a failing test
+# blocks downstream materialisations. Cron user must own
 # /opt/tfl-monitor for the log redirect since /var/log/ is root-owned
 # and would fail silently.
 0 */6 * * * ubuntu /opt/tfl-monitor/scripts/cron-dbt-run.sh >> /opt/tfl-monitor/cron.log 2>&1
