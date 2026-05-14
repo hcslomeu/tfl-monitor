@@ -41,11 +41,14 @@ async def _amain() -> NoReturn:
         arrivals = ArrivalsProducer(tfl_client=tfl, kafka_producer=kafka)
         disruptions = DisruptionsProducer(tfl_client=tfl, kafka_producer=kafka)
         logfire.info("ingestion.run_producers.start", count=3)
-        await asyncio.gather(
-            line_status.run_forever(),
-            arrivals.run_forever(),
-            disruptions.run_forever(),
-        )
+        # TaskGroup (Python 3.11+) propagates the first failure as an
+        # ExceptionGroup and cancels the surviving producers, so the
+        # box's process supervisor (Docker restart=unless-stopped)
+        # restarts the whole bundle cleanly.
+        async with asyncio.TaskGroup() as tg:
+            tg.create_task(line_status.run_forever())
+            tg.create_task(arrivals.run_forever())
+            tg.create_task(disruptions.run_forever())
 
     raise AssertionError("run_forever loops never return")
 

@@ -109,11 +109,14 @@ async def _amain() -> NoReturn:
             topic_label=DISRUPTIONS_TOPIC_LABEL,
         )
         logfire.info("ingestion.run_consumers.start", count=3)
-        await asyncio.gather(
-            line_status_consumer.run_forever(),
-            arrivals_consumer.run_forever(),
-            disruptions_consumer.run_forever(),
-        )
+        # TaskGroup (Python 3.11+) propagates the first failure as an
+        # ExceptionGroup and cancels the surviving consumers, so the
+        # box's process supervisor (Docker restart=unless-stopped)
+        # restarts the whole bundle cleanly.
+        async with asyncio.TaskGroup() as tg:
+            tg.create_task(line_status_consumer.run_forever())
+            tg.create_task(arrivals_consumer.run_forever())
+            tg.create_task(disruptions_consumer.run_forever())
 
     raise AssertionError("run_forever loops never return")
 

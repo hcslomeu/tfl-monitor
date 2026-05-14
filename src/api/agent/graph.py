@@ -56,6 +56,7 @@ def _build_chat_model() -> Any | None:
             model=model_id,
             region_name=bedrock_region,
             temperature=0.0,
+            timeout=int(DEFAULT_MODEL_TIMEOUT_SECONDS),
         )
 
     anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
