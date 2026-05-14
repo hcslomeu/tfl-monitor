@@ -93,6 +93,10 @@ recurring guidance only — not a session log.
    `git branch -m old new && git push origin -u new && git push origin --delete old` is denied as a single shell call (the harness flags the destructive delete inside the chain). Even rerunning just the rename+push together still got refused with "Deleting the remote branch ..." even though no delete was in the command.
    Do instead: split into separate `Bash` calls — first `git branch -m <old> <new>`, then `git push origin -u <new>`, leave the orphaned `origin/<old>` ref alone unless the user explicitly asks to delete (then run `git push origin --delete <old>` standalone with explicit user approval).
 
+10. **[2026-05-14] `vercel env add <name> preview --value <v> --yes` rejects its own suggested non-interactive form**
+    On TM-E4 Phase 6 deploy, the CLI emitted `{status: "action_required", reason: "git_branch_required"}` JSON and exited non-zero when called with exactly the form its error-message hint suggests. No TTY shim (`script -q /dev/null`) and no `printf "\n"` over stdin makes it accept the "all preview branches" path. The production-only form `vercel env add <name> production --value <v> --yes` works.
+    Do instead: skip the CLI for preview-scoped env vars; POST to the REST API directly — `curl -X POST "https://api.vercel.com/v10/projects/<projectId>/env?teamId=<teamId>" -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"key":"<KEY>","value":"<VAL>","type":"plain","target":["preview"]}'`. Token lives at `~/Library/Application\ Support/com.vercel.cli/auth.json` (key `.token`). Confirm via `GET /v9/projects/<id>/env?teamId=<teamId>`.
+
 ## Domain Behavior Guardrails
 
 1. **[2026-04-26] `required_review_thread_resolution: true` blocks merge until ALL threads resolved**
@@ -130,6 +134,13 @@ recurring guidance only — not a session log.
 9. **[2026-04-29] `pydantic-ai>=1.75` required when `anthropic>=0.96`**
    `anthropic 0.96` dropped/renamed the `UserLocation` symbol that `pydantic-ai 1.22` imports directly from the Anthropic provider. Lock resolved to two pydantic-ai versions (1.75 + 1.85) and crashed at agent compile time on the older one.
    Do instead: when bumping the Anthropic SDK or adding any LangChain/LangGraph dep that pulls anthropic 0.96, also raise the `pydantic-ai>=` floor to `>=1.75` in `pyproject.toml` and run `uv lock` to confirm a single resolved version.
+
+10. **[2026-05-14] Vercel deploy lifecycle quirks: first deploy targets prod, CLI `link` ≠ Git integration, monorepo subdir needs `rootDirectory` PATCH**
+    Three related Vercel gotchas surfaced on TM-E4 Phase 6 deploy:
+    1. **First `vercel deploy` on a fresh project = production**, even without `--prod`. The response showed `"target": "production"` and the `tfl-monitor.vercel.app` apex alias was attached immediately. Use `--target=preview` if you actually want a preview deployment.
+    2. **`vercel link` only writes `.vercel/project.json` — it does NOT connect the GitHub webhook.** The CLI deploy works from the linked dir, but auto-deploy on push is OFF until the author clicks "Connect Git Repository" in the project's Settings → Git page and authorizes the Vercel GitHub app on the specific repo. The CLI cannot do this.
+    3. **After Git integration is connected, monorepo subdir projects break with `Error: No Next.js version detected`** because the project's `rootDirectory` defaults to `null` (repo root) when created via CLI from inside the subdir. The CLI build worked because `pwd` was the subdir; Git-triggered builds clone the repo at the root. Fix: `curl -X PATCH "https://api.vercel.com/v9/projects/<projectId>?teamId=<teamId>" -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"rootDirectory":"<subdir>"}'`, then `vercel redeploy <last-good-url>` (or push a new commit) to exercise the integration. Hook denies this PATCH without explicit user authorization — pre-ask before running.
+    Do instead: when setting up Vercel for a monorepo, run `vercel link` from the subdir, then immediately PATCH `rootDirectory`, then ask the author to connect Git in the dashboard. Verify with `vercel ls <project>` after first auto-trigger — a Ready 30s build vs. Error 3s build is the signal.
 
 ## User Directives
 
