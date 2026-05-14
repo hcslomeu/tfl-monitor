@@ -9,8 +9,10 @@
 [![python](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/)
 [![licence](https://img.shields.io/badge/licence-MIT-green.svg)](./LICENSE)
 
-🚧 **Under active deployment** — the codebase is feature-complete; TM-A5
-ships the AWS Bedrock + EC2 deploy.
+✅ **Live in production** — `https://tfl-monitor-api.humbertolomeu.com`
+(API + agent) and `https://tfl-monitor.humbertolomeu.com` (frontend),
+deployed on a shared AWS Lightsail box (eu-west-2) with AWS Bedrock
+(Claude 4.5) as the LLM backend. See ADR 006.
 
 - 📚 **Documentation**: <https://hcslomeu.github.io/tfl-monitor/>
 - 🏛️ **Architecture**: [`ARCHITECTURE.md`](./ARCHITECTURE.md) ·
@@ -48,7 +50,7 @@ realistic public dataset, not a CRUD demo or a notebook prototype:
 - A warehouse modelled properly in dbt with tests, documentation, and lineage
 - An AI agent that doesn't hallucinate because it's wired to real data and
   real documents
-- Production deployment for ~$6/month total, observable end-to-end
+- Production deployment for ~$5.50/month effective, observable end-to-end
 
 ## Architecture at a glance
 
@@ -216,22 +218,29 @@ near-zero spend.
 
 ## Production deployment (TM-A5)
 
-| Layer | Host | $/mo |
+| Layer | Host | $/mo (this project's share) |
 |-------|------|------|
-| Backend compute (FastAPI + ingestion + Airflow) | AWS EC2 t4g.small spot via ASG | ~3-4 |
-| LLM | AWS Bedrock (Claude Sonnet 3.5 + Haiku 3.5) | ~2-3 |
-| Postgres warehouse + Airflow metadata | Supabase free | 0 |
+| Backend compute (FastAPI + ingestion producers + consumers) | AWS Lightsail (eu-west-2, $10/mo plan), **shared with alpha-whale + portfolio-humberto** | ~3.50 |
+| LLM | AWS Bedrock (`eu.anthropic.claude-sonnet-4-5-*` + `eu.anthropic.claude-haiku-4-5-*` cross-region inference) | ~2 |
+| Postgres warehouse | Supabase free | 0 |
 | Kafka broker | Redpanda Cloud Serverless free | 0 |
 | Vector DB | Pinecone serverless free | 0 |
-| Frontend | Vercel hobby free | 0 |
-| HTTPS | DuckDNS subdomain + Caddy auto-LE | 0 |
-| Image registry | GHCR (public repo) | 0 |
+| Frontend | Vercel hobby (`tfl-monitor.humbertolomeu.com`) | 0 |
+| Reverse proxy + TLS | Shared Caddy at `/opt/caddy/` on the host + Let's Encrypt HTTP-01 | 0 |
+| DNS | Cloudflare (`humbertolomeu.com`, DNS only) | 0 |
+| Periodic jobs | Host cron in `/etc/cron.d/tfl-monitor` (replaces Airflow — see ADR 006) | 0 |
+| CI/CD | GitHub Actions → SSH rsync + `scripts/deploy.sh` (pinned host key) | 0 |
 | Observability | Logfire + LangSmith free tiers | 0 |
-| **Steady-state target** | | **~$5-8** |
+| **Steady-state effective total** | | **~$5.50** |
+
+The shared $100 AWS credit covers ~18 months across the three
+projects co-hosted on the Lightsail box.
 
 Full design and provisioning runbook in
-[`docs/deployment`](https://hcslomeu.github.io/tfl-monitor/deployment/) and
-[`.claude/specs/TM-A5-plan.md`](./.claude/specs/TM-A5-plan.md).
+[`.claude/specs/TM-A5-plan.md`](./.claude/specs/TM-A5-plan.md);
+operator quickstart in [`infra/README.md`](./infra/README.md);
+architecture decision in
+[`.claude/adrs/006-aws-deploy.md`](./.claude/adrs/006-aws-deploy.md).
 
 ## Status
 
@@ -247,7 +256,7 @@ in the [docs roadmap](https://hcslomeu.github.io/tfl-monitor/roadmap/).
 | 4 | arrivals + disruptions topics, remaining marts + exposures, `/disruptions/recent` + `/bus/{id}/punctuality`, Disruption Log view | ✅ |
 | 5 | Airflow DAGs, RAG ingestion (Docling → Pinecone) | ✅ |
 | 6 | LangGraph agent + Pydantic AI normaliser, Chat view with SSE | ✅ |
-| 7 | AWS Bedrock + EC2 deploy, Vercel deploy, demo video, live URL | 🚧 |
+| 7 | AWS Bedrock + shared Lightsail deploy, Vercel deploy, demo video, live URL | ✅ (TM-A5 done; TM-F1 demo video next) |
 
 ## Folder map
 
