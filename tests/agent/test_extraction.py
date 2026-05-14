@@ -59,3 +59,21 @@ async def test_nonsense_returns_none() -> None:
     agent = _normaliser()
     with agent.override(model=_BoomModel()):
         assert await normalise_line_id("my favourite stop") is None
+
+
+def test_model_string_picks_bedrock_when_region_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("BEDROCK_REGION", "eu-west-2")
+    monkeypatch.setenv(
+        "BEDROCK_HAIKU_MODEL_ID",
+        "eu.anthropic.claude-haiku-4-5-20251001-v1:0",
+    )
+    assert extraction._model_string() == ("bedrock:eu.anthropic.claude-haiku-4-5-20251001-v1:0")
+
+
+def test_model_string_falls_back_to_anthropic_when_region_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("BEDROCK_REGION", raising=False)
+    assert extraction._model_string() == extraction.DEFAULT_ANTHROPIC_HAIKU_MODEL

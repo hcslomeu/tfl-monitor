@@ -14,6 +14,8 @@ dependencies = [
     "aiokafka>=0.12",
     "psycopg[binary,pool]>=3.2",
     "langchain-anthropic>=0.3",
+    "langchain-aws>=0.2",
+    "boto3>=1.35",
     "langgraph>=1.0",
     "langsmith>=0.1",
     "llama-index>=0.12",
@@ -33,11 +35,14 @@ dev = [
     "ruff>=0.8",
     "mypy>=1.13",
     "bandit>=1.7",
-    "dbt-core>=1.9",
-    "dbt-postgres>=1.9",
     "openapi-spec-validator>=0.7",
     "taskipy>=1.14",
     "apache-airflow>=2.10,<3.0",
+    {include-group = "dbt"},
+]
+dbt = [
+    "dbt-core>=1.9",
+    "dbt-postgres>=1.9",
 ]
 docs = [
     "mkdocs>=1.6",
@@ -81,6 +86,8 @@ follow_untyped_imports = true
 module = [
     "langchain_anthropic",
     "langchain_anthropic.*",
+    "langchain_aws",
+    "langchain_aws.*",
     "langchain_core.*",
     "langgraph",
     "langgraph.*",
@@ -124,5 +131,7 @@ ingest-arrivals = "python -m ingestion.producers.arrivals"
 consume-arrivals = "python -m ingestion.consumers.arrivals"
 ingest-disruptions = "python -m ingestion.producers.disruptions"
 consume-disruptions = "python -m ingestion.consumers.disruptions"
+run-producers = "python -m ingestion.run_producers"
+run-consumers = "python -m ingestion.run_consumers"
 docs-serve = "mkdocs serve --config-file mkdocs.yml --dev-addr 127.0.0.1:8001"
 docs-build = "mkdocs build --config-file mkdocs.yml --strict"
