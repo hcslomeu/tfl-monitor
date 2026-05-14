@@ -1,0 +1,17 @@
+# Site block for the shared Caddy stack at `/opt/caddy/Caddyfile` on
+# the Lightsail host (eu-west-2). Merge once when adding tfl-monitor
+# as a tenant; subsequent deploys do not touch the Caddyfile.
+#
+# Requires the shared `scanner_block` snippet to be defined at the top
+# of `/opt/caddy/Caddyfile` and the `caddy_net` external docker network
+# to exist (see tfl-monitor TM-A5 plan §3 step 1 for the bootstrap).
+
+tfl-monitor-api.humbertolomeu.com {
+        import scanner_block
+        encode zstd gzip
+        reverse_proxy tfl-monitor-api-1:8000
+        log {
+                output stdout
+                format json
+        }
+}

@@ -1,0 +1,53 @@
+# Production compose stack — deployed to /opt/tfl-monitor/ on the shared
+# Lightsail box (eu-west-2). Three services: api, producers, consumers.
+# Airflow is not part of prod (see ADR 006 + .claude/specs/TM-A5-plan.md
+# decision #17). dbt runs are triggered by host cron via `docker exec api`.
+#
+# The api container joins the host-wide `caddy_net` so the shared Caddy
+# at /opt/caddy/ can reverse-proxy `tfl-monitor-api.humbertolomeu.com` to
+# `tfl-monitor-api-1:8000`.
+
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: src/api/Dockerfile
+    container_name: tfl-monitor-api-1
+    restart: unless-stopped
+    env_file: ../.env
+    networks:
+      - caddy_net
+      - tfl-monitor
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  producers:
+    build:
+      context: ..
+      dockerfile: src/ingestion/Dockerfile
+    container_name: tfl-monitor-producers-1
+    restart: unless-stopped
+    env_file: ../.env
+    command: ["uv", "run", "python", "-m", "ingestion.run_producers"]
+    networks:
+      - tfl-monitor
+
+  consumers:
+    build:
+      context: ..
+      dockerfile: src/ingestion/Dockerfile
+    container_name: tfl-monitor-consumers-1
+    restart: unless-stopped
+    env_file: ../.env
+    command: ["uv", "run", "python", "-m", "ingestion.run_consumers"]
+    networks:
+      - tfl-monitor
+
+networks:
+  caddy_net:
+    external: true
+  tfl-monitor:
+    driver: bridge
