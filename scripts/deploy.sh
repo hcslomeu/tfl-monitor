@@ -2,6 +2,15 @@
 # Idempotent redeploy on the Lightsail box. Used both by `.github/workflows/deploy.yml`
 # (over SSH) and by operators running a hot fix from the workstation. Assumes the
 # repo tree has already been rsynced into /opt/tfl-monitor/.
+#
+# Prerequisites (one-time, before the first invocation):
+#   * Cloudflare A record `tfl-monitor-api.humbertolomeu.com` -> the static IP
+#   * Shared Caddy site block for that hostname appended to /opt/caddy/Caddyfile
+#     and reloaded via `docker exec shared-caddy caddy reload …`
+#   * /opt/tfl-monitor/.env populated (chmod 600)
+# Without those, the healthcheck against the public URL below will fail. For
+# the very first deploy follow `infra/README.md` "First deploy" instead — it
+# brings up the stack without depending on this script's public healthcheck.
 
 set -euo pipefail
 

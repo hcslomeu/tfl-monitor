@@ -31,7 +31,7 @@ services:
     container_name: tfl-monitor-producers-1
     restart: unless-stopped
     env_file: ../.env
-    command: ["uv", "run", "python", "-m", "ingestion.run_producers"]
+    command: ["python", "-m", "ingestion.run_producers"]
     networks:
       - tfl-monitor
 
@@ -42,7 +42,7 @@ services:
     container_name: tfl-monitor-consumers-1
     restart: unless-stopped
     env_file: ../.env
-    command: ["uv", "run", "python", "-m", "ingestion.run_consumers"]
+    command: ["python", "-m", "ingestion.run_consumers"]
     networks:
       - tfl-monitor
 

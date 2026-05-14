@@ -9,7 +9,9 @@ LOG_TAG="tfl-monitor-cron"
 echo "[$(date -Iseconds)] $LOG_TAG dbt run start"
 
 cd /opt/tfl-monitor
-docker exec tfl-monitor-api-1 uv run dbt run \
+# `dbt` is on $PATH inside the container thanks to
+# UV_PROJECT_ENVIRONMENT=/usr/local — no `uv run` wrapping needed.
+docker exec tfl-monitor-api-1 dbt run \
   --profiles-dir /app/dbt \
   --project-dir /app/dbt
 

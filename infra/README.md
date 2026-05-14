@@ -35,6 +35,7 @@ ssh ubuntu@13.41.145.33 'sudo mkdir -p /opt/tfl-monitor && sudo chown ubuntu:ubu
 # From workstation, in this repo root:
 rsync -avz --delete \
   --exclude=.env --exclude=.env.* \
+  --exclude=cron.log --exclude='*.log' \
   --exclude=.git --exclude=node_modules --exclude=.venv --exclude=web \
   --exclude=tests --exclude=.claude \
   ./ ubuntu@13.41.145.33:/opt/tfl-monitor/
