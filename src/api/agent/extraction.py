@@ -3,10 +3,15 @@
 Maps free-text line names ("Lizzy", "Lizzie", "Elizabeth Line") to the
 canonical TfL ``line_id``. Used inside ``query_line_reliability`` when
 the LLM-supplied ``line_id`` is not already a canonical token.
+
+Backend selection mirrors :mod:`api.agent.graph`: when
+``BEDROCK_REGION`` is set the normaliser runs Haiku via Bedrock,
+otherwise it falls back to Anthropic direct for local dev.
 """
 
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 from typing import Literal, get_args
 
@@ -30,6 +35,8 @@ CanonicalLineId = Literal[
 ]
 
 _CANONICAL: frozenset[str] = frozenset(get_args(CanonicalLineId))
+DEFAULT_BEDROCK_HAIKU_MODEL = "eu.anthropic.claude-haiku-4-5-20251001-v1:0"
+DEFAULT_ANTHROPIC_HAIKU_MODEL = "anthropic:claude-3-5-haiku-latest"
 
 
 class LineId(BaseModel):
@@ -38,11 +45,18 @@ class LineId(BaseModel):
     line_id: CanonicalLineId
 
 
+def _model_string() -> str:
+    """Return the pydantic-ai model identifier for the active backend."""
+    if os.environ.get("BEDROCK_REGION"):
+        return "bedrock:" + os.environ.get("BEDROCK_HAIKU_MODEL_ID", DEFAULT_BEDROCK_HAIKU_MODEL)
+    return DEFAULT_ANTHROPIC_HAIKU_MODEL
+
+
 @lru_cache(maxsize=1)
 def _normaliser() -> Agent[None, LineId]:
     """Return the singleton Haiku-backed extraction agent."""
     return Agent(
-        "anthropic:claude-3-5-haiku-latest",
+        _model_string(),
         output_type=LineId,
         instructions=(
             "Map the user's mention of a London Underground or Elizabeth "
