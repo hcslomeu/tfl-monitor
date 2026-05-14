@@ -130,7 +130,7 @@ done (Vercel live).
 | 15 | Image arch | **amd64-only.** Box is amd64. All images already build under amd64 on the author's M-series laptop via `--platform=linux/amd64`. |
 | 16 | API + ingestion image split | **Yes** — new `src/api/Dockerfile` produces `tfl-monitor-api`. Faster API rebuilds, ~250 MB image. Ingestion image stays in `src/ingestion/Dockerfile`. |
 | 17 | Airflow | **Removed from prod.** Host cron + `docker exec` for dbt builds. Airflow stays in `docker-compose.yml` for local dev (portfolio demo + screenshots). Decision driven by RAM math: Airflow scheduler + webserver hold ~700 MB constant on a 1.9 GB shared box. See ADR 006. |
-| 18 | Periodic jobs in prod | **Host cron** in `/etc/cron.d/tfl-monitor`. Entries call `scripts/cron-dbt-run.sh` which does `docker exec tfl-monitor-api-1 uv run dbt run --profiles-dir ... --project-dir ...`. Logs to `/var/log/tfl-monitor-cron.log`. Logfire spans wrapped in the script entrypoint. |
+| 18 | Periodic jobs in prod | **Host cron** in `/etc/cron.d/tfl-monitor`. Entries call `scripts/cron-dbt-run.sh` which does `docker exec tfl-monitor-api-1 uv run dbt run --profiles-dir ... --project-dir ...`. Output redirected to `/opt/tfl-monitor/cron.log` (owned by `ubuntu`, so the cron user has write access — `/var/log/` is root-owned and would fail silently). Logfire tracing happens inside the api container's existing Logfire init; no extra wrapper at the cron level. |
 | 19 | Secrets management | **Plain `/opt/tfl-monitor/.env` file**, chmod 600, owned by `ubuntu`. Populated by the author once via scp from the workstation. No Secrets Manager / Parameter Store. |
 | 20 | RDS / RDS Proxy | **None.** Supabase remains the warehouse. Airflow metadata schema dropped (no Airflow in prod). |
 | 21 | Custom domain | **Yes — used in TM-A5.** `tfl-monitor-api.humbertolomeu.com` via Cloudflare DNS. Replaces the original "DuckDNS for v1, custom in TM-F1" plan. |
@@ -353,9 +353,26 @@ Inside the tfl-monitor repo, branch `feature/TM-A5-bedrock-swap`.
 - `extraction.py`: pydantic-ai model string driven by env. If
   `BEDROCK_REGION` set -> `"bedrock:" + os.environ["BEDROCK_HAIKU_MODEL_ID"]`,
   else `"anthropic:claude-haiku-..."`.
-- `pyproject.toml`: add `langchain-aws>=0.2` and `boto3>=1.35`.
-  Anthropic stays as transitive (LangChain still depends on it for
-  the fallback path).
+- `pyproject.toml`: add `langchain-aws>=0.2` and `boto3>=1.35` to the
+  main `[project].dependencies` list. Anthropic stays as transitive
+  (LangChain still depends on it for the fallback path).
+- `pyproject.toml`: move `dbt-core>=1.9` and `dbt-postgres>=1.9` out
+  of `[dependency-groups].dev` into a new
+  `[dependency-groups].dbt` group. The production `src/api/Dockerfile`
+  installs both `main` and `dbt` groups (`uv sync --frozen --no-dev
+  --group dbt --no-install-project`) so that `docker exec api uv run
+  dbt run` from the host cron entrypoint resolves successfully. The
+  local dev `docker-compose.yml` keeps Airflow which calls `dbt run`
+  itself; both paths converge on the same group.
+
+#### 3.1.5 API Dockerfile (`src/api/Dockerfile`)
+
+Split out of `src/ingestion/Dockerfile`. Key differences from the
+ingestion image:
+
+- `RUN apt-get update && apt-get install --no-install-recommends -y curl && rm -rf /var/lib/apt/lists/*` so the healthcheck (`HEALTHCHECK`/compose-level) can shell out to curl. `python:3.12-slim` ships without curl.
+- `uv sync --frozen --no-dev --group dbt --no-install-project` includes the dbt deps for the cron-triggered `dbt run` exec.
+- `CMD ["uv", "run", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]`. Same rationale as decision #4: container sets `PYTHONPATH=/app/src` (matches the existing ingestion Dockerfile), so module paths skip the `src.` prefix.
 
 #### 3.2 Service collapse (`src/ingestion/`)
 
@@ -389,7 +406,7 @@ services:
       dockerfile: src/api/Dockerfile
     container_name: tfl-monitor-api-1
     restart: unless-stopped
-    env_file: .env
+    env_file: ../.env
     networks:
       - caddy_net
       - tfl-monitor
@@ -405,8 +422,8 @@ services:
       dockerfile: src/ingestion/Dockerfile
     container_name: tfl-monitor-producers-1
     restart: unless-stopped
-    env_file: .env
-    command: ["uv", "run", "python", "-m", "src.ingestion.run_producers"]
+    env_file: ../.env
+    command: ["uv", "run", "python", "-m", "ingestion.run_producers"]
     networks:
       - tfl-monitor
 
@@ -416,8 +433,8 @@ services:
       dockerfile: src/ingestion/Dockerfile
     container_name: tfl-monitor-consumers-1
     restart: unless-stopped
-    env_file: .env
-    command: ["uv", "run", "python", "-m", "src.ingestion.run_consumers"]
+    env_file: ../.env
+    command: ["uv", "run", "python", "-m", "ingestion.run_consumers"]
     networks:
       - tfl-monitor
 
@@ -452,7 +469,7 @@ tfl-monitor-api.humbertolomeu.com {
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-0 */6 * * * ubuntu /opt/tfl-monitor/scripts/cron-dbt-run.sh >> /var/log/tfl-monitor-cron.log 2>&1
+0 */6 * * * ubuntu /opt/tfl-monitor/scripts/cron-dbt-run.sh >> /opt/tfl-monitor/cron.log 2>&1
 ```
 
 `scripts/cron-dbt-run.sh`:
@@ -489,12 +506,20 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
 
-      - name: Trust host
-        run: ssh-keyscan -H ${{ secrets.LIGHTSAIL_HOST }} >> ~/.ssh/known_hosts
+      - name: Trust host (pinned)
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          # Pinned host key — avoid TOFU/MITM. Capture once locally with
+          #   ssh-keyscan -H 13.41.145.33 | grep -v '^#'
+          # then paste output into GitHub secret LIGHTSAIL_HOST_KEY.
+          printf '%s\n' "${{ secrets.LIGHTSAIL_HOST_KEY }}" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
 
       - name: Rsync source
         run: |
           rsync -avz --delete \
+            --exclude=.env --exclude=.env.* \
             --exclude=.git --exclude=node_modules --exclude=.venv --exclude=web \
             --exclude=tests --exclude=.claude \
             ./ ubuntu@${{ secrets.LIGHTSAIL_HOST }}:/opt/tfl-monitor/
@@ -524,6 +549,10 @@ GitHub repo secrets (Settings -> Secrets and variables -> Actions):
 - `LIGHTSAIL_SSH_KEY` — paste the entire `alpha-whale-lightsail.pem`
   contents (same key already used by alpha-whale's CI).
 - `LIGHTSAIL_HOST` — `13.41.145.33`.
+- `LIGHTSAIL_HOST_KEY` — output of `ssh-keyscan -H 13.41.145.33 | grep -v '^#'`
+  captured once on the author's laptop. Pinning the host key
+  eliminates the TOFU/MITM window that a runtime `ssh-keyscan` in CI
+  would leave open.
 
 #### 4.5 First-deploy sequence
 
@@ -537,6 +566,7 @@ cd /opt/tfl-monitor
 
 ```bash
 rsync -avz --delete \
+  --exclude=.env --exclude=.env.* \
   --exclude=.git --exclude=node_modules --exclude=.venv --exclude=web \
   --exclude=tests --exclude=.claude \
   ~/tfl-monitor/ ubuntu@13.41.145.33:/opt/tfl-monitor/
