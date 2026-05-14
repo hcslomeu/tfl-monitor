@@ -1,0 +1,52 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'web/**'
+      - '.claude/**'
+      - 'docs/**'
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      LIGHTSAIL_HOST: ${{ secrets.LIGHTSAIL_HOST }}
+      LIGHTSAIL_HOST_KEY: ${{ secrets.LIGHTSAIL_HOST_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+
+      - name: Trust host (pinned)
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          # Pinned host key — avoid TOFU/MITM. Capture once locally with
+          #   ssh-keyscan -H 13.41.145.33 | grep -v '^#'
+          # then paste output into GitHub secret LIGHTSAIL_HOST_KEY.
+          printf '%s\n' "$LIGHTSAIL_HOST_KEY" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Rsync source
+        run: |
+          rsync -avz --delete \
+            --exclude=.env --exclude=.env.* \
+            --exclude=cron.log --exclude='*.log' \
+            --exclude=.git --exclude=node_modules --exclude=.venv --exclude=web \
+            --exclude=tests --exclude=.claude \
+            ./ "ubuntu@${LIGHTSAIL_HOST}:/opt/tfl-monitor/"
+
+      - name: Build + restart + healthcheck
+        run: |
+          ssh "ubuntu@${LIGHTSAIL_HOST}" \
+            'cd /opt/tfl-monitor && bash scripts/deploy.sh'
