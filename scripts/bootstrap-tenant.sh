@@ -17,7 +17,9 @@ if [[ ! -d "${APP_DIR}" ]]; then
 fi
 
 mkdir -p "${APP_DIR}/scripts"
-chmod +x "${APP_DIR}/scripts/"*.sh
+# Guard against `set -e` aborting when no scripts have been rsynced yet
+# (e.g. bootstrap run before deploy.sh). `find -exec` exits 0 on no-match.
+find "${APP_DIR}/scripts" -maxdepth 1 -type f -name '*.sh' -exec chmod +x {} +
 
 touch "${LOG_FILE}"
 chown ubuntu:ubuntu "${LOG_FILE}"

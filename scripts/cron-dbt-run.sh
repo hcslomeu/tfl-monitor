@@ -13,6 +13,7 @@ cd /opt/tfl-monitor
 # UV_PROJECT_ENVIRONMENT=/usr/local — no `uv run` wrapping needed.
 docker exec tfl-monitor-api-1 dbt run \
   --profiles-dir /app/dbt \
-  --project-dir /app/dbt
+  --project-dir /app/dbt \
+  --target prod
 
 echo "[$(date -Iseconds)] $LOG_TAG dbt run done"

@@ -19,3 +19,18 @@ tfl_monitor:
       dbname: "{{ env_var('POSTGRES_DB', 'postgres') }}"
       schema: analytics
       threads: 2
+    prod:
+      # Used by the production cron entry (scripts/cron-dbt-run.sh).
+      # Reads POSTGRES_* from /opt/tfl-monitor/.env on the Lightsail
+      # box — populate with the Supabase connection parts (Settings ->
+      # Database -> Connection info). No defaults so missing vars fail
+      # loudly instead of pointing at localhost.
+      type: postgres
+      host: "{{ env_var('POSTGRES_HOST') }}"
+      port: "{{ env_var('POSTGRES_PORT') | int }}"
+      user: "{{ env_var('POSTGRES_USER') }}"
+      password: "{{ env_var('POSTGRES_PASSWORD') }}"
+      dbname: "{{ env_var('POSTGRES_DB') }}"
+      schema: analytics
+      threads: 2
+      sslmode: require
