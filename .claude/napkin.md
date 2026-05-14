@@ -123,19 +123,15 @@ recurring guidance only — not a session log.
    Linear team identifier `TM` produces issues TM-2, TM-3, … and the GitHub mirror assigns matching `gh issue` numbers. `Closes TM-N` in PR body auto-transitions on merge.
    Do instead: cross-reference `gh issue list` once per session to confirm WP↔Linear mapping (TM-000=TM-2, TM-A1=TM-3, TM-B1=TM-4, TM-C1=TM-5, TM-D1=TM-6, etc.).
 
-7. **[2026-04-26] TM-000 over-delivered scope of TM-C1 and parts of TM-D1**
-   Always run a research pass against the spec's stated AC before treating a WP as net-new work. The dbt scaffold + FastAPI 501 stubs + Logfire wiring landed in TM-000.
-   Do instead: Phase 1 research first; if AC already met, propose "close as already-delivered" with a docs-only PR plus any missing safety nets (e.g. drift tests, parametrised 501 lock, prod CORS origin).
-
-8. **[2026-04-26] Synthetic IDs need full-fidelity input fields**
+7. **[2026-04-26] Synthetic IDs need full-fidelity input fields**
    `_synthetic_disruption_id` initially hashed only `category + description + affected_routes`; TfL emits multiple records sharing description but differing in `type` / `closureText`. Hash must include all disambiguating fields.
    Do instead: when designing synthetic keys against lossy upstream data, include every field that could legitimately distinguish two records. Add a regression test against a real fixture proving distinct rows produce distinct keys.
 
-9. **[2026-04-26] Python `hash()` is randomised per process — never use for persistent IDs**
+8. **[2026-04-26] Python `hash()` is randomised per process — never use for persistent IDs**
    Hash randomisation salts each interpreter run; `hash("x")` differs between invocations.
    Do instead: `hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()[:N]` for stable digests.
 
-10. **[2026-04-29] `pydantic-ai>=1.75` required when `anthropic>=0.96`**
+9. **[2026-04-29] `pydantic-ai>=1.75` required when `anthropic>=0.96`**
    `anthropic 0.96` dropped/renamed the `UserLocation` symbol that `pydantic-ai 1.22` imports directly from the Anthropic provider. Lock resolved to two pydantic-ai versions (1.75 + 1.85) and crashed at agent compile time on the older one.
    Do instead: when bumping the Anthropic SDK or adding any LangChain/LangGraph dep that pulls anthropic 0.96, also raise the `pydantic-ai>=` floor to `>=1.75` in `pyproject.toml` and run `uv lock` to confirm a single resolved version.
 
