@@ -168,4 +168,58 @@ describe("ChatPanel (TM-F2 SSE rewrite)", () => {
 			.querySelector('[data-role="assistant"]');
 		expect(assistantBubble).toHaveAttribute("data-errored", "true");
 	});
+
+	it("guards against a synchronous double-send before busy state flushes", async () => {
+		// Manual controller so the in-flight stream is still open while we
+		// fire the second click; the synchronous inFlightRef guard must
+		// reject the second send before any second fetch can be issued.
+		let controller!: ReadableStreamDefaultController<Uint8Array>;
+		const stream = new ReadableStream<Uint8Array>({
+			start(c) {
+				controller = c;
+			},
+		});
+		const fetchMock = vi.fn().mockResolvedValueOnce(streamingResponse(stream));
+		vi.stubGlobal("fetch", fetchMock);
+
+		render(<ChatPanel />);
+
+		typeIntoTextbox("hi");
+		clickSend();
+		clickSend();
+
+		controller.enqueue(
+			encoder.encode('data: {"type":"token","content":"ok"}\n\n'),
+		);
+		controller.enqueue(encoder.encode('data: {"type":"end","content":""}\n\n'));
+		controller.close();
+
+		await screen.findByText(/ok/i);
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+	});
+
+	it("aborts the in-flight stream when the panel unmounts", async () => {
+		const abortError = new DOMException("aborted", "AbortError");
+		const fetchMock = vi
+			.fn()
+			.mockImplementation((_url: string, init: RequestInit) => {
+				return new Promise((_resolve, reject) => {
+					init.signal?.addEventListener("abort", () => reject(abortError));
+				});
+			});
+		vi.stubGlobal("fetch", fetchMock);
+
+		const { unmount } = render(<ChatPanel />);
+
+		typeIntoTextbox("hi");
+		clickSend();
+
+		const init = fetchMock.mock.calls[0][1] as RequestInit;
+		const signal = init.signal as AbortSignal;
+		expect(signal.aborted).toBe(false);
+
+		unmount();
+
+		expect(signal.aborted).toBe(true);
+	});
 });

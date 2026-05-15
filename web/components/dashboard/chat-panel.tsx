@@ -42,9 +42,8 @@ export function ChatPanel({
 	quickPrompts = DEFAULT_QUICK_PROMPTS,
 }: ChatPanelProps) {
 	const threadIdRef = useRef<string | null>(null);
-	if (threadIdRef.current === null) {
-		threadIdRef.current = crypto.randomUUID();
-	}
+	const inFlightRef = useRef(false);
+	const abortRef = useRef<AbortController | null>(null);
 
 	const [value, setValue] = useState("");
 	const [messages, setMessages] = useState<RenderableMessage[]>([]);
@@ -61,9 +60,22 @@ export function ChatPanel({
 		}
 	}, [messages, toolStatus]);
 
+	useEffect(() => {
+		return () => {
+			abortRef.current?.abort();
+		};
+	}, []);
+
 	async function send() {
 		const trimmed = value.trim();
-		if (!trimmed || busy) return;
+		if (!trimmed || inFlightRef.current) return;
+		inFlightRef.current = true;
+
+		if (threadIdRef.current === null) {
+			threadIdRef.current = crypto.randomUUID();
+		}
+		const controller = new AbortController();
+		abortRef.current = controller;
 
 		setValue("");
 		setBusy(true);
@@ -78,10 +90,13 @@ export function ChatPanel({
 		try {
 			let assistantContent = "";
 			let endedWithError = false;
-			for await (const frame of streamChat({
-				thread_id: threadIdRef.current as string,
-				message: trimmed,
-			})) {
+			for await (const frame of streamChat(
+				{
+					thread_id: threadIdRef.current,
+					message: trimmed,
+				},
+				controller.signal,
+			)) {
 				if (frame.type === "token") {
 					assistantContent += frame.content;
 					setToolStatus(null);
@@ -110,6 +125,7 @@ export function ChatPanel({
 				});
 			}
 		} catch (err) {
+			if (controller.signal.aborted) return;
 			setMessages((prev) => prev.slice(0, -2));
 			if (err instanceof ApiError) {
 				setServiceError(err.detail || `HTTP ${err.status}`);
@@ -119,8 +135,12 @@ export function ChatPanel({
 				setServiceError("Unknown error");
 			}
 		} finally {
-			setBusy(false);
-			setToolStatus(null);
+			inFlightRef.current = false;
+			if (abortRef.current === controller) abortRef.current = null;
+			if (!controller.signal.aborted) {
+				setBusy(false);
+				setToolStatus(null);
+			}
 		}
 	}
 
