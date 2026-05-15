@@ -47,7 +47,7 @@
 }
 .tfl-nav-status { display: flex; align-items: center; gap: 14px; }
 .tfl-nav-summary { display: flex; align-items: center; gap: 12px; font-family: var(--font-mono); font-size: 11px; line-height: 1; }
-.tfl-nav-summary .seg { display: inline-flex; align-items: center; gap: 5px; color: var(--ink-secondary); white-space: nowrap; line-height: 1; }
+.tfl-nav-summary .seg { display: inline-flex; align-items: center; gap: 5px; color: var(--ink-secondary); white-space: nowrap; }
 .tfl-nav-summary .seg .pill { width: 7px; height: 7px; border-radius: 9999px; }
 .tfl-nav-clock {
   font-family: var(--font-mono);
