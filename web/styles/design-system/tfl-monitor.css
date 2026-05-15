@@ -63,13 +63,22 @@
   .tfl-nav-status { display: none; }
 }
 
-/* ---------- Columns: natural flex stacks --------------------------- */
+/* ---------- Columns: 2-row subgrid so row 1 (LineGrid ↔ LineDetail)
+   stretches equal across both columns, row 2 (left-bottom ↔ chat) gets
+   its natural height. --------------------------------------------- */
 .tfl-left-col,
 .tfl-right-col {
+  display: grid;
+  grid-template-rows: subgrid;
+  grid-row: 1 / -1;
+  gap: var(--space-4);
+  min-width: 0;
+  min-height: 0;
+}
+.tfl-left-bottom {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  min-width: 0;
   min-height: 0;
 }
 
@@ -138,8 +147,12 @@
 .tfl-chatbox .tfl-chatbox-send { width: 24px; height: 24px; }
 .tfl-chatbox-ta {
   width: 100%; resize: none; border: none; outline: none; background: transparent;
-  font-family: var(--font-body); font-size: var(--ui-lg); color: #EEE9DE;
+  font-family: var(--font-body); font-size: var(--ui-sm); color: #EEE9DE;
   line-height: 1.5; padding: 4px 0 10px; min-height: 44px;
+}
+@media (max-width: 768px) {
+  /* iOS Safari zooms the viewport on focus when font-size < 16px on an input */
+  .tfl-chatbox-ta { font-size: var(--ui-lg); }
 }
 .tfl-chatbox-ta:focus-visible {
   outline: 2px solid var(--accent-display);
@@ -177,8 +190,12 @@
   max-width: 80rem; margin: 0 auto;
   padding: var(--space-4) var(--space-5) var(--space-7);
   display: grid; grid-template-columns: 1fr 1fr;
+  /* Both rows size to content. Subgrid children align so row 1 (LineGrid ↔ LineDetail)
+     is the height of whichever card is taller — typically the line list. */
+  grid-template-rows: auto auto;
   gap: var(--space-4);
   align-items: stretch;
+  width: 100%;
 }
 
 .tfl-card {
@@ -186,6 +203,9 @@
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 .tfl-card-h {
   display: flex; align-items: center; justify-content: space-between;
@@ -238,7 +258,7 @@
 
 .tfl-disruption { padding: var(--space-4) var(--space-5); }
 .tfl-disruption .summary { color: var(--danger); font-weight: 500; margin-bottom: var(--space-3); font-size: var(--ui-sm); }
-.tfl-disruption p { font-size: var(--ui-md); color: var(--ink-secondary); line-height: 1.55; max-width: none; margin-bottom: var(--space-3); }
+.tfl-disruption p { font-size: var(--ui-sm); color: var(--ink-secondary); line-height: 1.55; max-width: none; margin-bottom: var(--space-3); }
 
 .tfl-stations {
   padding: var(--space-4) var(--space-5);
