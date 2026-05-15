@@ -3,6 +3,7 @@
 .tfl-app { flex: 1 1 auto; display: flex; flex-direction: column; }
 
 .tfl-nav {
+  box-sizing: border-box;
   position: sticky; top: 1rem; z-index: 50;
   display: flex; align-items: center; justify-content: space-between;
   gap: 2rem;
@@ -42,10 +43,11 @@
   font-family: var(--font-mono); font-size: 9px;
   text-transform: uppercase; letter-spacing: 0.18em;
   color: var(--ink-tertiary);
+  line-height: 1;
 }
 .tfl-nav-status { display: flex; align-items: center; gap: 14px; }
-.tfl-nav-summary { display: flex; align-items: center; gap: 12px; font-family: var(--font-mono); font-size: 11px; }
-.tfl-nav-summary .seg { display: flex; align-items: center; gap: 5px; color: var(--ink-secondary); white-space: nowrap; }
+.tfl-nav-summary { display: flex; align-items: center; gap: 12px; font-family: var(--font-mono); font-size: 11px; line-height: 1; }
+.tfl-nav-summary .seg { display: inline-flex; align-items: center; gap: 5px; color: var(--ink-secondary); white-space: nowrap; line-height: 1; }
 .tfl-nav-summary .seg .pill { width: 7px; height: 7px; border-radius: 9999px; }
 .tfl-nav-clock {
   font-family: var(--font-mono);
@@ -53,6 +55,7 @@
   color: var(--ink-tertiary);
   white-space: nowrap;
   flex-shrink: 0;
+  line-height: 1;
 }
 
 @media (max-width: 720px) {
