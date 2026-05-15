@@ -32,32 +32,34 @@ export function TopNav({
 				</a>
 			</div>
 			<div className="tfl-nav-side tfl-nav-right">
-				<div className="tfl-nav-sep">
-					<span className="tfl-nav-sep-line" />
-					<span className="tfl-nav-sep-label">Status</span>
+				<div className="tfl-nav-status">
+					<div className="tfl-nav-sep">
+						<span className="tfl-nav-sep-line" />
+						<span className="tfl-nav-sep-label">Status</span>
+					</div>
+					<div className="tfl-nav-summary">
+						<span className="seg">
+							<span className="pill" style={{ background: "var(--success)" }} />
+							{summary.good} good
+						</span>
+						<span className="seg">
+							<span className="pill" style={{ background: "var(--warning)" }} />
+							{summary.minor} minor
+						</span>
+						<span className="seg">
+							<span className="pill" style={{ background: "var(--danger)" }} />
+							{summary.severe} severe
+						</span>
+						<span className="seg">
+							<span
+								className="pill"
+								style={{ background: "var(--ink-primary)" }}
+							/>
+							{summary.suspended} suspended
+						</span>
+					</div>
 				</div>
-				<div className="tfl-nav-summary">
-					<span className="seg">
-						<span className="pill" style={{ background: "var(--success)" }} />
-						{summary.good} good
-					</span>
-					<span className="seg">
-						<span className="pill" style={{ background: "var(--warning)" }} />
-						{summary.minor} minor
-					</span>
-					<span className="seg">
-						<span className="pill" style={{ background: "var(--danger)" }} />
-						{summary.severe} severe
-					</span>
-					<span className="seg">
-						<span
-							className="pill"
-							style={{ background: "var(--ink-primary)" }}
-						/>
-						{summary.suspended} suspended
-					</span>
-					<span className="clock">{clockLabel}</span>
-				</div>
+				<span className="tfl-nav-clock">{clockLabel}</span>
 			</div>
 		</nav>
 	);

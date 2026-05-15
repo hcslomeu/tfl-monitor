@@ -12,3 +12,110 @@
 		var(--font-wordmark-local), var(--font-body-local), -apple-system,
 		sans-serif;
 }
+
+/* ---------- Sticky-footer shell -------------------------------------- */
+.hl-shell {
+	min-height: 100vh;
+	display: flex;
+	flex-direction: column;
+}
+.hl-shell-main {
+	flex: 1 1 auto;
+	display: flex;
+	flex-direction: column;
+}
+
+/* ---------- Footer (verbatim from portfolio app/portfolio.css) -------- */
+.hl-footer {
+	background: var(--footer-canvas);
+	color: var(--footer-ink);
+}
+.hl-footer-inner {
+	max-width: 64rem;
+	margin: 0 auto;
+	padding: var(--space-5) var(--space-6);
+	display: flex;
+	flex-direction: column;
+}
+.hl-footer-foot {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-4);
+	border-top: 1px solid var(--border-footer);
+	padding-top: var(--space-5);
+}
+.hl-footer-foot .meta {
+	color: var(--footer-muted);
+	font-size: 12px;
+}
+
+.hl-footer-mark {
+	display: inline-flex;
+	align-items: center;
+	gap: 10px;
+	text-decoration: none;
+	color: inherit;
+	transition: opacity var(--dur-fast) var(--ease-default);
+}
+.hl-footer-mark:hover {
+	opacity: 0.82;
+}
+.hl-footer-mark-logo {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 40px;
+	height: 40px;
+	background: var(--canvas);
+	border-radius: 9999px;
+	padding: 1px;
+	flex-shrink: 0;
+}
+.hl-footer-mark-logo img {
+	width: 100%;
+	height: 100%;
+	object-fit: contain;
+	display: block;
+}
+.hl-footer-mark-tagline {
+	font-family: var(--font-mono);
+	font-size: 11px;
+	color: var(--footer-muted);
+	letter-spacing: 0.02em;
+	line-height: 1.3;
+}
+
+.hl-footer-socials {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	background: var(--surface-pure);
+	border-radius: 9999px;
+	padding: 2px;
+}
+.hl-footer-socials a {
+	width: 30px;
+	height: 30px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 9999px;
+	color: var(--ink-secondary);
+	background: transparent;
+	transition:
+		color var(--dur-fast),
+		background var(--dur-fast);
+}
+.hl-footer-socials a:hover {
+	color: var(--accent-primary);
+	background: color-mix(in oklch, var(--accent-primary) 8%, transparent);
+}
+
+@media (max-width: 980px) {
+	.hl-footer-foot {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: var(--space-3);
+	}
+}

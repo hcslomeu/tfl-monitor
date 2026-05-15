@@ -199,6 +199,31 @@ If Codex detects any of the following, escalate to the author before approving:
 
 ---
 
+## Iconography
+
+Brand icons (Github, LinkedIn, X, Upwork) MUST come from local
+`web/components/icons.tsx`. Never import them from `lucide-react`,
+`react-icons`, `simple-icons-react`, or any other library. Stroke-only,
+`currentColor`, 1.5px stroke, `viewBox="0 0 24 24"`. No filled silhouettes.
+The Biome `noRestrictedImports` rule in `web/biome.json` enforces this for
+the listed packages; reviewers are responsible for catching any other
+brand-icon library that slips through (Biome only does exact module-specifier
+match — no wildcard/pattern support).
+
+**Upwork exception**: the Upwork mark is the official wordmark, which is
+inherently a filled silhouette and uses its own native viewBox. It ships
+in `icons.tsx` with a `monochrome` mode that paints with `currentColor`.
+Treat it as an exception to the stroke-only rule — do not rewrite it as
+strokes. Apply the strict rule to every other brand glyph.
+
+The Retrieverworks wordmark in the footer is Humberto's maker's mark and
+ships on every product he builds — do NOT swap it for this product's own
+logo. The footer is distributed by copy-paste from
+`humbertolomeu-portfolio` per the design-system rule (no package, no
+submodule, no shared workspace).
+
+---
+
 ## Cross-references
 
 - Claude Code instructions: [`CLAUDE.md`](./CLAUDE.md) — must stay in sync with this file

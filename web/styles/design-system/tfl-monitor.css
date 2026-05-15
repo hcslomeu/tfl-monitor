@@ -1,6 +1,6 @@
 /* TFL Monitor surface — dense product, builds on tokens.css */
 
-.tfl-app { min-height: 100vh; }
+.tfl-app { flex: 1 1 auto; display: flex; flex-direction: column; }
 
 .tfl-nav {
   position: sticky; top: 1rem; z-index: 50;
@@ -25,6 +25,8 @@
   letter-spacing: -0.03em;
   color: var(--ink-primary);
   line-height: 1;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .tfl-nav-divider { width: 1px; height: 16px; background: var(--border-strong); }
 .tfl-nav-iconbtn {
@@ -41,10 +43,21 @@
   text-transform: uppercase; letter-spacing: 0.18em;
   color: var(--ink-tertiary);
 }
+.tfl-nav-status { display: flex; align-items: center; gap: 14px; }
 .tfl-nav-summary { display: flex; align-items: center; gap: 12px; font-family: var(--font-mono); font-size: 11px; }
 .tfl-nav-summary .seg { display: flex; align-items: center; gap: 5px; color: var(--ink-secondary); white-space: nowrap; }
 .tfl-nav-summary .seg .pill { width: 7px; height: 7px; border-radius: 9999px; }
-.tfl-nav-summary .clock { color: var(--ink-tertiary); }
+.tfl-nav-clock {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-tertiary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+@media (max-width: 720px) {
+  .tfl-nav-status { display: none; }
+}
 
 /* ---------- Columns: natural flex stacks --------------------------- */
 .tfl-left-col,
