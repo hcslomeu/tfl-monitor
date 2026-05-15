@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Inter, JetBrains_Mono } from "next/font/google";
 import localFont from "next/font/local";
 
+import { Footer } from "@/components/layout/footer";
 import "./globals.css";
 
 const editorial = localFont({
@@ -79,7 +80,12 @@ export default function RootLayout({
 
 	return (
 		<html lang="en" className={fontVariables}>
-			<body className="density-product">{children}</body>
+			<body className="density-product">
+				<div className="hl-shell">
+					<div className="hl-shell-main">{children}</div>
+					<Footer />
+				</div>
+			</body>
 		</html>
 	);
 }

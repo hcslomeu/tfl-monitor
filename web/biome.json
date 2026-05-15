@@ -16,7 +16,19 @@
 	"linter": {
 		"enabled": true,
 		"rules": {
-			"recommended": true
+			"recommended": true,
+			"style": {
+				"noRestrictedImports": {
+					"level": "error",
+					"options": {
+						"paths": {
+							"lucide-react": "Brand icons (Github, Linkedin, Twitter/X) come from @/components/icons (design-system rule).",
+							"react-icons": "Brand icons come from @/components/icons only.",
+							"simple-icons": "Brand icons come from @/components/icons only."
+						}
+					}
+				}
+			}
 		}
 	},
 	"javascript": {
