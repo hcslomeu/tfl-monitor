@@ -24,7 +24,12 @@
 						"paths": {
 							"lucide-react": "Brand icons (Github, Linkedin, Twitter/X) come from @/components/icons (design-system rule).",
 							"react-icons": "Brand icons come from @/components/icons only.",
-							"simple-icons": "Brand icons come from @/components/icons only."
+							"react-icons/fa": "Brand icons come from @/components/icons only.",
+							"react-icons/fa6": "Brand icons come from @/components/icons only.",
+							"react-icons/si": "Brand icons come from @/components/icons only.",
+							"react-icons/ai": "Brand icons come from @/components/icons only.",
+							"simple-icons": "Brand icons come from @/components/icons only.",
+							"simple-icons-react": "Brand icons come from @/components/icons only."
 						}
 					}
 				}

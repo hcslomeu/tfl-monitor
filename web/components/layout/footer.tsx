@@ -53,7 +53,7 @@ export function Footer() {
 								aria-label={label}
 								href={href}
 								target="_blank"
-								rel="noreferrer"
+								rel="noopener noreferrer"
 							>
 								<Icon size={16} />
 							</a>

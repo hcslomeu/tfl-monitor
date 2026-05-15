@@ -1,6 +1,6 @@
 /* TFL Monitor surface — dense product, builds on tokens.css */
 
-.tfl-app { min-height: 100vh; }
+.tfl-app { flex: 1 1 auto; display: flex; flex-direction: column; }
 
 .tfl-nav {
   position: sticky; top: 1rem; z-index: 50;

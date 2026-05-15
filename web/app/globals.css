@@ -27,7 +27,7 @@
 
 /* ---------- Footer (verbatim from portfolio app/portfolio.css) -------- */
 .hl-footer {
-	background: #121212;
+	background: var(--footer-canvas);
 	color: var(--footer-ink);
 }
 .hl-footer-inner {
@@ -90,7 +90,7 @@
 	display: flex;
 	align-items: center;
 	gap: 2px;
-	background: #fff;
+	background: var(--surface-pure);
 	border-radius: 9999px;
 	padding: 2px;
 }
@@ -109,7 +109,7 @@
 }
 .hl-footer-socials a:hover {
 	color: var(--accent-primary);
-	background: rgba(189, 89, 52, 0.08);
+	background: color-mix(in oklch, var(--accent-primary) 8%, transparent);
 }
 
 @media (max-width: 980px) {
