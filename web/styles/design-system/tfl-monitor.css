@@ -131,6 +131,32 @@
 .tfl-msg-bot  .tfl-msg-bubble { background: transparent; padding: 0; max-width: none; color: var(--ink-secondary); }
 .tfl-msg-bot  .tfl-msg-bubble code,
 .tfl-msg-bot  .tfl-msg-bubble .mono { background: var(--canvas-elevated); }
+.tfl-msg[data-errored="true"] .tfl-msg-bubble {
+  border: 1px solid color-mix(in oklab, #c0392b 50%, transparent);
+  background: color-mix(in oklab, #c0392b 8%, var(--canvas-elevated));
+}
+.tfl-chat-alert {
+  margin: 8px 14px 4px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in oklab, #c0392b 35%, transparent);
+  background: color-mix(in oklab, #c0392b 10%, var(--surface-warm));
+  color: var(--ink-primary);
+  font-family: var(--font-body);
+  font-size: var(--ui-xs);
+}
+.tfl-chat-alert strong { font-weight: 600; }
+.tfl-chat-tool-status {
+  margin: 4px 0 0;
+  font-family: var(--font-mono);
+  font-size: var(--ui-xs);
+  color: var(--ink-tertiary);
+}
+.tfl-msg-skel {
+  display: inline-block;
+  letter-spacing: 0.1em;
+  color: var(--ink-tertiary);
+}
 
 /* ---------- Composer (dark — separate card) -------------------- */
 .tfl-chatbox {

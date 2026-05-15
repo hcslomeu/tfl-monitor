@@ -51,8 +51,3 @@ export interface NewsItem {
 	title: string;
 	body: string;
 }
-
-export interface ChatMessage {
-	who: "user" | "bot";
-	text: string;
-}
