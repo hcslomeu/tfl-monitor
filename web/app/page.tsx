@@ -85,8 +85,10 @@ export default function HomePage() {
 						selected={selectedCode ?? undefined}
 						onSelect={setSelectedCode}
 					/>
-					<BusBanner buses={MOCK_BUSES} />
-					<NewsReports items={MOCK_NEWS} />
+					<div className="tfl-left-bottom">
+						<BusBanner buses={MOCK_BUSES} />
+						<NewsReports items={MOCK_NEWS} />
+					</div>
 				</div>
 				<div className="tfl-right-col">
 					{selectedLine ? (

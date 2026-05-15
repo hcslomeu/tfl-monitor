@@ -22,7 +22,7 @@
 .tfl-brand {
   font-family: var(--font-wordmark);
   font-weight: 900;
-  font-size: 15px;
+  font-size: var(--ui-md);
   letter-spacing: -0.03em;
   color: var(--ink-primary);
   line-height: 1;
@@ -40,18 +40,19 @@
 .tfl-nav-sep { display: flex; align-items: center; gap: 8px; }
 .tfl-nav-sep-line { width: 14px; height: 1px; background: var(--border-strong); }
 .tfl-nav-sep-label {
+  /* 9px is sub-token (below --ui-xs); mirrored verbatim from portfolio .hl-nav-sep-label */
   font-family: var(--font-mono); font-size: 9px;
   text-transform: uppercase; letter-spacing: 0.18em;
   color: var(--ink-tertiary);
   line-height: 1;
 }
 .tfl-nav-status { display: flex; align-items: center; gap: 14px; }
-.tfl-nav-summary { display: flex; align-items: center; gap: 12px; font-family: var(--font-mono); font-size: 11px; line-height: 1; }
+.tfl-nav-summary { display: flex; align-items: center; gap: 12px; font-family: var(--font-mono); font-size: var(--ui-xs); line-height: 1; }
 .tfl-nav-summary .seg { display: inline-flex; align-items: center; gap: 5px; color: var(--ink-secondary); white-space: nowrap; }
 .tfl-nav-summary .seg .pill { width: 7px; height: 7px; border-radius: 9999px; }
 .tfl-nav-clock {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--ui-xs);
   color: var(--ink-tertiary);
   white-space: nowrap;
   flex-shrink: 0;
@@ -62,13 +63,22 @@
   .tfl-nav-status { display: none; }
 }
 
-/* ---------- Columns: natural flex stacks --------------------------- */
+/* ---------- Columns: 2-row subgrid so row 1 (LineGrid ↔ LineDetail)
+   stretches equal across both columns, row 2 (left-bottom ↔ chat) gets
+   its natural height. --------------------------------------------- */
 .tfl-left-col,
 .tfl-right-col {
+  display: grid;
+  grid-template-rows: subgrid;
+  grid-row: 1 / -1;
+  gap: var(--space-4);
+  min-width: 0;
+  min-height: 0;
+}
+.tfl-left-bottom {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  min-width: 0;
   min-height: 0;
 }
 
@@ -90,8 +100,8 @@
   padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--border-default);
 }
-.tfl-chat-card-h h4 { font-family: var(--font-body); font-size: 13px; font-weight: 600; margin: 0; color: var(--ink-primary); }
-.tfl-chat-card-h .meta { font-family: var(--font-mono); font-size: 10px; color: var(--ink-tertiary); }
+.tfl-chat-card-h h4 { font-family: var(--font-body); font-size: var(--ui-sm); font-weight: 600; margin: 0; color: var(--ink-primary); }
+.tfl-chat-card-h .meta { font-family: var(--font-mono); font-size: var(--ui-xs); color: var(--ink-tertiary); }
 .tfl-chat-transcript {
   padding: var(--space-4);
   flex: 1 1 0;
@@ -113,7 +123,7 @@
   clip-path: polygon(50% 0, 60% 40%, 100% 50%, 60% 60%, 50% 100%, 40% 60%, 0 50%, 40% 40%);
 }
 .tfl-msg-bubble {
-  font-family: var(--font-body); font-size: 13.5px; line-height: 1.5;
+  font-family: var(--font-body); font-size: var(--ui-sm); line-height: 1.5;
   padding: 8px 12px; border-radius: 12px; max-width: 78%;
   color: var(--ink-primary);
 }
@@ -130,15 +140,19 @@
   border: 1px solid #2A2724;
   box-shadow: var(--shadow-card-hover);
 }
-.tfl-chatbox .tfl-chatbox-ta { min-height: 22px; padding: 2px 0 4px; font-size: 13px; }
+.tfl-chatbox .tfl-chatbox-ta { min-height: 22px; padding: 2px 0 4px; }
 .tfl-chatbox .tfl-chatbox-row { gap: 6px; }
-.tfl-chatbox .tfl-chip-sm { padding: 2px 8px; font-size: 10.5px; }
+.tfl-chatbox .tfl-chip-sm { padding: 2px 8px; font-size: var(--ui-xs); }
 .tfl-chatbox .tfl-chat-iconbtn { width: 22px; height: 22px; }
 .tfl-chatbox .tfl-chatbox-send { width: 24px; height: 24px; }
 .tfl-chatbox-ta {
   width: 100%; resize: none; border: none; outline: none; background: transparent;
-  font-family: var(--font-body); font-size: 14px; color: #EEE9DE;
+  font-family: var(--font-body); font-size: var(--ui-sm); color: #EEE9DE;
   line-height: 1.5; padding: 4px 0 10px; min-height: 44px;
+}
+@media (max-width: 768px) {
+  /* iOS Safari zooms the viewport on focus when font-size < 16px on an input */
+  .tfl-chatbox-ta { font-size: var(--ui-lg); }
 }
 .tfl-chatbox-ta:focus-visible {
   outline: 2px solid var(--accent-display);
@@ -150,7 +164,7 @@
 .tfl-chatbox-l { display: flex; gap: 6px; flex-wrap: wrap; }
 .tfl-chatbox-r { display: flex; gap: 6px; align-items: center; }
 .tfl-chip-sm {
-  font-family: var(--font-body); font-size: 11px; padding: 4px 10px;
+  font-family: var(--font-body); font-size: var(--ui-xs); padding: 4px 10px;
   border-radius: 9999px; background: transparent; color: #EEE9DE;
   border: 1px solid rgba(238,233,222,0.2); cursor: pointer; white-space: nowrap;
   transition: background var(--dur-fast), border-color var(--dur-fast), color var(--dur-fast);
@@ -176,8 +190,12 @@
   max-width: 80rem; margin: 0 auto;
   padding: var(--space-4) var(--space-5) var(--space-7);
   display: grid; grid-template-columns: 1fr 1fr;
+  /* Both rows size to content. Subgrid children align so row 1 (LineGrid ↔ LineDetail)
+     is the height of whichever card is taller — typically the line list. */
+  grid-template-rows: auto auto;
   gap: var(--space-4);
   align-items: stretch;
+  width: 100%;
 }
 
 .tfl-card {
@@ -185,14 +203,17 @@
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 .tfl-card-h {
   display: flex; align-items: center; justify-content: space-between;
   padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--border-default);
 }
-.tfl-card-h h4 { font-family: var(--font-body); font-size: 13px; font-weight: 600; margin: 0; color: var(--ink-primary); }
-.tfl-card-h .meta { font-family: var(--font-mono); font-size: 10px; color: var(--ink-tertiary); }
+.tfl-card-h h4 { font-family: var(--font-body); font-size: var(--ui-sm); font-weight: 600; margin: 0; color: var(--ink-primary); }
+.tfl-card-h .meta { font-family: var(--font-mono); font-size: var(--ui-xs); color: var(--ink-tertiary); }
 
 /* ---------- Line list ---------------------------------------------- */
 .tfl-line-list { display: flex; flex-direction: column; }
@@ -208,10 +229,10 @@
 .tfl-line:last-child { border-bottom: none; }
 .tfl-line:hover, .tfl-line.active { background: var(--canvas-elevated); }
 .tfl-line-stripe { width: 4px; height: 22px; border-radius: 2px; }
-.tfl-line-name { font-family: var(--font-body); font-weight: 500; font-size: 14px; color: var(--ink-primary); line-height: 1.2; }
-.tfl-line-updated { font-family: var(--font-mono); font-size: 10px; color: var(--ink-tertiary); }
+.tfl-line-name { font-family: var(--font-body); font-weight: 500; font-size: var(--ui-sm); color: var(--ink-primary); line-height: 1.2; }
+.tfl-line-updated { font-family: var(--font-mono); font-size: var(--ui-xs); color: var(--ink-tertiary); }
 .tfl-line-status {
-  font-family: var(--font-body); font-size: 11px; font-weight: 500;
+  font-family: var(--font-body); font-size: var(--ui-xs); font-weight: 500;
   padding: 3px 9px; border-radius: 9999px;
   display: inline-flex; align-items: center; gap: 5px;
 }
@@ -233,31 +254,31 @@
 }
 .tfl-detail-stripe { width: 6px; align-self: stretch; border-radius: 3px; }
 .tfl-detail-name { font-family: var(--font-display); font-size: var(--step-2); letter-spacing: -0.02em; line-height: 1.05; margin: 0; color: var(--ink-primary); font-weight: 500; }
-.tfl-detail-sub { font-family: var(--font-mono); font-size: 11px; color: var(--ink-tertiary); margin-top: 6px; }
+.tfl-detail-sub { font-family: var(--font-mono); font-size: var(--ui-xs); color: var(--ink-tertiary); margin-top: 6px; }
 
 .tfl-disruption { padding: var(--space-4) var(--space-5); }
-.tfl-disruption .summary { color: var(--danger); font-weight: 500; margin-bottom: var(--space-3); font-size: 14px; }
-.tfl-disruption p { font-size: 14px; color: var(--ink-secondary); line-height: 1.55; max-width: none; margin-bottom: var(--space-3); }
+.tfl-disruption .summary { color: var(--danger); font-weight: 500; margin-bottom: var(--space-3); font-size: var(--ui-sm); }
+.tfl-disruption p { font-size: var(--ui-sm); color: var(--ink-secondary); line-height: 1.55; max-width: none; margin-bottom: var(--space-3); }
 
 .tfl-stations {
   padding: var(--space-4) var(--space-5);
   border-top: 1px solid var(--border-default);
 }
-.tfl-stations h5 { font-family: var(--font-mono); font-size: 11px; color: var(--ink-tertiary); margin: 0 0 var(--space-3); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 500; }
+.tfl-stations h5 { font-family: var(--font-mono); font-size: var(--ui-xs); color: var(--ink-tertiary); margin: 0 0 var(--space-3); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 500; }
 .tfl-stations ul { list-style: none; padding: 0; margin: 0; }
 .tfl-stations li {
   display: flex; align-items: center; gap: 10px;
-  padding: 6px 0; font-family: var(--font-body); font-size: 13px;
+  padding: 6px 0; font-family: var(--font-body); font-size: var(--ui-sm);
   color: var(--ink-primary); border-bottom: 1px dashed var(--border-default);
 }
 .tfl-stations li:last-child { border-bottom: none; }
-.tfl-stations li .code { font-family: var(--font-mono); font-size: 10px; color: var(--ink-tertiary); margin-left: auto; }
+.tfl-stations li .code { font-family: var(--font-mono); font-size: var(--ui-xs); color: var(--ink-tertiary); margin-left: auto; }
 
 .tfl-detail-foot {
   padding: var(--space-3) var(--space-5);
   border-top: 1px solid var(--border-default);
   display: flex; justify-content: space-between;
-  font-family: var(--font-mono); font-size: 11px; color: var(--ink-tertiary);
+  font-family: var(--font-mono); font-size: var(--ui-xs); color: var(--ink-tertiary);
 }
 
 /* ---------- Bus banner (now inside left column, narrower) ---------- */
@@ -273,8 +294,8 @@
 }
 .tfl-bus-cell:nth-child(2n) { border-right: none; }
 .tfl-bus-cell:nth-last-child(-n+2) { border-bottom: none; }
-.tfl-bus-route { font-family: var(--font-mono); font-size: 14px; font-weight: 500; color: var(--ink-primary); }
-.tfl-bus-text  { font-family: var(--font-body); font-size: 12px; color: var(--ink-secondary); line-height: 1.4; }
+.tfl-bus-route { font-family: var(--font-mono); font-size: var(--ui-sm); font-weight: 500; color: var(--ink-primary); }
+.tfl-bus-text  { font-family: var(--font-body); font-size: var(--ui-sm); color: var(--ink-secondary); line-height: 1.4; }
 
 /* ---------- News & reports ---------------------------------------- */
 .tfl-news { display: flex; flex-direction: column; }
@@ -289,10 +310,10 @@
 }
 .tfl-news-list li:last-child { border-bottom: none; }
 .tfl-news-list li.is-empty { color: var(--ink-tertiary); }
-.tfl-news-placeholder { font-family: var(--font-mono); font-size: 11px; color: var(--ink-tertiary); padding-top: 2px; }
-.tfl-news-time { font-family: var(--font-mono); font-size: 11px; color: var(--ink-tertiary); padding-top: 2px; }
-.tfl-news-title { font-family: var(--font-body); font-size: 13px; font-weight: 500; color: var(--ink-primary); margin-bottom: 2px; }
-.tfl-news-body { font-family: var(--font-body); font-size: 12px; color: var(--ink-secondary); line-height: 1.45; }
+.tfl-news-placeholder { font-family: var(--font-mono); font-size: var(--ui-xs); color: var(--ink-tertiary); padding-top: 2px; }
+.tfl-news-time { font-family: var(--font-mono); font-size: var(--ui-xs); color: var(--ink-tertiary); padding-top: 2px; }
+.tfl-news-title { font-family: var(--font-body); font-size: var(--ui-sm); font-weight: 500; color: var(--ink-primary); margin-bottom: 2px; }
+.tfl-news-body { font-family: var(--font-body); font-size: var(--ui-sm); color: var(--ink-secondary); line-height: 1.45; }
 
 @media (max-width: 880px) {
   .tfl-grid { grid-template-columns: 1fr; }

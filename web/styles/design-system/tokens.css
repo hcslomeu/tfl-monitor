@@ -48,6 +48,15 @@
   --step-5:  clamp(3.052rem, 2.66rem + 1.86vw, 4.74rem);    /* hero h1 */
   --step-6:  clamp(3.815rem, 3.25rem + 2.7vw, 6.32rem);     /* display */
 
+  /* ---------- Type: fixed UI scale (chrome, dense product, meta) -----
+     Stable across viewports so UI density does not drift. Pixels, not
+     rem. Mirrors humbertolomeu-portfolio exactly. */
+  --ui-xs: 11px;  /* meta, eyebrows, mono tags, timestamps, sep labels */
+  --ui-sm: 13px;  /* nav links, dense UI labels, code, button text, table cells */
+  --ui-md: 15px;  /* body prose inside cards, bio paragraphs, project blurbs */
+  --ui-lg: 16px;  /* form inputs (iOS-safe, prevents zoom-on-focus), large body */
+  --ui-xl: 18px;  /* lead paragraphs in chrome contexts (rare) */
+
   /* ---------- Type: tracking + leading ------------------------------- */
   --track-display: -0.02em;
   --track-body:    -0.005em;
