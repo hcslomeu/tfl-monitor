@@ -114,10 +114,12 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "https://tfl-monitor.vercel.app",
+        "https://tfl-monitor.humbertolomeu.com",
     ],
+    allow_origin_regex=r"^https://tfl-monitor-[a-z0-9-]+\.vercel\.app$",
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Accept", "Content-Type", "Authorization"],
 )
 
 

@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
+import { streamChat } from "@/lib/api/chat-stream";
+import { ApiError } from "@/lib/api-client";
 import { AUDIO_PATH, Icon, SEND_PATH } from "./icons";
-import type { ChatMessage } from "./types";
 
 export interface QuickPrompt {
 	label: string;
@@ -11,14 +12,17 @@ export interface QuickPrompt {
 }
 
 export interface ChatPanelProps {
-	initialMessages?: ChatMessage[];
 	placeholder?: string;
 	quickPrompts?: QuickPrompt[];
-	onSend?: (message: string) => void;
 }
 
-interface RenderableMessage extends ChatMessage {
+type Role = "user" | "assistant";
+
+interface RenderableMessage {
 	id: string;
+	role: Role;
+	content: string;
+	errored?: boolean;
 }
 
 const DEFAULT_PLACEHOLDER =
@@ -34,20 +38,18 @@ const DEFAULT_QUICK_PROMPTS: QuickPrompt[] = [
 ];
 
 export function ChatPanel({
-	initialMessages = [],
 	placeholder = DEFAULT_PLACEHOLDER,
 	quickPrompts = DEFAULT_QUICK_PROMPTS,
-	onSend,
 }: ChatPanelProps) {
-	const sessionId = useId();
+	const threadIdRef = useRef<string | null>(null);
+	const inFlightRef = useRef(false);
+	const abortRef = useRef<AbortController | null>(null);
+
 	const [value, setValue] = useState("");
-	const [messages, setMessages] = useState<RenderableMessage[]>(() =>
-		initialMessages.map((message, index) => ({
-			...message,
-			id: `${sessionId}-seed-${index}`,
-		})),
-	);
-	const nextLocalId = useRef(0);
+	const [messages, setMessages] = useState<RenderableMessage[]>([]);
+	const [busy, setBusy] = useState(false);
+	const [toolStatus, setToolStatus] = useState<string | null>(null);
+	const [serviceError, setServiceError] = useState<string | null>(null);
 	const transcriptRef = useRef<HTMLDivElement | null>(null);
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: scroll-to-bottom must re-run whenever the transcript grows, even though the effect body only touches the ref.
@@ -56,16 +58,93 @@ export function ChatPanel({
 		if (node) {
 			node.scrollTop = node.scrollHeight;
 		}
-	}, [messages]);
+	}, [messages, toolStatus]);
 
-	const send = () => {
+	useEffect(() => {
+		return () => {
+			abortRef.current?.abort();
+		};
+	}, []);
+
+	async function send() {
 		const trimmed = value.trim();
-		if (!trimmed) return;
-		const id = `${sessionId}-local-${nextLocalId.current++}`;
-		setMessages((current) => [...current, { id, who: "user", text: trimmed }]);
+		if (!trimmed || inFlightRef.current) return;
+		inFlightRef.current = true;
+
+		if (threadIdRef.current === null) {
+			threadIdRef.current = crypto.randomUUID();
+		}
+		const controller = new AbortController();
+		abortRef.current = controller;
+
 		setValue("");
-		onSend?.(trimmed);
-	};
+		setBusy(true);
+		setServiceError(null);
+		setToolStatus(null);
+		setMessages((prev) => [
+			...prev,
+			{ id: crypto.randomUUID(), role: "user", content: trimmed },
+			{ id: crypto.randomUUID(), role: "assistant", content: "" },
+		]);
+
+		try {
+			let assistantContent = "";
+			let endedWithError = false;
+			for await (const frame of streamChat(
+				{
+					thread_id: threadIdRef.current,
+					message: trimmed,
+				},
+				controller.signal,
+			)) {
+				if (frame.type === "token") {
+					assistantContent += frame.content;
+					setToolStatus(null);
+					setMessages((prev) => {
+						const next = [...prev];
+						const last = next[next.length - 1];
+						next[next.length - 1] = { ...last, content: assistantContent };
+						return next;
+					});
+				} else if (frame.type === "tool") {
+					setToolStatus(`Using tool: ${frame.content}…`);
+				} else if (frame.type === "end") {
+					endedWithError = frame.content === "error";
+				}
+			}
+			if (endedWithError) {
+				setMessages((prev) => {
+					const next = [...prev];
+					const last = next[next.length - 1];
+					next[next.length - 1] = {
+						...last,
+						content: assistantContent || "Stream interrupted.",
+						errored: true,
+					};
+					return next;
+				});
+			}
+		} catch (err) {
+			if (controller.signal.aborted) return;
+			setMessages((prev) => prev.slice(0, -2));
+			if (err instanceof ApiError) {
+				setServiceError(err.detail || `HTTP ${err.status}`);
+			} else if (err instanceof Error && err.message) {
+				setServiceError(err.message);
+			} else {
+				setServiceError("Unknown error");
+			}
+		} finally {
+			inFlightRef.current = false;
+			if (abortRef.current === controller) abortRef.current = null;
+			if (!controller.signal.aborted) {
+				setBusy(false);
+				setToolStatus(null);
+			}
+		}
+	}
+
+	const canSend = !busy && value.trim().length > 0;
 
 	return (
 		<div className="tfl-chat-stack">
@@ -74,19 +153,70 @@ export function ChatPanel({
 					<h4>Ask the Monitor</h4>
 					<span className="meta">GPT · context · TfL</span>
 				</div>
+				{serviceError ? (
+					<div role="alert" className="tfl-chat-alert">
+						<strong>Agent unavailable.</strong> {serviceError}
+					</div>
+				) : null}
 				<div
 					className="tfl-chat-transcript"
 					ref={transcriptRef}
 					aria-live="polite"
 				>
-					{messages.map((message) => (
-						<div key={message.id} className={`tfl-msg tfl-msg-${message.who}`}>
-							{message.who === "bot" && (
-								<span className="tfl-msg-avatar" aria-hidden />
-							)}
-							<span className="tfl-msg-bubble">{message.text}</span>
-						</div>
-					))}
+					{messages.length > 0 ? (
+						<ul
+							aria-label="Conversation"
+							data-testid="conversation"
+							style={{
+								display: "flex",
+								flexDirection: "column",
+								gap: 10,
+								listStyle: "none",
+								margin: 0,
+								padding: 0,
+							}}
+						>
+							{messages.map((message, index) => {
+								const isLast = index === messages.length - 1;
+								const showSkeleton =
+									busy &&
+									isLast &&
+									message.role === "assistant" &&
+									message.content === "";
+								const who = message.role === "user" ? "user" : "bot";
+								return (
+									<li
+										key={message.id}
+										className={`tfl-msg tfl-msg-${who}`}
+										data-role={message.role}
+										data-errored={message.errored ? "true" : undefined}
+									>
+										{who === "bot" ? (
+											<span className="tfl-msg-avatar" aria-hidden />
+										) : null}
+										<span className="tfl-msg-bubble">
+											{showSkeleton ? (
+												<span
+													className="tfl-msg-skel"
+													role="status"
+													aria-label="Streaming"
+												>
+													…
+												</span>
+											) : (
+												message.content
+											)}
+										</span>
+									</li>
+								);
+							})}
+						</ul>
+					) : null}
+					{toolStatus ? (
+						<p data-testid="agent-status" className="tfl-chat-tool-status">
+							{toolStatus}
+						</p>
+					) : null}
 				</div>
 			</section>
 			<div className="tfl-chatbox">
@@ -106,6 +236,8 @@ export function ChatPanel({
 						}
 					}}
 					rows={2}
+					maxLength={4000}
+					disabled={busy}
 				/>
 				<div className="tfl-chatbox-row">
 					<div className="tfl-chatbox-l">
@@ -115,6 +247,7 @@ export function ChatPanel({
 								type="button"
 								className="tfl-chip-sm"
 								onClick={() => setValue(prompt.value)}
+								disabled={busy}
 							>
 								{prompt.label}
 							</button>
@@ -125,6 +258,7 @@ export function ChatPanel({
 							type="button"
 							className="tfl-chat-iconbtn"
 							aria-label="Voice"
+							disabled={busy}
 						>
 							<Icon d={AUDIO_PATH} size={16} />
 						</button>
@@ -133,6 +267,7 @@ export function ChatPanel({
 							className="tfl-chatbox-send"
 							aria-label="Send"
 							onClick={send}
+							disabled={!canSend}
 						>
 							<Icon d={SEND_PATH} size={16} />
 						</button>
