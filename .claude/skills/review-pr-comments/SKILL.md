@@ -38,7 +38,7 @@ If no argument is provided, detect the current branch and find the open PR for i
 
 2. **Filter** to AI reviewers. Use this jq pattern across all three surfaces:
    ```bash
-   --jq '.[] | select(.user.login | test("(?i)^(coderabbit|gemini-code-assist|codex|claude|copilot|github-actions).*\\[bot\\]$"))'
+   --jq '.[] | select(.user.login | test("(?i)^(coderabbit|gemini-code-assist|codex|chatgpt-codex-connector|claude|copilot|github-actions).*\\[bot\\]$"))'
    ```
    Always enumerate all five reviewers explicitly in the output (`coderabbitai[bot]`, `gemini-code-assist[bot]`, `chatgpt-codex-connector[bot]`, `claude[bot]`, `copilot-pull-request-reviewer[bot]`) — if one posted nothing, list it as "no comments" or "rate-limited" so the user can see at a glance which reviewers were active. Do not silently drop a reviewer just because it had no findings.
 
