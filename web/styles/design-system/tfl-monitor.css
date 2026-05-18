@@ -214,7 +214,7 @@
 
 .tfl-grid {
   max-width: 80rem; margin: 0 auto;
-  padding: var(--space-4) var(--space-5) var(--space-7);
+  padding: 5rem var(--space-5) var(--space-7);
   display: grid; grid-template-columns: 1fr 1fr;
   /* Both rows size to content. Subgrid children align so row 1 (LineGrid ↔ LineDetail)
      is the height of whichever card is taller — typically the line list. */
