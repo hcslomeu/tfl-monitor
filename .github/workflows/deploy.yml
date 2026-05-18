@@ -48,5 +48,12 @@ jobs:
 
       - name: Build + restart + healthcheck
         run: |
-          ssh "ubuntu@${LIGHTSAIL_HOST}" \
+          # ServerAlive* + TCPKeepAlive prevent GHA's SSH client from dropping the
+          # connection during buildkit's silent unpack phase — that phase can run
+          # 4+ minutes without writing to stdout, and the default OpenSSH client
+          # times out a quiet channel well before then. Without these flags the
+          # deploy fails with `client_loop: send disconnect: Broken pipe` while
+          # the build itself completes successfully on the box.
+          ssh -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -o TCPKeepAlive=yes \
+            "ubuntu@${LIGHTSAIL_HOST}" \
             'cd /opt/tfl-monitor && bash scripts/deploy.sh'
