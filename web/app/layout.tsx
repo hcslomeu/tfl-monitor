@@ -64,6 +64,16 @@ export const metadata: Metadata = {
 	title: "TfL Monitor — London transport at a glance",
 	description:
 		"Real-time London transport status dashboard — Tube, Overground, DLR, Elizabeth line, buses, and disruptions.",
+	icons: {
+		icon: [
+			{ url: "/favicon.svg", type: "image/svg+xml" },
+			{ url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
+			{ url: "/favicon-16.png", sizes: "16x16", type: "image/png" },
+			{ url: "/favicon-192.png", sizes: "192x192", type: "image/png" },
+			{ url: "/favicon-512.png", sizes: "512x512", type: "image/png" },
+		],
+		apple: [{ url: "/apple-touch-icon.png", sizes: "180x180" }],
+	},
 };
 
 export default function RootLayout({

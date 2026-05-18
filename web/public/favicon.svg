@@ -1,0 +1,24 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!--
+    TfL Monitor — favicon source
+    Font: Editorial New (italic 400)
+    
+    To swap fonts:
+      1. Change the font-family below to your new font name.
+      2. For the SVG to render correctly as a favicon (browsers do NOT load
+         external fonts for SVG favicons), open this file in Figma/Illustrator,
+         select the <text>, and convert to outlines/paths before saving.
+         Alternatively, just use the PNG renders (favicon-32.png etc) — they
+         bake the font in at render time so they always render correctly.
+  -->
+  <rect width="512" height="512" rx="112" fill="#b94a2a"/>
+  <text x="246" y="266"
+        text-anchor="middle"
+        dominant-baseline="central"
+        font-family="'Editorial New', serif"
+        font-style="italic"
+        font-weight="400"
+        font-size="486"
+        fill="#f5f3ee">m</text>
+  <circle cx="400" cy="400" r="30" fill="#f5f3ee"/>
+</svg>
