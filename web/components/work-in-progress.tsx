@@ -19,7 +19,11 @@ export function WorkInProgress({
 
 	useEffect(() => {
 		setMounted(true);
-		setDismissed(window.localStorage.getItem(storageKey) === "1");
+		try {
+			setDismissed(window.localStorage.getItem(storageKey) === "1");
+		} catch {
+			setDismissed(false);
+		}
 	}, [storageKey]);
 
 	useEffect(() => {
@@ -31,7 +35,7 @@ export function WorkInProgress({
 		const update = () => {
 			const rect = anchor.getBoundingClientRect();
 			const rightOffset = document.documentElement.clientWidth - rect.right;
-			aside.style.right = `${Math.max(rightOffset, 8)}px`;
+			aside.style.right = `${Math.max(rightOffset, 16)}px`;
 		};
 
 		update();
@@ -47,7 +51,11 @@ export function WorkInProgress({
 	if (!mounted || dismissed) return null;
 
 	const dismiss = () => {
-		window.localStorage.setItem(storageKey, "1");
+		try {
+			window.localStorage.setItem(storageKey, "1");
+		} catch {
+			// Fail open: hide for the session even if persistence is blocked.
+		}
 		setDismissed(true);
 	};
 
