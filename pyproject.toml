@@ -18,12 +18,7 @@ dependencies = [
     "boto3>=1.35",
     "langgraph>=1.0",
     "langsmith>=0.1",
-    "llama-index>=0.12",
-    "llama-index-vector-stores-pinecone>=0.4",
-    "pinecone>=5.0",
-    "docling>=2.0",
     "anthropic>=0.39",
-    "openai>=1.54",
     "logfire[fastapi,httpx,psycopg]>=3.0",
     "python-dotenv>=1.0",
 ]
@@ -39,10 +34,18 @@ dev = [
     "taskipy>=1.14",
     "apache-airflow>=2.10,<3.0",
     {include-group = "dbt"},
+    {include-group = "rag"},
 ]
 dbt = [
     "dbt-core>=1.9",
     "dbt-postgres>=1.9",
+]
+rag = [
+    "llama-index>=0.12",
+    "llama-index-vector-stores-pinecone>=0.4",
+    "pinecone>=5.0",
+    "docling>=2.0",
+    "openai>=1.54",
 ]
 docs = [
     "mkdocs>=1.6",
@@ -52,6 +55,20 @@ docs = [
     "mkdocs-minify-plugin>=0.8",
     "pymdown-extensions>=10.0",
 ]
+
+# Force CPU-only torch wheels. docling/transformers pull torch transitively;
+# without this pin, uv resolves the default CUDA-enabled wheel (~4 GB of
+# nvidia-cu13 libs). Production runs CPU-only on the Lightsail box, so the
+# CUDA payload is pure bloat and overflows the 58 GB disk during image unpack.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]
+torchvision = [{ index = "pytorch-cpu" }]
+torchaudio = [{ index = "pytorch-cpu" }]
 
 [build-system]
 requires = ["hatchling"]
