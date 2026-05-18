@@ -19,6 +19,10 @@
 #      by the time the internal check passes, Caddy should be routing.
 
 set -euo pipefail
+# Without pipefail wired through to every pipe stage, `docker compose up ... | tail`
+# masked build failures (tail's exit 0 overrode docker's exit 1), letting the deploy
+# look green while no containers actually started. Keep pipefail on for the whole
+# script.
 
 APP_DIR="/opt/tfl-monitor"
 COMPOSE_FILE="${APP_DIR}/infra/docker-compose.prod.yml"

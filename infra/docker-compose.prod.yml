@@ -28,6 +28,7 @@ services:
     build:
       context: ..
       dockerfile: src/ingestion/Dockerfile
+    image: tfl-monitor-ingestion:latest
     container_name: tfl-monitor-producers-1
     restart: unless-stopped
     env_file: ../.env
@@ -36,13 +37,16 @@ services:
       - tfl-monitor
 
   consumers:
-    build:
-      context: ..
-      dockerfile: src/ingestion/Dockerfile
+    image: tfl-monitor-ingestion:latest
+    # producers builds and tags this image; pull_policy: never blocks compose
+    # from racing to fetch it from a registry before the build completes.
+    pull_policy: never
     container_name: tfl-monitor-consumers-1
     restart: unless-stopped
     env_file: ../.env
     command: ["python", "-m", "ingestion.run_consumers"]
+    depends_on:
+      - producers
     networks:
       - tfl-monitor
 
