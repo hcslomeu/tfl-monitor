@@ -8,6 +8,7 @@ import { LineDetail } from "@/components/dashboard/line-detail";
 import { LineGrid } from "@/components/dashboard/line-grid";
 import { NewsReports } from "@/components/dashboard/news-reports";
 import { TopNav } from "@/components/dashboard/top-nav";
+import { WorkInProgress } from "@/components/work-in-progress";
 import { getRecentDisruptions } from "@/lib/api/disruptions-recent";
 import { getStatusLive } from "@/lib/api/status-live";
 import {
@@ -95,6 +96,11 @@ export default function HomePage() {
 					<ChatPanel />
 				</div>
 			</main>
+			<WorkInProgress
+				label="TfL Monitor — still being built"
+				storageKey="tflm-wip-dismissed"
+				anchorSelector=".tfl-nav"
+			/>
 		</div>
 	);
 }

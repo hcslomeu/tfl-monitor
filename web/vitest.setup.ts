@@ -27,6 +27,18 @@ function createMemoryStorage(): Storage {
 	};
 }
 
+if (typeof globalThis.ResizeObserver === "undefined") {
+	class ResizeObserverStub {
+		observe(): void {}
+		unobserve(): void {}
+		disconnect(): void {}
+	}
+	Object.defineProperty(globalThis, "ResizeObserver", {
+		configurable: true,
+		value: ResizeObserverStub,
+	});
+}
+
 for (const name of ["localStorage", "sessionStorage"] as const) {
 	const storage = createMemoryStorage();
 	Object.defineProperty(globalThis, name, {
