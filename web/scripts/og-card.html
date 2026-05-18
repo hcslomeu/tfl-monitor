@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>TfL Monitor — OG card</title>
+<meta name="viewport" content="width=1200, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<!-- =================================================================== -->
+<!-- FONT IMPORT                                                          -->
+<!-- To swap fonts: change the families in the URL below AND in the       -->
+<!-- :root variables further down. Both must agree.                        -->
+<!-- =================================================================== -->
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@1&family=Geist:wght@400;500;700;800&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  /* =================================================================== */
+  /*  EDIT TOKENS                                                         */
+  /*  Background, text colour, accent (used for the dot + italic surname) */
+  /*  and the three font families. Everything else flows from these.      */
+  /* =================================================================== */
+  :root {
+    --bg:           #f5f3ee;                         /* page background    */
+    --ink:          #111111;                         /* primary text       */
+    --muted:        #6b6862;                         /* secondary text     */
+    --accent:       #b94a2a;                         /* dot + italic name  */
+
+    --font-display: 'Geist', system-ui, sans-serif;  /* huge name          */
+    --font-serif:   'Instrument Serif', serif;       /* italic surname     */
+    --font-mono:    'Geist Mono', ui-monospace, monospace; /* meta lines   */
+  }
+
+  /* === Card frame ===================================================== */
+  /* The card is locked to 1200×630 — Open Graph + Twitter "summary_large_image" spec.
+     The <body> matches so a headless browser screenshot at this viewport
+     captures the card 1:1. */
+  html, body { margin: 0; padding: 0; background: #1a1a1a; }
+  * { box-sizing: border-box; }
+  body {
+    width: 1200px; height: 630px; overflow: hidden;
+    font-family: var(--font-display);
+  }
+  .og {
+    width: 1200px; height: 630px; background: var(--bg); color: var(--ink);
+    padding: 72px 80px;
+    display: flex; flex-direction: column; justify-content: space-between;
+    overflow: hidden;
+  }
+
+  /* === Top row ======================================================== */
+  .og .top {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    font-family: var(--font-mono); font-size: 20px; letter-spacing: 0.02em;
+    color: var(--muted);
+  }
+  .og .top .dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--accent);
+    display: inline-block; margin-right: 10px; vertical-align: 1px;
+  }
+
+  /* === Name (line 1 sans bold, line 2 italic serif accent) ============ */
+  .og .name {
+    font-family: var(--font-display);
+    font-weight: 800; font-size: 168px; line-height: 0.92; letter-spacing: -0.045em;
+    color: var(--ink);
+  }
+  .og .name em {
+    font-family: var(--font-serif);
+    font-style: italic; font-weight: 400;
+    letter-spacing: -0.02em; color: var(--accent);
+  }
+
+  /* === Bottom row ===================================================== */
+  .og .bottom {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    font-family: var(--font-mono); font-size: 22px; color: var(--ink);
+  }
+  .og .bottom .role { max-width: 620px; line-height: 1.35; }
+  .og .bottom .url  { color: var(--muted); }
+</style>
+</head>
+<body>
+
+<div class="og">
+
+  <!-- ─── TOP ROW ──────────────────────────────────────────────────── -->
+  <div class="top">
+    <span><span class="dot"></span><!-- EDIT · DOMAIN -->tfl-monitor.humbertolomeu.com</span>
+    <span><!-- EDIT · META (location, version, status, anything) -->LIVE · LONDON · UK</span>
+  </div>
+
+  <!-- ─── NAME ─────────────────────────────────────────────────────── -->
+  <div class="name">
+    <!-- EDIT · NAME LINE 1 (roman / sans) -->TfL<br />
+    <em><!-- EDIT · NAME LINE 2 (italic accent) -->Monitor</em>
+  </div>
+
+  <!-- ─── BOTTOM ROW ───────────────────────────────────────────────── -->
+  <div class="bottom">
+    <div class="role">
+      <!-- EDIT · ROLE -->Live status across the network.<br />
+      <!-- EDIT · TAGLINE -->Tube · Bus · Overground · Elizabeth line.
+    </div>
+    <div class="url">→ <!-- EDIT · URL -->tfl-monitor.humbertolomeu.com</div>
+  </div>
+
+</div>
+
+</body>
+</html>

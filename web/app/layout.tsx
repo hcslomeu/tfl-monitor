@@ -60,10 +60,15 @@ const geist = Geist({
 	display: "swap",
 });
 
+const SITE_URL = "https://tfl-monitor.humbertolomeu.com";
+const SITE_TITLE = "TfL Monitor — London transport at a glance";
+const SITE_DESCRIPTION =
+	"Real-time London transport status dashboard — Tube, Overground, DLR, Elizabeth line, buses, and disruptions.";
+
 export const metadata: Metadata = {
-	title: "TfL Monitor — London transport at a glance",
-	description:
-		"Real-time London transport status dashboard — Tube, Overground, DLR, Elizabeth line, buses, and disruptions.",
+	metadataBase: new URL(SITE_URL),
+	title: SITE_TITLE,
+	description: SITE_DESCRIPTION,
 	icons: {
 		icon: [
 			{ url: "/favicon.svg", type: "image/svg+xml" },
@@ -73,6 +78,19 @@ export const metadata: Metadata = {
 			{ url: "/favicon-512.png", sizes: "512x512", type: "image/png" },
 		],
 		apple: [{ url: "/apple-touch-icon.png", sizes: "180x180" }],
+	},
+	openGraph: {
+		type: "website",
+		url: SITE_URL,
+		title: SITE_TITLE,
+		description: SITE_DESCRIPTION,
+		images: [{ url: "/og.png", width: 1200, height: 630 }],
+	},
+	twitter: {
+		card: "summary_large_image",
+		title: SITE_TITLE,
+		description: SITE_DESCRIPTION,
+		images: ["/og.png"],
 	},
 };
 
