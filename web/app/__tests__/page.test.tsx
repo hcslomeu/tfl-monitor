@@ -6,6 +6,16 @@ import type { LineStatus } from "@/lib/api/status-live";
 
 const SAMPLE_LINES: LineStatus[] = [
 	{
+		line_id: "lioness",
+		line_name: "Lioness",
+		mode: "overground",
+		status_severity: 10,
+		status_severity_description: "Good Service",
+		reason: null,
+		valid_from: "2026-05-13T05:00:00Z",
+		valid_to: "2026-05-13T23:59:00Z",
+	},
+	{
 		line_id: "elizabeth",
 		line_name: "Elizabeth line",
 		mode: "elizabeth-line",
@@ -19,6 +29,26 @@ const SAMPLE_LINES: LineStatus[] = [
 		line_id: "victoria",
 		line_name: "Victoria",
 		mode: "tube",
+		status_severity: 10,
+		status_severity_description: "Good Service",
+		reason: null,
+		valid_from: "2026-05-13T05:00:00Z",
+		valid_to: "2026-05-13T23:59:00Z",
+	},
+	{
+		line_id: "dlr",
+		line_name: "DLR",
+		mode: "dlr",
+		status_severity: 10,
+		status_severity_description: "Good Service",
+		reason: null,
+		valid_from: "2026-05-13T05:00:00Z",
+		valid_to: "2026-05-13T23:59:00Z",
+	},
+	{
+		line_id: "windrush",
+		line_name: "Windrush",
+		mode: "overground",
 		status_severity: 10,
 		status_severity_description: "Good Service",
 		reason: null,
@@ -95,10 +125,29 @@ describe("HomePage", () => {
 
 		expect(await screen.findByText(/Ask the Monitor/)).toBeInTheDocument();
 
-		const goodPill = await screen.findByText(/1 good/);
+		const goodPill = await screen.findByText(/4 good/);
 		expect(goodPill).toBeInTheDocument();
 		expect(screen.getByText(/1 severe/)).toBeInTheDocument();
 		expect(screen.getByText(/1 minor/)).toBeInTheDocument();
+	});
+
+	it("renders lines as tube → Elizabeth → DLR → Overground regardless of payload order", async () => {
+		const { default: HomePage } = await import("../page");
+		const { container } = render(<HomePage />);
+
+		await screen.findByText("Elizabeth line");
+
+		const renderedNames = Array.from(
+			container.querySelectorAll(".tfl-line .tfl-line-name"),
+		).map((node) => node.textContent ?? "");
+		expect(renderedNames).toEqual([
+			"Piccadilly",
+			"Victoria",
+			"Elizabeth",
+			"DLR",
+			"Lioness",
+			"Windrush",
+		]);
 	});
 
 	it("renders the news-and-reports + bus banner cards from mocks", async () => {
