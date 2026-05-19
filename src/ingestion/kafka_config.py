@@ -30,6 +30,7 @@ __all__ = ["build_aiokafka_security_config"]
 _PLAINTEXT_PROTOCOLS = frozenset({"", "PLAINTEXT"})
 _SASL_PROTOCOLS = frozenset({"SASL_PLAINTEXT", "SASL_SSL"})
 _TLS_PROTOCOLS = frozenset({"SSL", "SASL_SSL"})
+_SUPPORTED_PROTOCOLS = frozenset({"PLAINTEXT", "SSL", "SASL_PLAINTEXT", "SASL_SSL"})
 
 
 def build_aiokafka_security_config() -> dict[str, Any]:
@@ -43,13 +44,23 @@ def build_aiokafka_security_config() -> dict[str, Any]:
         protocol uses TLS).
 
     Raises:
-        SystemExit: When ``KAFKA_SECURITY_PROTOCOL`` requests SASL but
-            any of ``KAFKA_SASL_MECHANISM`` / ``KAFKA_SASL_USERNAME`` /
+        SystemExit: When ``KAFKA_SECURITY_PROTOCOL`` is set to an
+            unsupported value, or when SASL is requested but any of
+            ``KAFKA_SASL_MECHANISM`` / ``KAFKA_SASL_USERNAME`` /
             ``KAFKA_SASL_PASSWORD`` is missing.
     """
     protocol = os.environ.get("KAFKA_SECURITY_PROTOCOL", "").upper()
     if protocol in _PLAINTEXT_PROTOCOLS:
         return {}
+
+    # Validate upfront so a typo (e.g. ``SALS_SSL``) fails with a clear
+    # configuration error rather than a generic aiokafka bootstrap failure
+    # several layers deeper.
+    if protocol not in _SUPPORTED_PROTOCOLS:
+        supported = ", ".join(sorted(_SUPPORTED_PROTOCOLS))
+        raise SystemExit(
+            f"KAFKA_SECURITY_PROTOCOL={protocol!r} is not supported; expected one of: {supported}"
+        )
 
     config: dict[str, Any] = {"security_protocol": protocol}
 

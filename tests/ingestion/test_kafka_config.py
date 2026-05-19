@@ -97,3 +97,19 @@ def test_raises_when_sasl_credentials_missing(
         build_aiokafka_security_config()
 
     assert missing_var in str(excinfo.value)
+
+
+@pytest.mark.parametrize("typo", ["SALS_SSL", "PLAIN", "TLS", "SASL"])
+def test_raises_when_protocol_unsupported(monkeypatch: pytest.MonkeyPatch, typo: str) -> None:
+    monkeypatch.setenv("KAFKA_SECURITY_PROTOCOL", typo)
+    monkeypatch.setenv("KAFKA_SASL_MECHANISM", "SCRAM-SHA-256")
+    monkeypatch.setenv("KAFKA_SASL_USERNAME", "u")
+    monkeypatch.setenv("KAFKA_SASL_PASSWORD", "p")
+
+    with pytest.raises(SystemExit) as excinfo:
+        build_aiokafka_security_config()
+
+    message = str(excinfo.value)
+    assert typo in message
+    assert "PLAINTEXT" in message
+    assert "SASL_SSL" in message
