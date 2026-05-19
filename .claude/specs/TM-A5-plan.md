@@ -171,7 +171,7 @@ Everything below runs in this order. Each step has an exit check.
 |---|---|---|
 | AWS account credentials | IAM user creation in §3.2 | `aws sts get-caller-identity` (region irrelevant for IAM) |
 | Cloudflare dashboard access | DNS A record creation in §3.4.6 | https://dash.cloudflare.com -> humbertolomeu.com zone visible |
-| SSH key `/Users/humbertolomeu/.ssh/alpha-whale-lightsail.pem` | SSH into the box | `ssh ubuntu@13.41.145.33 'whoami'` returns `ubuntu` |
+| SSH key `/Users/humbertolomeu/aws/lightsail.pem` | SSH into the box | `ssh ubuntu@13.41.145.33 'whoami'` returns `ubuntu` |
 | `gh` CLI authenticated | PR creation, secret upload | `gh auth status` |
 
 Exit check: all four green.
@@ -546,7 +546,7 @@ jobs:
 
 GitHub repo secrets (Settings -> Secrets and variables -> Actions):
 
-- `LIGHTSAIL_SSH_KEY` — paste the entire `alpha-whale-lightsail.pem`
+- `LIGHTSAIL_SSH_KEY` — paste the entire `~/aws/lightsail.pem`
   contents (same key already used by alpha-whale's CI).
 - `LIGHTSAIL_HOST` — `13.41.145.33`.
 - `LIGHTSAIL_HOST_KEY` — output of `ssh-keyscan -H 13.41.145.33 | grep -v '^#'`
@@ -660,7 +660,7 @@ replaces it; kept commented as opt-in for local dev).
 
 **GitHub repo secrets** (Settings -> Secrets and variables -> Actions):
 
-- `LIGHTSAIL_SSH_KEY` — contents of `~/.ssh/alpha-whale-lightsail.pem`
+- `LIGHTSAIL_SSH_KEY` — contents of `~/aws/lightsail.pem`
 - `LIGHTSAIL_HOST` — `13.41.145.33`
 
 ## 5. What we are NOT doing
