@@ -1,3 +1,4 @@
+// Local-dev mock — guarded behind NEXT_PUBLIC_USE_MOCKS=true.
 import type { DisruptionSnapshot } from "@/components/dashboard/types";
 
 /**
