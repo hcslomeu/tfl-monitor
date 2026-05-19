@@ -222,7 +222,7 @@ export function disruptionsToNews(disruptions: Disruption[]): NewsItem[] {
 }
 
 function firstParagraph(description: string): string {
-	const [first] = description.split(/\n{2,}|\n/);
+	const [first] = description.split(/\n{2,}/);
 	return first.trim();
 }
 

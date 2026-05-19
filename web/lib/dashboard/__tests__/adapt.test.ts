@@ -229,4 +229,18 @@ describe("disruptionsToNews", () => {
 		const [item] = disruptionsToNews([verbose]);
 		expect(item.body).toBe("Faulty train at Hayes & Harlington.");
 	});
+
+	it("keeps line-broken sentences together within a single paragraph", () => {
+		// Real TfL payloads sometimes inject a single `\n` between sentences
+		// inside the same paragraph; splitting on it would clip the body
+		// mid-thought. We only split on blank lines (`\n{2,}`).
+		const wrapped: Disruption = {
+			...baseDisruption,
+			description: "Train at Hayes & Harlington.\nAlternatives: take the bus.",
+		};
+		const [item] = disruptionsToNews([wrapped]);
+		expect(item.body).toBe(
+			"Train at Hayes & Harlington.\nAlternatives: take the bus.",
+		);
+	});
 });
