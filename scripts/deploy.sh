@@ -52,17 +52,22 @@ if ! grep -qx "${API_SERVICE}" <<<"${running_services}"; then
   echo "Running services:" >&2
   echo "${running_services:-<none>}" >&2
   docker compose -f "${COMPOSE_FILE}" ps >&2 || true
+  docker compose -f "${COMPOSE_FILE}" logs --tail=200 "${API_SERVICE}" >&2 || true
   exit 1
 fi
 
 echo "[$(date -Iseconds)] internal healthcheck (docker exec ${API_CONTAINER})"
-for attempt in 1 2 3 4 5; do
+# Budget of 12 attempts × 5s sleep ≈ 60s, sized for the worst observed Lightsail
+# cold-start. Bucket A is reducing that; this loop is the upper bound, not the
+# expected wait.
+for attempt in $(seq 1 12); do
   if docker exec "${API_CONTAINER}" curl -fsS http://localhost:8000/health >/dev/null 2>&1; then
     echo "[$(date -Iseconds)] container healthy"
     break
   fi
-  if [[ ${attempt} -eq 5 ]]; then
-    echo "ERROR: ${API_CONTAINER} did not respond to /health after 5 attempts" >&2
+  if [[ ${attempt} -eq 12 ]]; then
+    echo "ERROR: ${API_CONTAINER} did not respond to /health after 12 attempts" >&2
+    docker compose -f "${COMPOSE_FILE}" logs --tail=200 "${API_SERVICE}" >&2 || true
     exit 1
   fi
   sleep 5
@@ -78,4 +83,5 @@ for attempt in 1 2 3; do
 done
 
 echo "WARN: container is healthy but ${HEALTHCHECK_URL} is unreachable — check DNS / Caddy" >&2
+docker compose -f "${COMPOSE_FILE}" logs --tail=200 "${API_SERVICE}" >&2 || true
 exit 1
