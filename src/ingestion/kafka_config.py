@@ -49,7 +49,10 @@ def build_aiokafka_security_config() -> dict[str, Any]:
             ``KAFKA_SASL_MECHANISM`` / ``KAFKA_SASL_USERNAME`` /
             ``KAFKA_SASL_PASSWORD`` is missing.
     """
-    protocol = os.environ.get("KAFKA_SECURITY_PROTOCOL", "").upper()
+    # `.strip()` tolerates accidental leading / trailing whitespace introduced
+    # by hand-edited `.env` files; `.upper()` lets operators set the protocol
+    # in either case without surprising the supported-set check below.
+    protocol = os.environ.get("KAFKA_SECURITY_PROTOCOL", "").strip().upper()
     if protocol in _PLAINTEXT_PROTOCOLS:
         return {}
 
@@ -65,7 +68,10 @@ def build_aiokafka_security_config() -> dict[str, Any]:
     config: dict[str, Any] = {"security_protocol": protocol}
 
     if protocol in _SASL_PROTOCOLS:
-        mechanism = os.environ.get("KAFKA_SASL_MECHANISM", "")
+        # Strip whitespace and uppercase the mechanism for the same reason as
+        # the protocol — Kafka mechanisms (PLAIN, SCRAM-SHA-256, SCRAM-SHA-512,
+        # GSSAPI, OAUTHBEARER) are uppercase by convention.
+        mechanism = os.environ.get("KAFKA_SASL_MECHANISM", "").strip().upper()
         username = os.environ.get("KAFKA_SASL_USERNAME", "")
         password = os.environ.get("KAFKA_SASL_PASSWORD", "")
         missing = [

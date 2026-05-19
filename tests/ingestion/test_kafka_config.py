@@ -113,3 +113,23 @@ def test_raises_when_protocol_unsupported(monkeypatch: pytest.MonkeyPatch, typo:
     assert typo in message
     assert "PLAINTEXT" in message
     assert "SASL_SSL" in message
+
+
+def test_strips_whitespace_from_protocol_and_mechanism(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Hand-edited ``.env`` files often introduce stray whitespace.
+
+    Regression guard: a leading newline on ``KAFKA_SECURITY_PROTOCOL`` or
+    trailing spaces on ``KAFKA_SASL_MECHANISM`` must not fail the
+    supported-set check or be forwarded verbatim to aiokafka.
+    """
+    monkeypatch.setenv("KAFKA_SECURITY_PROTOCOL", "  sasl_ssl\n")
+    monkeypatch.setenv("KAFKA_SASL_MECHANISM", "  scram-sha-256\t")
+    monkeypatch.setenv("KAFKA_SASL_USERNAME", "u")
+    monkeypatch.setenv("KAFKA_SASL_PASSWORD", "p")
+
+    config = build_aiokafka_security_config()
+
+    assert config["security_protocol"] == "SASL_SSL"
+    assert config["sasl_mechanism"] == "SCRAM-SHA-256"
