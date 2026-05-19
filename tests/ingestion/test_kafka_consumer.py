@@ -187,3 +187,63 @@ async def test_seek_records_partition_and_offset() -> None:
         consumer.seek(tp, 42)
 
     assert fake.seeks == [(tp, 42)]
+
+
+async def test_aiokafka_extra_config_kwargs_forwarded_to_factory() -> None:
+    """``aiokafka_extra_config`` keys must reach the underlying constructor.
+
+    Regression test for the production outage where SASL/SSL kwargs were
+    never forwarded, causing every prod consumer to crashloop with
+    ``KafkaConnectionError`` against Redpanda Cloud.
+    """
+    fake = FakeAIOKafkaConsumer()
+    captured: dict[str, Any] = {}
+
+    def _factory(*args: Any, **kwargs: Any) -> AIOKafkaConsumer:
+        captured.update(kwargs)
+        return cast(AIOKafkaConsumer, fake)
+
+    async with KafkaEventConsumer(
+        "line-status",
+        bootstrap_servers="localhost:19092",
+        group_id="g",
+        consumer_factory=_factory,
+        aiokafka_extra_config={
+            "security_protocol": "SASL_SSL",
+            "sasl_mechanism": "SCRAM-SHA-256",
+            "sasl_plain_username": "redpanda-user",
+            "sasl_plain_password": "redpanda-secret",
+        },
+    ):
+        pass
+
+    assert captured["security_protocol"] == "SASL_SSL"
+    assert captured["sasl_mechanism"] == "SCRAM-SHA-256"
+    assert captured["sasl_plain_username"] == "redpanda-user"
+    assert captured["sasl_plain_password"] == "redpanda-secret"
+    # Original kwargs still pass through.
+    assert captured["bootstrap_servers"] == "localhost:19092"
+    assert captured["group_id"] == "g"
+    assert captured["enable_auto_commit"] is False
+
+
+async def test_aiokafka_extra_config_defaults_to_empty_dict() -> None:
+    """No extra config keys when the kwarg is omitted (local plaintext path)."""
+    fake = FakeAIOKafkaConsumer()
+    captured: dict[str, Any] = {}
+
+    def _factory(*args: Any, **kwargs: Any) -> AIOKafkaConsumer:
+        captured.update(kwargs)
+        return cast(AIOKafkaConsumer, fake)
+
+    async with KafkaEventConsumer(
+        "line-status",
+        bootstrap_servers="localhost:19092",
+        group_id="g",
+        consumer_factory=_factory,
+    ):
+        pass
+
+    assert "security_protocol" not in captured
+    assert "sasl_mechanism" not in captured
+    assert "ssl_context" not in captured

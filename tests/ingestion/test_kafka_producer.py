@@ -181,3 +181,58 @@ async def test_kafka_event_producer_isinstance_of_self_returns_self() -> None:
     async with producer as bound:
         assert isinstance(bound, KafkaEventProducer)
         assert bound is producer
+
+
+async def test_aiokafka_extra_config_kwargs_forwarded_to_factory() -> None:
+    """``aiokafka_extra_config`` keys must reach the underlying constructor.
+
+    Regression test for the production outage where SASL/SSL kwargs were
+    never forwarded, causing every prod producer to crashloop with
+    ``KafkaConnectionError`` against Redpanda Cloud.
+    """
+    fake = _FakeAIOKafkaProducer()
+    captured: dict[str, Any] = {}
+
+    def _factory(**kwargs: Any) -> AIOKafkaProducer:
+        captured.update(kwargs)
+        return cast(AIOKafkaProducer, fake)
+
+    async with KafkaEventProducer(
+        bootstrap_servers="localhost:19092",
+        producer_factory=_factory,
+        aiokafka_extra_config={
+            "security_protocol": "SASL_SSL",
+            "sasl_mechanism": "SCRAM-SHA-256",
+            "sasl_plain_username": "redpanda-user",
+            "sasl_plain_password": "redpanda-secret",
+        },
+    ) as _:
+        pass
+
+    assert captured["security_protocol"] == "SASL_SSL"
+    assert captured["sasl_mechanism"] == "SCRAM-SHA-256"
+    assert captured["sasl_plain_username"] == "redpanda-user"
+    assert captured["sasl_plain_password"] == "redpanda-secret"
+    # Original kwargs still pass through.
+    assert captured["bootstrap_servers"] == "localhost:19092"
+    assert captured["enable_idempotence"] is True
+
+
+async def test_aiokafka_extra_config_defaults_to_empty_dict() -> None:
+    """No extra config keys when the kwarg is omitted (local plaintext path)."""
+    fake = _FakeAIOKafkaProducer()
+    captured: dict[str, Any] = {}
+
+    def _factory(**kwargs: Any) -> AIOKafkaProducer:
+        captured.update(kwargs)
+        return cast(AIOKafkaProducer, fake)
+
+    async with KafkaEventProducer(
+        bootstrap_servers="localhost:19092",
+        producer_factory=_factory,
+    ) as _:
+        pass
+
+    assert "security_protocol" not in captured
+    assert "sasl_mechanism" not in captured
+    assert "ssl_context" not in captured

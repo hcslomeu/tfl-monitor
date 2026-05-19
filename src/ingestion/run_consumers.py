@@ -42,6 +42,7 @@ from ingestion.consumers.line_status import (
     LINE_STATUS_TOPIC_LABEL,
 )
 from ingestion.consumers.postgres import RawEventWriter
+from ingestion.kafka_config import build_aiokafka_security_config
 from ingestion.observability import configure_logfire
 
 
@@ -56,6 +57,9 @@ async def _amain() -> NoReturn:
     if not dsn:
         raise SystemExit("DATABASE_URL is required")
 
+    # Empty dict on plaintext local Redpanda; SASL_SSL kwargs on Redpanda Cloud.
+    aiokafka_extra_config = build_aiokafka_security_config()
+
     async with AsyncExitStack() as stack:
         line_status_kafka = await stack.enter_async_context(
             KafkaEventConsumer(
@@ -63,6 +67,7 @@ async def _amain() -> NoReturn:
                 bootstrap_servers=bootstrap,
                 group_id=LINE_STATUS_CONSUMER_GROUP_ID,
                 client_id="tfl-monitor-ingestion-line-status-consumer",
+                aiokafka_extra_config=aiokafka_extra_config,
             )
         )
         line_status_writer = await stack.enter_async_context(
@@ -74,6 +79,7 @@ async def _amain() -> NoReturn:
                 bootstrap_servers=bootstrap,
                 group_id=ARRIVALS_CONSUMER_GROUP_ID,
                 client_id="tfl-monitor-ingestion-arrivals-consumer",
+                aiokafka_extra_config=aiokafka_extra_config,
             )
         )
         arrivals_writer = await stack.enter_async_context(RawEventWriter(dsn, table=ARRIVALS_TABLE))
@@ -83,6 +89,7 @@ async def _amain() -> NoReturn:
                 bootstrap_servers=bootstrap,
                 group_id=DISRUPTIONS_CONSUMER_GROUP_ID,
                 client_id="tfl-monitor-ingestion-disruptions-consumer",
+                aiokafka_extra_config=aiokafka_extra_config,
             )
         )
         disruptions_writer = await stack.enter_async_context(

@@ -11,7 +11,7 @@ from __future__ import annotations
 import contextlib
 from collections.abc import AsyncIterator, Callable, Iterable
 from types import TracebackType
-from typing import Self, cast
+from typing import Any, Self, cast
 
 import logfire
 from aiokafka import AIOKafkaConsumer
@@ -46,6 +46,7 @@ class KafkaEventConsumer:
         client_id: str = _DEFAULT_CLIENT_ID,
         auto_offset_reset: str = "earliest",
         consumer_factory: Callable[..., AIOKafkaConsumer] | None = None,
+        aiokafka_extra_config: dict[str, Any] | None = None,
     ) -> None:
         if not topic:
             raise ValueError("topic must be a non-empty string")
@@ -59,6 +60,11 @@ class KafkaEventConsumer:
         self._client_id = client_id
         self._auto_offset_reset = auto_offset_reset
         self._consumer_factory = consumer_factory or AIOKafkaConsumer
+        # aiokafka_extra_config carries security_protocol / SASL / SSL
+        # kwargs (built by ingestion.kafka_config.build_aiokafka_security_config)
+        # so the same wrapper drives both the plaintext local Redpanda and
+        # the SASL_SSL Redpanda Cloud cluster without two code paths.
+        self._aiokafka_extra_config = aiokafka_extra_config or {}
         self._consumer: AIOKafkaConsumer | None = None
 
     async def __aenter__(self) -> Self:
@@ -69,6 +75,7 @@ class KafkaEventConsumer:
             group_id=self._group_id,
             auto_offset_reset=self._auto_offset_reset,
             enable_auto_commit=False,
+            **self._aiokafka_extra_config,
         )
         self._consumer = consumer
         with logfire.span("kafka.consumer.start", topic=self._topic, group_id=self._group_id):
