@@ -219,4 +219,14 @@ describe("disruptionsToNews", () => {
 	it("returns an empty list when no disruptions are supplied", () => {
 		expect(disruptionsToNews([])).toEqual([]);
 	});
+
+	it("trims multi-paragraph descriptions to the first paragraph so the dense news list does not overflow", () => {
+		const verbose: Disruption = {
+			...baseDisruption,
+			description:
+				"Faulty train at Hayes & Harlington.\n\nTickets accepted on Piccadilly & Bakerloo until service is restored.",
+		};
+		const [item] = disruptionsToNews([verbose]);
+		expect(item.body).toBe("Faulty train at Hayes & Harlington.");
+	});
 });

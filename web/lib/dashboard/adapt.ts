@@ -165,17 +165,18 @@ export function summarizeCounts(lines: LineSummary[]): StatusSummaryCounts {
 	return counts;
 }
 
-function formatLondonTime(iso: string): string {
-	try {
-		return new Date(iso).toLocaleTimeString("en-GB", {
-			hour: "2-digit",
-			minute: "2-digit",
-			timeZone: "Europe/London",
-			timeZoneName: "short",
-		});
-	} catch {
-		return iso;
-	}
+function formatLondonTime(
+	iso: string,
+	{ withTimezoneName = false }: { withTimezoneName?: boolean } = {},
+): string {
+	const date = new Date(iso);
+	if (Number.isNaN(date.getTime())) return "—";
+	return date.toLocaleTimeString("en-GB", {
+		hour: "2-digit",
+		minute: "2-digit",
+		timeZone: "Europe/London",
+		...(withTimezoneName ? { timeZoneName: "short" } : {}),
+	});
 }
 
 /**
@@ -200,9 +201,10 @@ export function disruptionForLine(
  * recent updates surface first; the component handles slot truncation.
  *
  * `time` uses the London-local `HH:MM` format the design canvas
- * specifies. The `Disruption` payload already carries `summary` and
- * `description`, so the mapping is direct and no further fetcher is
- * required.
+ * specifies. The `body` is trimmed to the first paragraph of
+ * `description` so the dense news list does not overflow when the TfL
+ * payload carries a multi-paragraph blob — the LineDetail card already
+ * surfaces the full description.
  */
 export function disruptionsToNews(disruptions: Disruption[]): NewsItem[] {
 	const sorted = [...disruptions].sort((a, b) => {
@@ -213,20 +215,15 @@ export function disruptionsToNews(disruptions: Disruption[]): NewsItem[] {
 		);
 	});
 	return sorted.map((d) => ({
-		time: formatLondonClockHHMM(d.last_update),
+		time: formatLondonTime(d.last_update),
 		title: d.summary,
-		body: d.description,
+		body: firstParagraph(d.description),
 	}));
 }
 
-function formatLondonClockHHMM(iso: string): string {
-	const date = new Date(iso);
-	if (Number.isNaN(date.getTime())) return "—";
-	return date.toLocaleTimeString("en-GB", {
-		hour: "2-digit",
-		minute: "2-digit",
-		timeZone: "Europe/London",
-	});
+function firstParagraph(description: string): string {
+	const [first] = description.split(/\n{2,}|\n/);
+	return first.trim();
 }
 
 /**
@@ -247,9 +244,9 @@ export function disruptionToSnapshot(d: Disruption): DisruptionSnapshot {
 	return {
 		headline: d.summary,
 		body,
-		reportedAtLabel: formatLondonTime(d.created),
+		reportedAtLabel: formatLondonTime(d.created, { withTimezoneName: true }),
 		stations,
 		sourceLabel: "Source: TfL Unified API",
-		updatedAtLabel: formatLondonTime(d.last_update),
+		updatedAtLabel: formatLondonTime(d.last_update, { withTimezoneName: true }),
 	};
 }
