@@ -28,6 +28,7 @@ APP_DIR="/opt/tfl-monitor"
 COMPOSE_FILE="${APP_DIR}/infra/docker-compose.prod.yml"
 HEALTHCHECK_URL="${HEALTHCHECK_URL:-https://tfl-monitor-api.humbertolomeu.com/health}"
 API_CONTAINER="tfl-monitor-api-1"
+API_SERVICE="${API_SERVICE:-api}"
 
 cd "${APP_DIR}"
 
@@ -46,8 +47,8 @@ docker compose -f "${COMPOSE_FILE}" up -d --build
 # output. List running services explicitly and fail fast if api is absent.
 echo "[$(date -Iseconds)] verifying api service is running"
 running_services="$(docker compose -f "${COMPOSE_FILE}" ps --status running --services)"
-if ! grep -qx api <<<"${running_services}"; then
-  echo "ERROR: 'api' service is not running after 'docker compose up'." >&2
+if ! grep -qx "${API_SERVICE}" <<<"${running_services}"; then
+  echo "ERROR: '${API_SERVICE}' service is not running after 'docker compose up'." >&2
   echo "Running services:" >&2
   echo "${running_services:-<none>}" >&2
   docker compose -f "${COMPOSE_FILE}" ps >&2 || true
