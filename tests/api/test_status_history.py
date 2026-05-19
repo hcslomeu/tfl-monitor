@@ -119,3 +119,19 @@ def test_missing_pool_returns_503(attach_pool: Callable[[Any], None]) -> None:
         params={"from": "2026-04-20T00:00:00Z", "to": "2026-04-21T00:00:00Z"},
     )
     assert response.status_code == 503
+
+
+def test_history_sql_casts_line_id_to_text_at_every_occurrence() -> None:
+    """Regression guard: both ``%(line_id)s`` binds must carry ``::text``.
+
+    Same root cause as ``DISRUPTIONS_SQL`` — Supabase's pgbouncer pooler
+    refuses an un-typed ``%(line_id)s IS NULL`` with
+    ``psycopg.errors.AmbiguousParameter``. The audit that closed PR #82
+    cast both binds to ``::text`` (one inside the ``IS NULL`` short
+    circuit, one inside the ``OR line_id = ...`` equality).
+    """
+    assert "%(line_id)s::text IS NULL" in HISTORY_SQL
+    assert "line_id = %(line_id)s::text" in HISTORY_SQL
+    # The un-cast pair (`%(line_id)s IS NULL OR line_id = %(line_id)s`) was the
+    # exact failing form; assert it has been fully replaced.
+    assert "%(line_id)s IS NULL" not in HISTORY_SQL.replace("%(line_id)s::text IS NULL", "")

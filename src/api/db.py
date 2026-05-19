@@ -71,7 +71,7 @@ SELECT line_id, line_name, mode,
 FROM analytics.stg_line_status
 WHERE valid_from >= %(from)s
   AND valid_from <  %(to)s
-  AND ( %(line_id)s IS NULL OR line_id = %(line_id)s )
+  AND ( %(line_id)s::text IS NULL OR line_id = %(line_id)s::text )
 ORDER BY valid_from ASC, line_id ASC
 LIMIT 10000
 """

@@ -165,3 +165,20 @@ def test_missing_pool_returns_503(attach_pool: Callable[[Any], None]) -> None:
     body = response.json()
     assert body["status"] == 503
     assert body["title"] == "Service Unavailable"
+
+
+def test_disruptions_sql_casts_mode_to_text_at_every_occurrence() -> None:
+    """Regression guard: both ``%(mode)s`` binds must carry ``::text``.
+
+    Supabase's pgbouncer pooler refuses ``%(mode)s IS NULL`` without an
+    inline cast (``psycopg.errors.AmbiguousParameter``), so the fix that
+    closed the production outage cast both binds to ``::text``. This
+    test fails fast if either cast is dropped — the existing tests
+    assert ``sql == DISRUPTIONS_SQL`` against the constant itself, so
+    they would silently track any regression in the constant's body.
+    """
+    assert "%(mode)s::text IS NULL" in DISRUPTIONS_SQL
+    assert "sls.mode = %(mode)s::text" in DISRUPTIONS_SQL
+    # Belt-and-braces: the bare un-cast forms must not reappear.
+    assert "%(mode)s IS NULL" not in DISRUPTIONS_SQL.replace("%(mode)s::text IS NULL", "")
+    assert "sls.mode = %(mode)s\n" not in DISRUPTIONS_SQL
