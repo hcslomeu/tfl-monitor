@@ -17,6 +17,7 @@ from typing import NoReturn
 
 import logfire
 
+from ingestion.kafka_config import build_aiokafka_security_config
 from ingestion.observability import configure_logfire
 from ingestion.producers.arrivals import ArrivalsProducer
 from ingestion.producers.disruptions import DisruptionsProducer
@@ -33,9 +34,15 @@ async def _amain() -> NoReturn:
     if not bootstrap:
         raise SystemExit("KAFKA_BOOTSTRAP_SERVERS is required")
 
+    # Empty dict on plaintext local Redpanda; SASL_SSL kwargs on Redpanda Cloud.
+    aiokafka_extra_config = build_aiokafka_security_config()
+
     async with (
         TflClient.from_env() as tfl,
-        KafkaEventProducer(bootstrap_servers=bootstrap) as kafka,
+        KafkaEventProducer(
+            bootstrap_servers=bootstrap,
+            aiokafka_extra_config=aiokafka_extra_config,
+        ) as kafka,
     ):
         line_status = LineStatusProducer(tfl_client=tfl, kafka_producer=kafka)
         arrivals = ArrivalsProducer(tfl_client=tfl, kafka_producer=kafka)

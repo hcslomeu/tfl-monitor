@@ -42,12 +42,18 @@ class KafkaEventProducer:
         *,
         client_id: str = _DEFAULT_CLIENT_ID,
         producer_factory: Callable[..., AIOKafkaProducer] | None = None,
+        aiokafka_extra_config: dict[str, Any] | None = None,
     ) -> None:
         if not bootstrap_servers:
             raise ValueError("bootstrap_servers must be a non-empty string")
         self._bootstrap_servers = bootstrap_servers
         self._client_id = client_id
         self._producer_factory = producer_factory or AIOKafkaProducer
+        # aiokafka_extra_config carries security_protocol / SASL / SSL
+        # kwargs (built by ingestion.kafka_config.build_aiokafka_security_config)
+        # so the same wrapper drives both the plaintext local Redpanda and
+        # the SASL_SSL Redpanda Cloud cluster without two code paths.
+        self._aiokafka_extra_config = aiokafka_extra_config or {}
         self._producer: AIOKafkaProducer | None = None
 
     async def __aenter__(self) -> Self:
@@ -57,6 +63,7 @@ class KafkaEventProducer:
             enable_idempotence=True,
             acks="all",
             linger_ms=_DEFAULT_LINGER_MS,
+            **self._aiokafka_extra_config,
         )
         await self._producer.start()  # type: ignore[no-untyped-call]
         return self
