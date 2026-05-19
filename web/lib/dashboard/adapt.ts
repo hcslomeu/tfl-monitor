@@ -221,8 +221,14 @@ export function disruptionsToNews(disruptions: Disruption[]): NewsItem[] {
 	}));
 }
 
+// Matches blank-line separators in both LF and CRLF payloads. The TfL
+// Unified API typically returns LF-encoded descriptions, but the schema
+// does not guarantee it — defending against CRLF keeps the news list
+// and the snapshot body trimmed under both line-ending conventions.
+const PARAGRAPH_SPLIT_RE = /\r?\n\s*\r?\n+/;
+
 function firstParagraph(description: string): string {
-	const [first] = description.split(/\n{2,}/);
+	const [first] = description.split(PARAGRAPH_SPLIT_RE);
 	return first.trim();
 }
 
@@ -234,7 +240,7 @@ function firstParagraph(description: string): string {
  */
 export function disruptionToSnapshot(d: Disruption): DisruptionSnapshot {
 	const body = d.description
-		.split(/\n{2,}/)
+		.split(PARAGRAPH_SPLIT_RE)
 		.map((paragraph) => paragraph.trim())
 		.filter((paragraph) => paragraph.length > 0);
 	const stations = d.affected_stops.map((stop) => ({

@@ -233,7 +233,7 @@ describe("disruptionsToNews", () => {
 	it("keeps line-broken sentences together within a single paragraph", () => {
 		// Real TfL payloads sometimes inject a single `\n` between sentences
 		// inside the same paragraph; splitting on it would clip the body
-		// mid-thought. We only split on blank lines (`\n{2,}`).
+		// mid-thought. We only split on blank lines.
 		const wrapped: Disruption = {
 			...baseDisruption,
 			description: "Train at Hayes & Harlington.\nAlternatives: take the bus.",
@@ -242,5 +242,15 @@ describe("disruptionsToNews", () => {
 		expect(item.body).toBe(
 			"Train at Hayes & Harlington.\nAlternatives: take the bus.",
 		);
+	});
+
+	it("trims paragraphs split by CRLF blank lines so Windows-encoded payloads behave like LF ones", () => {
+		const crlf: Disruption = {
+			...baseDisruption,
+			description:
+				"Faulty train at Hayes & Harlington.\r\n\r\nTickets accepted on Piccadilly & Bakerloo until service is restored.",
+		};
+		const [item] = disruptionsToNews([crlf]);
+		expect(item.body).toBe("Faulty train at Hayes & Harlington.");
 	});
 });
