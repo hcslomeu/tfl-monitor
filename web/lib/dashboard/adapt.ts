@@ -131,6 +131,8 @@ export function lineStatusesToSummaries(
 		if (rankDelta !== 0) return rankDelta;
 		return stripTrailingLine(a.line_name).localeCompare(
 			stripTrailingLine(b.line_name),
+			"en",
+			{ sensitivity: "base" },
 		);
 	});
 	return ordered.map((line) => {
