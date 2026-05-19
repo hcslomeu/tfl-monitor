@@ -201,10 +201,12 @@ export function disruptionForLine(
  * recent updates surface first; the component handles slot truncation.
  *
  * `time` uses the London-local `HH:MM` format the design canvas
- * specifies. The `body` is trimmed to the first paragraph of
- * `description` so the dense news list does not overflow when the TfL
- * payload carries a multi-paragraph blob — the LineDetail card already
- * surfaces the full description.
+ * specifies. The `body` carries only the *extra* paragraphs of
+ * `description` — TfL's Unified API repeats `summary` as the first
+ * paragraph of `description` in nearly every payload, so projecting
+ * the whole description into the body produces a duplicate of the
+ * title. We strip the leading paragraph when it matches `summary`
+ * and join any remaining paragraphs with a blank line.
  */
 export function disruptionsToNews(disruptions: Disruption[]): NewsItem[] {
 	const sorted = [...disruptions].sort((a, b) => {
@@ -217,7 +219,7 @@ export function disruptionsToNews(disruptions: Disruption[]): NewsItem[] {
 	return sorted.map((d) => ({
 		time: formatLondonTime(d.last_update),
 		title: d.summary,
-		body: firstParagraph(d.description),
+		body: extraParagraphs(d.summary, d.description),
 	}));
 }
 
@@ -227,9 +229,19 @@ export function disruptionsToNews(disruptions: Disruption[]): NewsItem[] {
 // and the snapshot body trimmed under both line-ending conventions.
 const PARAGRAPH_SPLIT_RE = /\r?\n\s*\r?\n+/;
 
-function firstParagraph(description: string): string {
-	const [first] = description.split(PARAGRAPH_SPLIT_RE);
-	return first.trim();
+function splitParagraphs(description: string): string[] {
+	return description
+		.split(PARAGRAPH_SPLIT_RE)
+		.map((paragraph) => paragraph.trim())
+		.filter((paragraph) => paragraph.length > 0);
+}
+
+function extraParagraphs(summary: string, description: string): string {
+	const paragraphs = splitParagraphs(description);
+	if (paragraphs.length === 0) return "";
+	const head = paragraphs[0];
+	const rest = head === summary.trim() ? paragraphs.slice(1) : paragraphs;
+	return rest.join("\n\n");
 }
 
 /**
