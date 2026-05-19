@@ -22,6 +22,8 @@ FORBIDDEN = (
     "transformers",
     "llama_index",
     "langchain_anthropic",
+    "langgraph",
+    "pinecone",
     "pydantic_ai",
     "cv2",
 )
