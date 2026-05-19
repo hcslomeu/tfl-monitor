@@ -8,7 +8,15 @@ export function BusBanner({ buses }: BusBannerProps) {
 	return (
 		<section className="tfl-card tfl-bus">
 			<div className="tfl-card-h">
-				<h4>Buses worth knowing about</h4>
+				<div className="tfl-card-h-title">
+					<h4>Buses worth knowing about</h4>
+					<span
+						className="tfl-demo-pill"
+						title="Bus disruptions are not in the live ingestion pipeline; this card uses static design-canvas fixtures so the layout stays visible end-to-end."
+					>
+						Demo
+					</span>
+				</div>
 				<span className="meta">{buses.length} routes flagged</span>
 			</div>
 			<div className="tfl-bus-row">

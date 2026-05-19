@@ -17,4 +17,9 @@ describe("BusBanner", () => {
 		expect(screen.getByText("38")).toBeInTheDocument();
 		expect(screen.getByText(/2 routes flagged/)).toBeInTheDocument();
 	});
+
+	it("labels the card as a Demo so reviewers don't mistake the fixtures for live data", () => {
+		render(<BusBanner buses={[]} />);
+		expect(screen.getByText("Demo")).toBeInTheDocument();
+	});
 });
