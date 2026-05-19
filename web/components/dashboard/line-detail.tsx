@@ -1,11 +1,26 @@
 import type { DisruptionSnapshot, LineSummary } from "./types";
 
+export type LineDetailState = "ready" | "loading" | "error";
+
 export interface LineDetailProps {
 	line: LineSummary;
 	disruption?: DisruptionSnapshot;
+	/**
+	 * Presentation state for the card body. Defaults to `"ready"`, in which
+	 * case the body is driven by `disruption` (rendered when present, "no
+	 * reported disruption" copy when absent). `"loading"` and `"error"` show
+	 * distinct non-jarring placeholders without flashing raw data.
+	 */
+	state?: LineDetailState;
 }
 
-export function LineDetail({ line, disruption }: LineDetailProps) {
+export function LineDetail({
+	line,
+	disruption,
+	state = "ready",
+}: LineDetailProps) {
+	const showDisruption = state === "ready" && disruption !== undefined;
+
 	return (
 		<section className="tfl-card">
 			<div className="tfl-detail-h">
@@ -16,12 +31,20 @@ export function LineDetail({ line, disruption }: LineDetailProps) {
 				<div>
 					<h2 className="tfl-detail-name">{line.name} line</h2>
 					<div className="tfl-detail-sub">
-						{line.code} · {line.statusText}
-						{disruption ? ` · reported ${disruption.reportedAtLabel}` : ""}
+						{line.code} · {line.statusText} · {line.updatedLabel}
+						{showDisruption ? ` · reported ${disruption.reportedAtLabel}` : ""}
 					</div>
 				</div>
 			</div>
-			{disruption ? (
+			{state === "loading" ? (
+				<div className="tfl-disruption">
+					<p>Loading line status…</p>
+				</div>
+			) : state === "error" ? (
+				<div className="tfl-disruption">
+					<p>Unable to load disruption details. Retrying shortly.</p>
+				</div>
+			) : disruption ? (
 				<>
 					<div className="tfl-disruption">
 						<div className="summary">{disruption.headline}</div>
@@ -53,7 +76,7 @@ export function LineDetail({ line, disruption }: LineDetailProps) {
 				</>
 			) : (
 				<div className="tfl-disruption">
-					<p>No active disruption reported for this line.</p>
+					<p>No reported disruption.</p>
 				</div>
 			)}
 		</section>

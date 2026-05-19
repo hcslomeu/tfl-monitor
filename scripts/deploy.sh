@@ -28,6 +28,7 @@ APP_DIR="/opt/tfl-monitor"
 COMPOSE_FILE="${APP_DIR}/infra/docker-compose.prod.yml"
 HEALTHCHECK_URL="${HEALTHCHECK_URL:-https://tfl-monitor-api.humbertolomeu.com/health}"
 API_CONTAINER="tfl-monitor-api-1"
+API_SERVICE="${API_SERVICE:-api}"
 
 cd "${APP_DIR}"
 
@@ -38,6 +39,21 @@ fi
 
 echo "[$(date -Iseconds)] docker compose up --build"
 docker compose -f "${COMPOSE_FILE}" up -d --build
+
+# Post-up assertion: confirm the api container is actually running before we
+# attempt healthchecks. `docker compose up` can exit 0 even when a service's
+# container immediately crash-loops, and the internal healthcheck below would
+# then loop on a `docker exec` against a non-running container with confusing
+# output. List running services explicitly and fail fast if api is absent.
+echo "[$(date -Iseconds)] verifying api service is running"
+running_services="$(docker compose -f "${COMPOSE_FILE}" ps --status running --services)"
+if ! grep -qx "${API_SERVICE}" <<<"${running_services}"; then
+  echo "ERROR: '${API_SERVICE}' service is not running after 'docker compose up'." >&2
+  echo "Running services:" >&2
+  echo "${running_services:-<none>}" >&2
+  docker compose -f "${COMPOSE_FILE}" ps >&2 || true
+  exit 1
+fi
 
 echo "[$(date -Iseconds)] internal healthcheck (docker exec ${API_CONTAINER})"
 for attempt in 1 2 3 4 5; do
