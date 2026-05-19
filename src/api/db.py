@@ -199,11 +199,11 @@ SELECT
 FROM analytics.stg_disruptions sd
 WHERE event_type = 'disruptions.snapshot'
   AND (
-      %(mode)s IS NULL
+      %(mode)s::text IS NULL
       OR EXISTS (
           SELECT 1
           FROM analytics.stg_line_status sls
-          WHERE sls.mode = %(mode)s
+          WHERE sls.mode = %(mode)s::text
             AND sls.line_id IN (
                 SELECT jsonb_array_elements_text(sd.affected_routes)
             )
