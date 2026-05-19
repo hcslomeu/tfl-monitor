@@ -1,3 +1,4 @@
+// Permanent placeholder — no backing API endpoint exists; always rendered (see TM-F2 plan).
 import type { BusItem } from "@/components/dashboard/types";
 
 /**

@@ -44,6 +44,26 @@ const LINE_META_BY_ID: Record<string, LineMeta> = {
 const UNKNOWN_CODE_PREFIX = "UNK:";
 const FALLBACK_COLOR = "#5A6A77";
 
+/**
+ * Display precedence for the `LineGrid` rows. Tube lines come first
+ * (alphabetical by name), then the Elizabeth line, then the DLR, then
+ * the Overground family (alphabetical within the group — post-2024
+ * the Overground was split into Lioness, Mildmay, Suffragette, Weaver,
+ * Windrush, Liberty). Any line whose `mode` is not in the array is
+ * pushed past Overground, alphabetical among the unknowns.
+ */
+const MODE_PRECEDENCE: readonly string[] = [
+	"tube",
+	"elizabeth-line",
+	"dlr",
+	"overground",
+];
+
+function modeRank(mode: string): number {
+	const index = MODE_PRECEDENCE.indexOf(mode);
+	return index === -1 ? MODE_PRECEDENCE.length : index;
+}
+
 const LINE_ID_BY_CODE: Record<string, string> = Object.fromEntries(
 	Object.entries(LINE_META_BY_ID).map(([id, { code }]) => [code, id]),
 );
@@ -106,7 +126,16 @@ export function lineStatusesToSummaries(
 	lines: LineStatus[],
 	now: Date = new Date(),
 ): LineSummary[] {
-	return lines.map((line) => {
+	const ordered = [...lines].sort((a, b) => {
+		const rankDelta = modeRank(a.mode) - modeRank(b.mode);
+		if (rankDelta !== 0) return rankDelta;
+		return stripTrailingLine(a.line_name).localeCompare(
+			stripTrailingLine(b.line_name),
+			"en",
+			{ sensitivity: "base" },
+		);
+	});
+	return ordered.map((line) => {
 		const meta = metaFor(line.line_id);
 		return {
 			code: meta.code,
