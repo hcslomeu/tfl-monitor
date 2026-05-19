@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import { MOCK_BUSES } from "@/lib/mocks/buses";
 import { MOCK_DISRUPTION } from "@/lib/mocks/disruptions";
 import { MOCK_LINES } from "@/lib/mocks/lines";
-import { MOCK_NEWS } from "@/lib/mocks/news";
 
 describe("design-system mock fixtures", () => {
 	it("ships 14 line summaries with unique codes", () => {
@@ -27,8 +26,7 @@ describe("design-system mock fixtures", () => {
 		expect(MOCK_DISRUPTION.stations.length).toBeGreaterThan(0);
 	});
 
-	it("ships 4 bus alerts and 3 news items per design canvas", () => {
+	it("ships 4 bus alerts per design canvas", () => {
 		expect(MOCK_BUSES).toHaveLength(4);
-		expect(MOCK_NEWS).toHaveLength(3);
 	});
 });

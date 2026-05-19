@@ -4,6 +4,7 @@ import type { Disruption } from "@/lib/api/disruptions-recent";
 import type { LineStatus } from "@/lib/api/status-live";
 import {
 	disruptionForLine,
+	disruptionsToNews,
 	disruptionToSnapshot,
 	lineStatusesToSummaries,
 	severityToBucket,
@@ -175,5 +176,47 @@ describe("disruptionForLine + disruptionToSnapshot", () => {
 		expect(snapshot.sourceLabel).toBe("Source: TfL Unified API");
 		expect(snapshot.reportedAtLabel).toMatch(/\d{2}:\d{2}/);
 		expect(snapshot.updatedAtLabel).toMatch(/\d{2}:\d{2}/);
+	});
+});
+
+describe("disruptionsToNews", () => {
+	const baseDisruption: Disruption = {
+		disruption_id: "test-news-1",
+		category: "RealTime",
+		category_description: "Real Time",
+		description: "Faulty train at Hayes & Harlington.",
+		summary: "Elizabeth line — westbound severe delays",
+		affected_routes: ["elizabeth"],
+		affected_stops: [],
+		closure_text: "",
+		severity: 6,
+		created: "2026-05-13T16:30:00Z",
+		last_update: "2026-05-13T16:58:00Z",
+	};
+
+	it("projects disruptions onto the news view-model in descending update order", () => {
+		const earlier: Disruption = {
+			...baseDisruption,
+			disruption_id: "test-news-2",
+			summary: "Northern line — Bank branch part-suspended",
+			description: "No service between Kennington and Moorgate.",
+			last_update: "2026-05-13T15:20:00Z",
+		};
+		const items = disruptionsToNews([earlier, baseDisruption]);
+		expect(items).toHaveLength(2);
+		expect(items[0].title).toBe("Elizabeth line — westbound severe delays");
+		expect(items[0].body).toBe("Faulty train at Hayes & Harlington.");
+		expect(items[0].time).toMatch(/^\d{2}:\d{2}$/);
+		expect(items[1].title).toBe("Northern line — Bank branch part-suspended");
+	});
+
+	it("falls back to '—' when last_update is unparseable", () => {
+		const broken: Disruption = { ...baseDisruption, last_update: "not-a-date" };
+		const [item] = disruptionsToNews([broken]);
+		expect(item.time).toBe("—");
+	});
+
+	it("returns an empty list when no disruptions are supplied", () => {
+		expect(disruptionsToNews([])).toEqual([]);
 	});
 });

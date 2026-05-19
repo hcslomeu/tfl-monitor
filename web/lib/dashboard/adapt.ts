@@ -13,6 +13,7 @@
 import type {
 	DisruptionSnapshot,
 	LineSummary,
+	NewsItem,
 	StatusBucket,
 	StatusSummaryCounts,
 } from "@/components/dashboard/types";
@@ -191,6 +192,41 @@ export function disruptionForLine(
 	const lineId = lineIdForCode(summary.code);
 	if (!lineId) return undefined;
 	return disruptions.find((d) => d.affected_routes.includes(lineId));
+}
+
+/**
+ * Project a list of backend `Disruption` rows into the `NewsReports`
+ * view-model. Rows are sorted by `last_update` descending so the most
+ * recent updates surface first; the component handles slot truncation.
+ *
+ * `time` uses the London-local `HH:MM` format the design canvas
+ * specifies. The `Disruption` payload already carries `summary` and
+ * `description`, so the mapping is direct and no further fetcher is
+ * required.
+ */
+export function disruptionsToNews(disruptions: Disruption[]): NewsItem[] {
+	const sorted = [...disruptions].sort((a, b) => {
+		const aTime = Date.parse(a.last_update);
+		const bTime = Date.parse(b.last_update);
+		return (
+			(Number.isNaN(bTime) ? 0 : bTime) - (Number.isNaN(aTime) ? 0 : aTime)
+		);
+	});
+	return sorted.map((d) => ({
+		time: formatLondonClockHHMM(d.last_update),
+		title: d.summary,
+		body: d.description,
+	}));
+}
+
+function formatLondonClockHHMM(iso: string): string {
+	const date = new Date(iso);
+	if (Number.isNaN(date.getTime())) return "—";
+	return date.toLocaleTimeString("en-GB", {
+		hour: "2-digit",
+		minute: "2-digit",
+		timeZone: "Europe/London",
+	});
 }
 
 /**
