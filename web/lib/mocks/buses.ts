@@ -1,4 +1,10 @@
-// Permanent placeholder — no backing API endpoint exists; always rendered (see TM-F2 plan).
+// BusBanner runs on these fixtures because TfL bus disruptions are not in
+// the live ingestion pipeline: src/ingestion/producers/disruptions.py only
+// polls `tube, elizabeth-line, overground, dlr`. Wiring buses would mean
+// expanding the producer, the Kafka schema, and the dbt marts, and would
+// add real warehouse volume on the Supabase free tier — disproportionate
+// for one dashboard card. The card stays as a labelled portfolio demo
+// (see the "Demo" pill in `bus-banner.tsx`).
 import type { BusItem } from "@/components/dashboard/types";
 
 /**

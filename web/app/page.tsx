@@ -13,13 +13,13 @@ import { getRecentDisruptions } from "@/lib/api/disruptions-recent";
 import { getStatusLive } from "@/lib/api/status-live";
 import {
 	disruptionForLine,
+	disruptionsToNews,
 	disruptionToSnapshot,
 	lineStatusesToSummaries,
 	summarizeCounts,
 } from "@/lib/dashboard/adapt";
 import { useAutoRefresh } from "@/lib/hooks/use-auto-refresh";
 import { MOCK_BUSES } from "@/lib/mocks/buses";
-import { MOCK_NEWS } from "@/lib/mocks/news";
 
 const REFRESH_INTERVAL_MS = 30_000;
 const REPO_URL = "https://github.com/humbertolomeu/tfl-monitor";
@@ -72,6 +72,11 @@ export default function HomePage() {
 		return match ? disruptionToSnapshot(match) : undefined;
 	}, [disruptions.data, selectedLine]);
 
+	const newsItems = useMemo(
+		() => (disruptions.data ? disruptionsToNews(disruptions.data) : []),
+		[disruptions.data],
+	);
+
 	const clockLabel = formatLondonClock(status.lastUpdated);
 
 	return (
@@ -86,7 +91,7 @@ export default function HomePage() {
 					/>
 					<div className="tfl-left-bottom">
 						<BusBanner buses={MOCK_BUSES} />
-						<NewsReports items={MOCK_NEWS} />
+						<NewsReports items={newsItems} />
 					</div>
 				</div>
 				<div className="tfl-right-col">
