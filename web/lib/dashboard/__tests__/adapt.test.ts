@@ -4,6 +4,7 @@ import type { Disruption } from "@/lib/api/disruptions-recent";
 import type { LineStatus } from "@/lib/api/status-live";
 import {
 	disruptionForLine,
+	disruptionsToNews,
 	disruptionToSnapshot,
 	lineStatusesToSummaries,
 	severityToBucket,
@@ -175,5 +176,81 @@ describe("disruptionForLine + disruptionToSnapshot", () => {
 		expect(snapshot.sourceLabel).toBe("Source: TfL Unified API");
 		expect(snapshot.reportedAtLabel).toMatch(/\d{2}:\d{2}/);
 		expect(snapshot.updatedAtLabel).toMatch(/\d{2}:\d{2}/);
+	});
+});
+
+describe("disruptionsToNews", () => {
+	const baseDisruption: Disruption = {
+		disruption_id: "test-news-1",
+		category: "RealTime",
+		category_description: "Real Time",
+		description: "Faulty train at Hayes & Harlington.",
+		summary: "Elizabeth line — westbound severe delays",
+		affected_routes: ["elizabeth"],
+		affected_stops: [],
+		closure_text: "",
+		severity: 6,
+		created: "2026-05-13T16:30:00Z",
+		last_update: "2026-05-13T16:58:00Z",
+	};
+
+	it("projects disruptions onto the news view-model in descending update order", () => {
+		const earlier: Disruption = {
+			...baseDisruption,
+			disruption_id: "test-news-2",
+			summary: "Northern line — Bank branch part-suspended",
+			description: "No service between Kennington and Moorgate.",
+			last_update: "2026-05-13T15:20:00Z",
+		};
+		const items = disruptionsToNews([earlier, baseDisruption]);
+		expect(items).toHaveLength(2);
+		expect(items[0].title).toBe("Elizabeth line — westbound severe delays");
+		expect(items[0].body).toBe("Faulty train at Hayes & Harlington.");
+		expect(items[0].time).toMatch(/^\d{2}:\d{2}$/);
+		expect(items[1].title).toBe("Northern line — Bank branch part-suspended");
+	});
+
+	it("falls back to '—' when last_update is unparseable", () => {
+		const broken: Disruption = { ...baseDisruption, last_update: "not-a-date" };
+		const [item] = disruptionsToNews([broken]);
+		expect(item.time).toBe("—");
+	});
+
+	it("returns an empty list when no disruptions are supplied", () => {
+		expect(disruptionsToNews([])).toEqual([]);
+	});
+
+	it("trims multi-paragraph descriptions to the first paragraph so the dense news list does not overflow", () => {
+		const verbose: Disruption = {
+			...baseDisruption,
+			description:
+				"Faulty train at Hayes & Harlington.\n\nTickets accepted on Piccadilly & Bakerloo until service is restored.",
+		};
+		const [item] = disruptionsToNews([verbose]);
+		expect(item.body).toBe("Faulty train at Hayes & Harlington.");
+	});
+
+	it("keeps line-broken sentences together within a single paragraph", () => {
+		// Real TfL payloads sometimes inject a single `\n` between sentences
+		// inside the same paragraph; splitting on it would clip the body
+		// mid-thought. We only split on blank lines.
+		const wrapped: Disruption = {
+			...baseDisruption,
+			description: "Train at Hayes & Harlington.\nAlternatives: take the bus.",
+		};
+		const [item] = disruptionsToNews([wrapped]);
+		expect(item.body).toBe(
+			"Train at Hayes & Harlington.\nAlternatives: take the bus.",
+		);
+	});
+
+	it("trims paragraphs split by CRLF blank lines so Windows-encoded payloads behave like LF ones", () => {
+		const crlf: Disruption = {
+			...baseDisruption,
+			description:
+				"Faulty train at Hayes & Harlington.\r\n\r\nTickets accepted on Piccadilly & Bakerloo until service is restored.",
+		};
+		const [item] = disruptionsToNews([crlf]);
+		expect(item.body).toBe("Faulty train at Hayes & Harlington.");
 	});
 });

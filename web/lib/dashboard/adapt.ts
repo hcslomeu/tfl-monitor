@@ -13,6 +13,7 @@
 import type {
 	DisruptionSnapshot,
 	LineSummary,
+	NewsItem,
 	StatusBucket,
 	StatusSummaryCounts,
 } from "@/components/dashboard/types";
@@ -164,17 +165,18 @@ export function summarizeCounts(lines: LineSummary[]): StatusSummaryCounts {
 	return counts;
 }
 
-function formatLondonTime(iso: string): string {
-	try {
-		return new Date(iso).toLocaleTimeString("en-GB", {
-			hour: "2-digit",
-			minute: "2-digit",
-			timeZone: "Europe/London",
-			timeZoneName: "short",
-		});
-	} catch {
-		return iso;
-	}
+function formatLondonTime(
+	iso: string,
+	{ withTimezoneName = false }: { withTimezoneName?: boolean } = {},
+): string {
+	const date = new Date(iso);
+	if (Number.isNaN(date.getTime())) return "—";
+	return date.toLocaleTimeString("en-GB", {
+		hour: "2-digit",
+		minute: "2-digit",
+		timeZone: "Europe/London",
+		...(withTimezoneName ? { timeZoneName: "short" } : {}),
+	});
 }
 
 /**
@@ -194,6 +196,43 @@ export function disruptionForLine(
 }
 
 /**
+ * Project a list of backend `Disruption` rows into the `NewsReports`
+ * view-model. Rows are sorted by `last_update` descending so the most
+ * recent updates surface first; the component handles slot truncation.
+ *
+ * `time` uses the London-local `HH:MM` format the design canvas
+ * specifies. The `body` is trimmed to the first paragraph of
+ * `description` so the dense news list does not overflow when the TfL
+ * payload carries a multi-paragraph blob — the LineDetail card already
+ * surfaces the full description.
+ */
+export function disruptionsToNews(disruptions: Disruption[]): NewsItem[] {
+	const sorted = [...disruptions].sort((a, b) => {
+		const aTime = Date.parse(a.last_update);
+		const bTime = Date.parse(b.last_update);
+		return (
+			(Number.isNaN(bTime) ? 0 : bTime) - (Number.isNaN(aTime) ? 0 : aTime)
+		);
+	});
+	return sorted.map((d) => ({
+		time: formatLondonTime(d.last_update),
+		title: d.summary,
+		body: firstParagraph(d.description),
+	}));
+}
+
+// Matches blank-line separators in both LF and CRLF payloads. The TfL
+// Unified API typically returns LF-encoded descriptions, but the schema
+// does not guarantee it — defending against CRLF keeps the news list
+// and the snapshot body trimmed under both line-ending conventions.
+const PARAGRAPH_SPLIT_RE = /\r?\n\s*\r?\n+/;
+
+function firstParagraph(description: string): string {
+	const [first] = description.split(PARAGRAPH_SPLIT_RE);
+	return first.trim();
+}
+
+/**
  * Project a backend `Disruption` row into the view-model `LineDetail`
  * consumes. Station names degrade to the raw stop ID when we lack a
  * richer registry — Phase 5 keeps the projection minimal; richer
@@ -201,7 +240,7 @@ export function disruptionForLine(
  */
 export function disruptionToSnapshot(d: Disruption): DisruptionSnapshot {
 	const body = d.description
-		.split(/\n{2,}/)
+		.split(PARAGRAPH_SPLIT_RE)
 		.map((paragraph) => paragraph.trim())
 		.filter((paragraph) => paragraph.length > 0);
 	const stations = d.affected_stops.map((stop) => ({
@@ -211,9 +250,9 @@ export function disruptionToSnapshot(d: Disruption): DisruptionSnapshot {
 	return {
 		headline: d.summary,
 		body,
-		reportedAtLabel: formatLondonTime(d.created),
+		reportedAtLabel: formatLondonTime(d.created, { withTimezoneName: true }),
 		stations,
 		sourceLabel: "Source: TfL Unified API",
-		updatedAtLabel: formatLondonTime(d.last_update),
+		updatedAtLabel: formatLondonTime(d.last_update, { withTimezoneName: true }),
 	};
 }
