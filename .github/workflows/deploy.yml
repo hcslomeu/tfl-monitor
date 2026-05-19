@@ -48,5 +48,15 @@ jobs:
 
       - name: Build + restart + healthcheck
         run: |
-          ssh "ubuntu@${LIGHTSAIL_HOST}" \
+          # ServerAliveInterval emits keepalive probes on the SSH channel so an
+          # intermediate NAT / firewall in the runner's network path does not
+          # drop the connection as idle while buildkit's silent unpack phase
+          # runs (4+ minutes with no stdout). OpenSSH does not enforce its own
+          # idle timeout by default — the disconnect we hit
+          # (`client_loop: send disconnect: Broken pipe`) was the GitHub-hosted
+          # runner's outbound NAT timing out the silent TCP session, not ssh
+          # itself. TCPKeepAlive is optional belt-and-braces; the SSH-layer
+          # probes do the actual work here.
+          ssh -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -o TCPKeepAlive=yes \
+            "ubuntu@${LIGHTSAIL_HOST}" \
             'cd /opt/tfl-monitor && bash scripts/deploy.sh'
