@@ -23,15 +23,10 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from langchain_anthropic import ChatAnthropic
-from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.prebuilt import create_react_agent
 from psycopg_pool import AsyncConnectionPool
 from pydantic import SecretStr
 
 from api.agent.prompts import render
-from api.agent.rag import build_retriever
-from api.agent.tools import make_tools
 
 DEFAULT_PINECONE_INDEX = "tfl-strategy-docs"
 DEFAULT_ANTHROPIC_MODEL = "claude-3-5-sonnet-latest"
@@ -61,6 +56,8 @@ def _build_chat_model() -> Any | None:
 
     anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
     if anthropic_key:
+        from langchain_anthropic import ChatAnthropic  # noqa: PLC0415
+
         return ChatAnthropic(
             model_name=DEFAULT_ANTHROPIC_MODEL,
             temperature=0.0,
@@ -99,6 +96,12 @@ def compile_agent(
     chat_model: Any = model if model is not None else _build_chat_model()
     if chat_model is None:
         return None
+
+    from langgraph.checkpoint.memory import InMemorySaver  # noqa: PLC0415
+    from langgraph.prebuilt import create_react_agent  # noqa: PLC0415
+
+    from api.agent.rag import build_retriever  # noqa: PLC0415
+    from api.agent.tools import make_tools  # noqa: PLC0415
 
     retriever = build_retriever(
         pinecone_api_key=pinecone_key,

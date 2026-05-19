@@ -22,7 +22,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from sse_starlette.sse import EventSourceResponse
 
-from api.agent.graph import compile_agent
 from api.agent.history import append_message, fetch_history
 from api.agent.streaming import frame_end, project, serialise
 from api.db import (
@@ -71,6 +70,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     pool = build_pool(dsn)
     await pool.open()
     app.state.db_pool = pool
+    # Lazy import: pulls langchain_anthropic + llama_index transitively.
+    # Keeping it out of module scope shaves cold-start when DATABASE_URL
+    # is unset (smoke tests, /health-only deploys).
+    from api.agent.graph import compile_agent  # noqa: PLC0415
+
     app.state.agent = compile_agent(pool=pool)
     logfire.info(
         "api_db_pool_opened",

@@ -9,17 +9,15 @@ to ``None`` so the LLM never sees a sentinel page number.
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import logfire
-from llama_index.core import VectorStoreIndex
-from llama_index.core.retrievers import BaseRetriever
-from llama_index.embeddings.openai import OpenAIEmbedding
-from llama_index.vector_stores.pinecone import PineconeVectorStore
-from pinecone import Pinecone
 from pydantic import BaseModel, ConfigDict
 
 from rag.upsert import PAGE_UNKNOWN_SENTINEL
+
+if TYPE_CHECKING:
+    from llama_index.core.retrievers import BaseRetriever
 
 NAMESPACES: tuple[str, ...] = ("tfl_business_plan", "mts_2018", "tfl_annual_report")
 DEFAULT_TOP_K = 5
@@ -56,6 +54,11 @@ def build_retriever(
     Returns:
         Dict mapping namespace (``doc_id``) to its retriever.
     """
+    from llama_index.core import VectorStoreIndex  # noqa: PLC0415
+    from llama_index.embeddings.openai import OpenAIEmbedding  # noqa: PLC0415
+    from llama_index.vector_stores.pinecone import PineconeVectorStore  # noqa: PLC0415
+    from pinecone import Pinecone  # noqa: PLC0415
+
     pc = Pinecone(api_key=pinecone_api_key)
     pinecone_index = pc.Index(index_name)
     embed_model = OpenAIEmbedding(
