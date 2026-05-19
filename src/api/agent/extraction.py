@@ -13,11 +13,13 @@ from __future__ import annotations
 
 import os
 from functools import lru_cache
-from typing import Literal, get_args
+from typing import TYPE_CHECKING, Literal, get_args
 
 import logfire
 from pydantic import BaseModel
-from pydantic_ai import Agent
+
+if TYPE_CHECKING:
+    from pydantic_ai import Agent
 
 CanonicalLineId = Literal[
     "bakerloo",
@@ -55,6 +57,8 @@ def _model_string() -> str:
 @lru_cache(maxsize=1)
 def _normaliser() -> Agent[None, LineId]:
     """Return the singleton Haiku-backed extraction agent."""
+    from pydantic_ai import Agent  # noqa: PLC0415
+
     return Agent(
         _model_string(),
         output_type=LineId,

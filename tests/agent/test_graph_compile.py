@@ -60,7 +60,14 @@ def test_compile_smoke_invoke_with_fake_model(monkeypatch: pytest.MonkeyPatch) -
     def fake_build_retriever(**_kwargs: object) -> dict[str, object]:
         return {}
 
-    monkeypatch.setattr(graph_module, "build_retriever", fake_build_retriever)
+    # ``compile_agent`` lazy-imports ``build_retriever`` from
+    # ``api.agent.rag`` so the heavy llama_index / pinecone chain stays
+    # off the API cold-start path. Patch the source attribute so the
+    # ``from … import build_retriever`` inside the function resolves to
+    # the fake.
+    from api.agent import rag as rag_module
+
+    monkeypatch.setattr(rag_module, "build_retriever", fake_build_retriever)
 
     fake_model = FakeChatModel(response="ack")
     agent = compile_agent(pool=object(), model=fake_model)  # type: ignore[arg-type]
@@ -118,7 +125,16 @@ def test_build_chat_model_falls_back_to_anthropic_when_region_unset(
         captured.update(kwargs)
         return object()
 
-    monkeypatch.setattr(graph_module, "ChatAnthropic", fake_chat_anthropic)
+    # ``_build_chat_model`` lazy-imports ``ChatAnthropic`` from
+    # ``langchain_anthropic``. Stub the module in ``sys.modules`` so the
+    # in-function ``from langchain_anthropic import ChatAnthropic`` picks
+    # up the fake (same pattern as the Bedrock test above).
+    import sys
+    import types
+
+    fake_module = types.ModuleType("langchain_anthropic")
+    fake_module.ChatAnthropic = fake_chat_anthropic  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "langchain_anthropic", fake_module)
 
     model = graph_module._build_chat_model()
     assert model is not None

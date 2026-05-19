@@ -14,11 +14,9 @@ smuggle unknown fields past the type system.
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import logfire
-from langchain_core.tools import BaseTool, tool
-from llama_index.core.retrievers import BaseRetriever
 from psycopg_pool import AsyncConnectionPool
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -32,6 +30,10 @@ from api.db import (
     fetch_reliability,
 )
 from api.schemas import Mode
+
+if TYPE_CHECKING:
+    from langchain_core.tools import BaseTool
+    from llama_index.core.retrievers import BaseRetriever
 
 
 class LineReliabilityQuery(BaseModel):
@@ -85,6 +87,7 @@ def make_tools(
         List of LangChain ``BaseTool`` instances ready for
         ``create_react_agent``.
     """
+    from langchain_core.tools import tool  # noqa: PLC0415
 
     @tool
     async def query_tube_status() -> list[dict[str, Any]]:
