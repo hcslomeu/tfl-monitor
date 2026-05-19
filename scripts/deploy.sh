@@ -29,6 +29,14 @@ COMPOSE_FILE="${APP_DIR}/infra/docker-compose.prod.yml"
 HEALTHCHECK_URL="${HEALTHCHECK_URL:-https://tfl-monitor-api.humbertolomeu.com/health}"
 API_CONTAINER="tfl-monitor-api-1"
 API_SERVICE="${API_SERVICE:-api}"
+# Budget for the internal healthcheck loop. 12 × 5s ≈ 60s — sized for the worst
+# observed Lightsail cold-start. A separate cold-start optimisation is in
+# progress; this budget remains the safety net.
+MAX_ATTEMPTS=12
+
+dump_api_logs() {
+  docker compose -f "${COMPOSE_FILE}" logs --tail=200 "${API_SERVICE}" >&2 || true
+}
 
 cd "${APP_DIR}"
 
@@ -52,17 +60,19 @@ if ! grep -qx "${API_SERVICE}" <<<"${running_services}"; then
   echo "Running services:" >&2
   echo "${running_services:-<none>}" >&2
   docker compose -f "${COMPOSE_FILE}" ps >&2 || true
+  dump_api_logs
   exit 1
 fi
 
 echo "[$(date -Iseconds)] internal healthcheck (docker exec ${API_CONTAINER})"
-for attempt in 1 2 3 4 5; do
+for ((attempt = 1; attempt <= MAX_ATTEMPTS; attempt++)); do
   if docker exec "${API_CONTAINER}" curl -fsS http://localhost:8000/health >/dev/null 2>&1; then
     echo "[$(date -Iseconds)] container healthy"
     break
   fi
-  if [[ ${attempt} -eq 5 ]]; then
-    echo "ERROR: ${API_CONTAINER} did not respond to /health after 5 attempts" >&2
+  if [[ ${attempt} -eq ${MAX_ATTEMPTS} ]]; then
+    echo "ERROR: ${API_CONTAINER} did not respond to /health after ${MAX_ATTEMPTS} attempts" >&2
+    dump_api_logs
     exit 1
   fi
   sleep 5
@@ -78,4 +88,5 @@ for attempt in 1 2 3; do
 done
 
 echo "WARN: container is healthy but ${HEALTHCHECK_URL} is unreachable — check DNS / Caddy" >&2
+dump_api_logs
 exit 1
