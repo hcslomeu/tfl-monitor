@@ -141,6 +141,10 @@ dbt-run = "dbt run --project-dir dbt --profiles-dir dbt --target dev"
 dbt-test = "dbt test --project-dir dbt --profiles-dir dbt --target dev"
 rag-ingest = "python -m rag.ingest"
 api = "uvicorn api.main:app --reload --app-dir src"
+# Loads .env so TFL_APP_KEY (and TFL_DEBUG_PROXY=1 when set) reach the
+# process, letting the Swagger UI proxy real TfL calls without manual
+# key entry. Local dev only — do not use in production.
+api-debug = "uvicorn api.main:app --reload --app-dir src --env-file .env"
 init-topics = "docker compose --profile init up redpanda-init"
 ingest-line-status = "python -m ingestion.producers.line_status"
 consume-line-status = "python -m ingestion.consumers.line_status"
