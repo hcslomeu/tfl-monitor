@@ -49,6 +49,8 @@ export const MOCK_LINES: LineSummary[] = [
 		status: "severe",
 		statusText: "Severe delays",
 		updatedLabel: "updated 2m ago",
+		reason:
+			"Elizabeth line: Severe delays between Paddington and Reading due to a faulty train at Hayes & Harlington.\n\nTickets accepted on local buses and on GWR services between affected stations.",
 	},
 	{
 		code: "HAM",
@@ -105,6 +107,8 @@ export const MOCK_LINES: LineSummary[] = [
 		status: "suspended",
 		statusText: "Suspended",
 		updatedLabel: "updated 2m ago",
+		reason:
+			"Waterloo & City Line: No service while we fix a signal failure at Bank.",
 	},
 	{
 		code: "DLR",
