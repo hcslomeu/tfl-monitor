@@ -35,8 +35,13 @@ def arrivals_oxford_circus_fixture() -> list[dict[str, Any]]:
 
 
 @pytest.fixture
-def disruptions_tube_fixture() -> list[dict[str, Any]]:
-    return _load("disruptions_tube.json")
+def line_status_tube_detailed_fixture() -> list[dict[str, Any]]:
+    """``/Line/Mode/tube/Status?detail=true`` response with nested disruptions.
+
+    Captured live (TM-26): bakerloo + district carry populated disruptions,
+    central is included to exercise the no-disruption skip path.
+    """
+    return _load("line_status_tube_detailed.json")
 
 
 ResponseFactory = Callable[[httpx.Request], httpx.Response]
