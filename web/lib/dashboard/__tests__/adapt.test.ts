@@ -177,6 +177,32 @@ describe("disruptionForLine + disruptionToSnapshot", () => {
 		expect(snapshot.reportedAtLabel).toMatch(/\d{2}:\d{2}/);
 		expect(snapshot.updatedAtLabel).toMatch(/\d{2}:\d{2}/);
 	});
+
+	it("drops the leading description paragraph when it duplicates summary so LineDetail does not echo the headline", () => {
+		// Same TfL Unified API echo pattern that `disruptionsToNews`
+		// already handles — the headline would otherwise render once
+		// in the .summary div and again as the first <p> body paragraph.
+		const echoed: Disruption = {
+			...disruption,
+			summary: "Piccadilly Line: SUSPENDED between Acton Town and Heathrow.",
+			description:
+				"Piccadilly Line: SUSPENDED between Acton Town and Heathrow.\n\nTickets accepted on London Buses.",
+		};
+		const snapshot = disruptionToSnapshot(echoed);
+		expect(snapshot.headline).toBe(
+			"Piccadilly Line: SUSPENDED between Acton Town and Heathrow.",
+		);
+		expect(snapshot.body).toEqual(["Tickets accepted on London Buses."]);
+	});
+
+	it("keeps the full description when the leading paragraph does not match summary", () => {
+		const snapshot = disruptionToSnapshot({
+			...disruption,
+			summary: "Severe delays westbound",
+			description: "Para 1.\n\nPara 2.\n\nPara 3.",
+		});
+		expect(snapshot.body).toEqual(["Para 1.", "Para 2.", "Para 3."]);
+	});
 });
 
 describe("disruptionsToNews", () => {

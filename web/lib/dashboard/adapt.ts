@@ -249,12 +249,17 @@ function extraParagraphs(summary: string, description: string): string {
  * consumes. Station names degrade to the raw stop ID when we lack a
  * richer registry — Phase 5 keeps the projection minimal; richer
  * naming comes when the disruption stream is wired end-to-end.
+ *
+ * The leading paragraph of `description` is dropped when it exactly
+ * matches `summary` — TfL's Unified API repeats the summary as the
+ * first paragraph of `description` for most payloads, so without this
+ * the LineDetail card would render the headline once and then again
+ * as the first body paragraph.
  */
 export function disruptionToSnapshot(d: Disruption): DisruptionSnapshot {
-	const body = d.description
-		.split(PARAGRAPH_SPLIT_RE)
-		.map((paragraph) => paragraph.trim())
-		.filter((paragraph) => paragraph.length > 0);
+	const paragraphs = splitParagraphs(d.description);
+	const body =
+		paragraphs[0] === d.summary.trim() ? paragraphs.slice(1) : paragraphs;
 	const stations = d.affected_stops.map((stop) => ({
 		name: stop,
 		code: stop,
