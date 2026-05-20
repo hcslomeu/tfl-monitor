@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Path, Query
 
 from ingestion.tfl_client import TflClient, TflClientError
 
@@ -21,6 +21,13 @@ router = APIRouter(prefix="/api/v1/debug/tfl", tags=["debug-tfl"])
 
 DEFAULT_MODES = "tube,elizabeth-line,overground,dlr"
 
+# Per CLAUDE.md zero-trust rule: validate user-controlled inputs that
+# reach the upstream URL path even on debug-only routes. CSV of TfL
+# mode slugs (lowercase letters, digits, dashes, commas) — nothing that
+# can shape the path (``/``, ``..``, encoded variants).
+_MODES_PATTERN = r"^[a-z0-9,-]+$"
+_NAPTAN_PATTERN = r"^[0-9A-Za-z]+$"
+
 
 async def _get(path: str, params: dict[str, Any] | None = None) -> Any:
     """Issue an authenticated GET against the TfL Unified API and return raw JSON."""
@@ -28,12 +35,19 @@ async def _get(path: str, params: dict[str, Any] | None = None) -> Any:
         async with TflClient.from_env() as tfl:
             return await tfl._request(path, params=params)  # noqa: SLF001
     except TflClientError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        # Missing-key is a local misconfiguration, not an upstream
+        # failure — surface it as 503 so the response code matches the
+        # cause. Anything else from the client wraps an upstream issue.
+        message = str(exc)
+        status = 503 if "TFL_APP_KEY" in message else 502
+        raise HTTPException(status_code=status, detail=message) from exc
 
 
 @router.get("/status", operation_id="debug_tfl_status")
 async def debug_status(
-    modes: Annotated[str, Query(description="CSV of TfL modes")] = DEFAULT_MODES,
+    modes: Annotated[
+        str, Query(description="CSV of TfL modes", pattern=_MODES_PATTERN)
+    ] = DEFAULT_MODES,
 ) -> Any:
     """``GET /Line/Mode/{modes}/Status`` — basic line statuses without nested disruption."""
     return await _get(f"/Line/Mode/{modes}/Status")
@@ -41,7 +55,9 @@ async def debug_status(
 
 @router.get("/status-detail", operation_id="debug_tfl_status_detail")
 async def debug_status_detail(
-    modes: Annotated[str, Query(description="CSV of TfL modes")] = DEFAULT_MODES,
+    modes: Annotated[
+        str, Query(description="CSV of TfL modes", pattern=_MODES_PATTERN)
+    ] = DEFAULT_MODES,
 ) -> Any:
     """``GET /Line/Mode/{modes}/Status?detail=true`` — populated ``reason`` and ``disruption``.
 
@@ -53,7 +69,9 @@ async def debug_status_detail(
 
 @router.get("/line-disruption", operation_id="debug_tfl_line_disruption")
 async def debug_line_disruption(
-    modes: Annotated[str, Query(description="CSV of TfL modes")] = DEFAULT_MODES,
+    modes: Annotated[
+        str, Query(description="CSV of TfL modes", pattern=_MODES_PATTERN)
+    ] = DEFAULT_MODES,
 ) -> Any:
     """``GET /Line/Mode/{modes}/Disruption`` — free-tier returns empty arrays (TM-26)."""
     return await _get(f"/Line/Mode/{modes}/Disruption")
@@ -78,6 +96,8 @@ async def debug_lift_disruptions() -> Any:
 
 
 @router.get("/arrivals/{stop_id}", operation_id="debug_tfl_arrivals")
-async def debug_arrivals(stop_id: str) -> Any:
+async def debug_arrivals(
+    stop_id: Annotated[str, Path(description="NaPTAN stop id", pattern=_NAPTAN_PATTERN)],
+) -> Any:
     """``GET /StopPoint/{stop_id}/Arrivals`` — live arrival predictions for one NaPTAN stop."""
     return await _get(f"/StopPoint/{stop_id}/Arrivals")
