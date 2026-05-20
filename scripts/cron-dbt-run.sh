@@ -11,6 +11,17 @@
 set -euo pipefail
 
 LOG_TAG="tfl-monitor-cron"
+LOCK_FILE="/tmp/tfl-monitor-dbt.lock"
+
+# Non-blocking flock prevents overlapping runs from piling up when a build
+# takes longer than the cron interval (currently 15 min). FD 9 stays open
+# for the lifetime of the script, so the lock is released on any exit.
+exec 9>"$LOCK_FILE"
+if ! flock -n 9; then
+  echo "[$(date -Iseconds)] $LOG_TAG dbt build already running, skipping"
+  exit 0
+fi
+
 echo "[$(date -Iseconds)] $LOG_TAG dbt build start"
 
 cd /opt/tfl-monitor

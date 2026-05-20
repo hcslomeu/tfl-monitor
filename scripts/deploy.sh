@@ -45,6 +45,14 @@ if [[ ! -f .env ]]; then
   exit 1
 fi
 
+# Reinstall the cron schedule on every deploy. bootstrap-tenant.sh only runs
+# once on first provisioning, so without this step changes to
+# infra/cron.d/tfl-monitor never reach /etc/cron.d on the box. The step runs
+# before `compose up` so a failing build does not also block cron updates.
+echo "[$(date -Iseconds)] installing cron schedule"
+sudo cp "${APP_DIR}/infra/cron.d/tfl-monitor" /etc/cron.d/tfl-monitor
+sudo chmod 644 /etc/cron.d/tfl-monitor
+
 echo "[$(date -Iseconds)] docker compose up --build"
 docker compose -f "${COMPOSE_FILE}" up -d --build
 
