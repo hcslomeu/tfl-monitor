@@ -25,7 +25,6 @@ from contracts.schemas.disruptions import DisruptionPayload
 from contracts.schemas.line_status import LineStatusPayload
 from contracts.schemas.tfl_api import (
     TflArrivalPrediction,
-    TflDisruption,
     TflLineResponse,
 )
 
@@ -136,84 +135,93 @@ def arrival_payloads(
 
 
 def disruption_payloads(
-    response: list[TflDisruption],
+    response: list[TflLineResponse],
 ) -> list[DisruptionPayload]:
-    """Normalise TfL disruption records into tier-2 payloads.
+    """Normalise nested disruption records into tier-2 payloads.
 
-    The free TfL ``/Line/Mode/{mode}/Disruption`` endpoint omits stable
-    identifiers (no ``id``, ``created`` or ``severity`` fields), so this
-    adapter synthesises:
+    Walks ``Line -> lineStatuses[] -> disruption`` over a response from
+    ``/Line/Mode/{modes}/Status?detail=true``. The bare ``/Disruption``
+    endpoint omits ``affectedRoutes`` and ``affectedStops`` on the free
+    tier; only the detailed line-status payload populates them.
 
+    Each populated ``disruption`` produces one tier-2 payload:
+
+    - ``affected_routes``: a single-element list with the parent
+      ``Line.id``. The nested ``disruption.affectedRoutes`` describes
+      route sections of the parent line, not other lines, so the
+      authoritative line identifier is the parent.
+    - ``affected_stops``: the deduplicated list of ``naptanId`` values
+      from ``disruption.affectedStops``.
     - ``disruption_id``: first ``32`` hex chars of a SHA-256 digest over
-      ``{"category", "type", "closure_text", "description": stripped,
-      "affected_routes": sorted([...])}``, stable across processes
-      (Python's built-in ``hash()`` is randomised per process and is
-      therefore not used). The description is ``.strip()``-normalised so
-      trivial upstream whitespace changes do not invalidate the synthetic
-      ID; ``type`` and ``closure_text`` are included so distinct events
-      sharing a description (common on the Piccadilly line in the
-      committed fixture) get distinct IDs.
+      ``{"category", "closure_text", "description": stripped,
+      "affected_routes": sorted([...])}``. The nested-form payload does
+      not expose the ``type`` field that the legacy ``/Disruption``
+      endpoint carried; the parent ``Line.id`` already disambiguates
+      across lines and ``closure_text`` disambiguates within a line.
     - ``created`` / ``last_update``: current UTC time. Downstream
       consumers must not rely on these for deduplication without a
       TfL-supplied key.
-    - ``summary``: ``description`` truncated to 160 characters; the TfL
-      free endpoint does not return a separate summary field.
-    - ``severity``: ``0``; the endpoint does not surface severity.
+    - ``summary``: ``description`` truncated to 160 characters.
+    - ``severity``: ``0``; the nested disruption record does not surface
+      severity (the parent ``lineStatuses`` entry does, but it describes
+      the line, not the disruption).
 
     Args:
-        response: Tier-1 disruption records.
+        response: Tier-1 line-status records carrying nested disruptions.
 
     Returns:
-        Tier-2 :class:`DisruptionPayload` list in input order.
+        Tier-2 :class:`DisruptionPayload` list in walk order
+        (line → lineStatus → disruption).
     """
     now = datetime.now(UTC)
     payloads: list[DisruptionPayload] = []
-    for item in response:
-        affected_routes = _extract_ids(item.affected_routes, "lineId")
-        affected_stops = _extract_ids(item.affected_stops, "naptanId")
-        closure_text = item.closure_text or ""
-        disruption_type = item.type or ""
-        try:
-            category = DisruptionCategory(item.category)
-        except ValueError:
-            category = DisruptionCategory.UNDEFINED
-        payloads.append(
-            DisruptionPayload(
-                disruption_id=_synthetic_disruption_id(
-                    category=item.category,
-                    description=item.description,
-                    disruption_type=disruption_type,
-                    closure_text=closure_text,
+    for line in response:
+        affected_routes = [line.id]
+        for status in line.line_statuses:
+            disruption = status.disruption
+            if disruption is None:
+                continue
+            affected_stops = _extract_ids(disruption.affected_stops, "naptanId")
+            closure_text = disruption.closure_text or ""
+            try:
+                category = DisruptionCategory(disruption.category)
+            except ValueError:
+                category = DisruptionCategory.UNDEFINED
+            payloads.append(
+                DisruptionPayload(
+                    disruption_id=_synthetic_disruption_id(
+                        category=disruption.category,
+                        description=disruption.description,
+                        closure_text=closure_text,
+                        affected_routes=affected_routes,
+                    ),
+                    category=category,
+                    category_description=disruption.category_description,
+                    description=disruption.description,
+                    summary=disruption.description[:_SUMMARY_MAX_LENGTH],
                     affected_routes=affected_routes,
-                ),
-                category=category,
-                category_description=item.category_description,
-                description=item.description,
-                summary=item.description[:_SUMMARY_MAX_LENGTH],
-                affected_routes=affected_routes,
-                affected_stops=affected_stops,
-                closure_text=closure_text,
-                severity=0,
-                created=now,
-                last_update=now,
+                    affected_stops=affected_stops,
+                    closure_text=closure_text,
+                    severity=0,
+                    created=now,
+                    last_update=now,
+                )
             )
-        )
     return payloads
 
 
 def _extract_ids(items: list[dict[str, object]], key: str) -> list[str]:
-    """Return the string values of ``key`` across a list of dict entries.
+    """Return the deduplicated string values of ``key`` across dict entries.
 
-    For TfL ``affectedRoutes`` entries the correct key is ``lineId`` (the
-    parent line identifier) rather than ``id`` (which identifies the
-    specific route segment); ``DisruptionPayload.affected_routes`` is
-    documented as a list of line identifiers, so consumers join on it.
+    Order is the first-seen order to keep the synthetic-ID inputs stable.
     """
     extracted: list[str] = []
+    seen: set[str] = set()
     for entry in items:
         value = entry.get(key)
-        if isinstance(value, str) and value:
+        if isinstance(value, str) and value and value not in seen:
             extracted.append(value)
+            seen.add(value)
     return extracted
 
 
@@ -221,25 +229,21 @@ def _synthetic_disruption_id(
     *,
     category: str,
     description: str,
-    disruption_type: str,
     closure_text: str,
     affected_routes: list[str],
 ) -> str:
     """Build a stable synthetic disruption ID via SHA-256.
 
-    Hash inputs include ``type`` (e.g. ``lineInfo`` / ``routeBlocking`` /
-    ``lineBlocking``) and ``closure_text`` (e.g. ``severeDelays`` /
-    ``partSuspended`` / ``suspended``) so semantically distinct events
-    that happen to share a description — observable in
-    ``tests/fixtures/tfl/disruptions_tube.json`` for the Piccadilly line —
-    no longer collapse onto the same ID. The built-in ``hash()`` is
-    unsuitable here because it is randomised per Python process
-    (``PYTHONHASHSEED``) and therefore unstable across runs and workers.
+    The hash inputs are the fields TfL publishes on every nested
+    disruption: ``category``, ``closure_text``, the whitespace-stripped
+    ``description``, and the sorted ``affected_routes`` (the parent
+    ``Line.id``). The built-in ``hash()`` is unsuitable here because it
+    is randomised per Python process (``PYTHONHASHSEED``) and therefore
+    unstable across runs and workers.
     """
     payload = json.dumps(
         {
             "category": category,
-            "type": disruption_type,
             "closure_text": closure_text,
             "description": description.strip(),
             "affected_routes": sorted(affected_routes),

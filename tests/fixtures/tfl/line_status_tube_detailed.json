@@ -1,0 +1,353 @@
+[
+  {
+    "$type": "Tfl.Api.Presentation.Entities.Line, Tfl.Api.Presentation.Entities",
+    "id": "bakerloo",
+    "name": "Bakerloo",
+    "modeName": "tube",
+    "lineStatuses": [
+      {
+        "$type": "Tfl.Api.Presentation.Entities.LineStatus, Tfl.Api.Presentation.Entities",
+        "id": 0,
+        "statusSeverity": 9,
+        "statusSeverityDescription": "Minor Delays",
+        "reason": "Bakerloo Line: Minor delays between Stonebridge Park and Harrow & Wealdstone due to an earlier faulty train at Wembley Central. GOOD SERVICE on the rest of the line. ",
+        "validityPeriods": [
+          {
+            "$type": "Tfl.Api.Presentation.Entities.ValidityPeriod, Tfl.Api.Presentation.Entities",
+            "fromDate": "2026-05-20T10:47:59Z",
+            "toDate": "2026-05-21T00:29:00Z",
+            "isNow": true
+          }
+        ],
+        "disruption": {
+          "$type": "Tfl.Api.Presentation.Entities.Disruption, Tfl.Api.Presentation.Entities",
+          "category": "RealTime",
+          "categoryDescription": "RealTime",
+          "description": "Bakerloo Line: Minor delays between Stonebridge Park and Harrow & Wealdstone due to an earlier faulty train at Wembley Central. GOOD SERVICE on the rest of the line. ",
+          "closureText": "minorDelays",
+          "affectedRoutes": [
+            {
+              "$type": "Tfl.Api.Presentation.Entities.DisruptedRoute, Tfl.Api.Presentation.Entities",
+              "id": "1673",
+              "name": "Harrow & Wealdstone Underground Station - Elephant & Castle Underground Station",
+              "direction": "inbound",
+              "originationName": "Harrow & Wealdstone Underground Station",
+              "destinationName": "Elephant & Castle Underground Station",
+              "isEntireRouteSection": false
+            },
+            {
+              "$type": "Tfl.Api.Presentation.Entities.DisruptedRoute, Tfl.Api.Presentation.Entities",
+              "id": "1675",
+              "name": "Elephant & Castle Underground Station - Harrow & Wealdstone Underground Station",
+              "direction": "outbound",
+              "originationName": "Elephant & Castle Underground Station",
+              "destinationName": "Harrow & Wealdstone Underground Station",
+              "isEntireRouteSection": false
+            }
+          ],
+          "affectedStops": [
+            {
+              "$type": "Tfl.Api.Presentation.Entities.StopPoint, Tfl.Api.Presentation.Entities",
+              "id": "940GZZLUHAW",
+              "naptanId": "940GZZLUHAW",
+              "commonName": "Harrow & Wealdstone Underground Station",
+              "stationNaptan": "940GZZLUHAW",
+              "status": true,
+              "lat": 0.0,
+              "lon": 0.0
+            },
+            {
+              "$type": "Tfl.Api.Presentation.Entities.StopPoint, Tfl.Api.Presentation.Entities",
+              "id": "940GZZLUKEN",
+              "naptanId": "940GZZLUKEN",
+              "commonName": "Kenton Underground Station",
+              "stationNaptan": "940GZZLUKEN",
+              "status": true,
+              "lat": 0.0,
+              "lon": 0.0
+            },
+            {
+              "$type": "Tfl.Api.Presentation.Entities.StopPoint, Tfl.Api.Presentation.Entities",
+              "id": "940GZZLUNWY",
+              "naptanId": "940GZZLUNWY",
+              "commonName": "North Wembley Underground Station",
+              "stationNaptan": "940GZZLUNWY",
+              "status": true,
+              "lat": 0.0,
+              "lon": 0.0
+            },
+            {
+              "$type": "Tfl.Api.Presentation.Entities.StopPoint, Tfl.Api.Presentation.Entities",
+              "id": "940GZZLUSGP",
+              "naptanId": "940GZZLUSGP",
+              "commonName": "Stonebridge Park Underground Station",
+              "stationNaptan": "940GZZLUSGP",
+              "status": true,
+              "lat": 0.0,
+              "lon": 0.0
+            },
+            {
+              "$type": "Tfl.Api.Presentation.Entities.StopPoint, Tfl.Api.Presentation.Entities",
+              "id": "940GZZLUSKT",
+              "naptanId": "940GZZLUSKT",
+              "commonName": "South Kenton Underground Station",
+              "stationNaptan": "940GZZLUSKT",
+              "status": true,
+              "lat": 0.0,
+              "lon": 0.0
+            },
+            {
+              "$type": "Tfl.Api.Presentation.Entities.StopPoint, Tfl.Api.Presentation.Entities",
+              "id": "940GZZLUWYC",
+              "naptanId": "940GZZLUWYC",
+              "commonName": "Wembley Central Underground Station",
+              "stationNaptan": "940GZZLUWYC",
+              "status": true,
+              "lat": 0.0,
+              "lon": 0.0
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "$type": "Tfl.Api.Presentation.Entities.Line, Tfl.Api.Presentation.Entities",
+    "id": "district",
+    "name": "District",
+    "modeName": "tube",
+    "lineStatuses": [
+      {
+        "$type": "Tfl.Api.Presentation.Entities.LineStatus, Tfl.Api.Presentation.Entities",
+        "id": 0,
+        "statusSeverity": 6,
+        "statusSeverityDescription": "Severe Delays",
+        "reason": "District Line: Severe delays Turnham Green and  Richmond / Ealing Broadway due to an earlier signal system failure. London buses are accepting valid tickets via any reasonable route. GOOD SERVICE on the rest of the line.  ",
+        "validityPeriods": [
+          {
+            "$type": "Tfl.Api.Presentation.Entities.ValidityPeriod, Tfl.Api.Presentation.Entities",
+            "fromDate": "2026-05-20T10:16:42Z",
+            "toDate": "2026-05-21T00:29:00Z",
+            "isNow": true
+          }
+        ],
+        "disruption": {
+          "$type": "Tfl.Api.Presentation.Entities.Disruption, Tfl.Api.Presentation.Entities",
+          "category": "RealTime",
+          "categoryDescription": "RealTime",
+          "description": "District Line: Severe delays Turnham Green and  Richmond / Ealing Broadway due to an earlier signal system failure. London buses are accepting valid tickets via any reasonable route. GOOD SERVICE on the rest of the line.  ",
+          "closureText": "severeDelays",
+          "affectedRoutes": [
+            {
+              "$type": "Tfl.Api.Presentation.Entities.DisruptedRoute, Tfl.Api.Presentation.Entities",
+              "id": "635",
+              "name": "Upminster Underground Station - Ealing Broadway Underground Station",
+              "direction": "inbound",
+              "originationName": "Upminster Underground Station",
+              "destinationName": "Ealing Broadway Underground Station",
+              "isEntireRouteSection": false
+            },
+            {
+              "$type": "Tfl.Api.Presentation.Entities.DisruptedRoute, Tfl.Api.Presentation.Entities",
+              "id": "636",
+              "name": "Ealing Broadway Underground Station - Upminster Underground Station",
+              "direction": "outbound",
+              "originationName": "Ealing Broadway Underground Station",
+              "destinationName": "Upminster Underground Station",
+              "isEntireRouteSection": false
+            },
+            {
+              "$type": "Tfl.Api.Presentation.Entities.DisruptedRoute, Tfl.Api.Presentation.Entities",
+              "id": "641",
+              "name": "Edgware Road (Circle Line) Underground Station - Ealing Broadway Underground Station",
+              "direction": "inbound",
+              "originationName": "Edgware Road (Circle Line) Underground Station",
+              "destinationName": "Ealing Broadway Underground Station",
+              "isEntireRouteSection": false
+            },
+            {
+              "$type": "Tfl.Api.Presentation.Entities.DisruptedRoute, Tfl.Api.Presentation.Entities",
+              "id": "642",
+              "name": "Ealing Broadway Underground Station - Edgware Road (Circle Line) Underground Station",
+              "direction": "outbound",
+              "originationName": "Ealing Broadway Underground Station",
+              "destinationName": "Edgware Road (Circle Line) Underground Station",
+              "isEntireRouteSection": false
+            }
+          ],
+          "affectedStops": [
+            {
+              "$type": "Tfl.Api.Presentation.Entities.StopPoint, Tfl.Api.Presentation.Entities",
+              "id": "940GZZLUACT",
+              "naptanId": "940GZZLUACT",
+              "commonName": "Acton Town Underground Station",
+              "stationNaptan": "940GZZLUACT",
+              "status": true,
+              "lat": 0.0,
+              "lon": 0.0
+            },
+            {
+              "$type": "Tfl.Api.Presentation.Entities.StopPoint, Tfl.Api.Presentation.Entities",
+              "id": "940GZZLUCWP",
+              "naptanId": "940GZZLUCWP",
+              "commonName": "Chiswick Park Underground Station",
+              "stationNaptan": "940GZZLUCWP",
+              "status": true,
+              "lat": 0.0,
+              "lon": 0.0
+            },
+            {
+              "$type": "Tfl.Api.Presentation.Entities.StopPoint, Tfl.Api.Presentation.Entities",
+              "id": "940GZZLUEBY",
+              "naptanId": "940GZZLUEBY",
+              "commonName": "Ealing Broadway Underground Station",
+              "stationNaptan": "940GZZLUEBY",
+              "status": true,
+              "lat": 0.0,
+              "lon": 0.0
+            },
+            {
+              "$type": "Tfl.Api.Presentation.Entities.StopPoint, Tfl.Api.Presentation.Entities",
+              "id": "940GZZLUECM",
+              "naptanId": "940GZZLUECM",
+              "commonName": "Ealing Common Underground Station",
+              "stationNaptan": "940GZZLUECM",
+              "status": true,
+              "lat": 0.0,
+              "lon": 0.0
+            },
+            {
+              "$type": "Tfl.Api.Presentation.Entities.StopPoint, Tfl.Api.Presentation.Entities",
+              "id": "940GZZLUTNG",
+              "naptanId": "940GZZLUTNG",
+              "commonName": "Turnham Green Underground Station",
+              "stationNaptan": "940GZZLUTNG",
+              "status": true,
+              "lat": 0.0,
+              "lon": 0.0
+            }
+          ]
+        }
+      },
+      {
+        "$type": "Tfl.Api.Presentation.Entities.LineStatus, Tfl.Api.Presentation.Entities",
+        "id": 0,
+        "statusSeverity": 6,
+        "statusSeverityDescription": "Severe Delays",
+        "reason": "District Line: Severe delays Turnham Green and  Richmond / Ealing Broadway due to an earlier signal system failure. London buses are accepting valid tickets via any reasonable route. GOOD SERVICE on the rest of the line.  ",
+        "validityPeriods": [
+          {
+            "$type": "Tfl.Api.Presentation.Entities.ValidityPeriod, Tfl.Api.Presentation.Entities",
+            "fromDate": "2026-05-20T10:16:42Z",
+            "toDate": "2026-05-21T00:29:00Z",
+            "isNow": true
+          }
+        ],
+        "disruption": {
+          "$type": "Tfl.Api.Presentation.Entities.Disruption, Tfl.Api.Presentation.Entities",
+          "category": "RealTime",
+          "categoryDescription": "RealTime",
+          "description": "District Line: Severe delays Turnham Green and  Richmond / Ealing Broadway due to an earlier signal system failure. London buses are accepting valid tickets via any reasonable route. GOOD SERVICE on the rest of the line.  ",
+          "closureText": "severeDelays",
+          "affectedRoutes": [
+            {
+              "$type": "Tfl.Api.Presentation.Entities.DisruptedRoute, Tfl.Api.Presentation.Entities",
+              "id": "637",
+              "name": "Upminster Underground Station - Richmond Underground Station",
+              "direction": "inbound",
+              "originationName": "Upminster Underground Station",
+              "destinationName": "Richmond Underground Station",
+              "isEntireRouteSection": false
+            },
+            {
+              "$type": "Tfl.Api.Presentation.Entities.DisruptedRoute, Tfl.Api.Presentation.Entities",
+              "id": "638",
+              "name": "Richmond Underground Station - Upminster Underground Station",
+              "direction": "outbound",
+              "originationName": "Richmond Underground Station",
+              "destinationName": "Upminster Underground Station",
+              "isEntireRouteSection": false
+            },
+            {
+              "$type": "Tfl.Api.Presentation.Entities.DisruptedRoute, Tfl.Api.Presentation.Entities",
+              "id": "643",
+              "name": "Edgware Road (Circle Line) Underground Station - Richmond Underground Station",
+              "direction": "inbound",
+              "originationName": "Edgware Road (Circle Line) Underground Station",
+              "destinationName": "Richmond Underground Station",
+              "isEntireRouteSection": false
+            },
+            {
+              "$type": "Tfl.Api.Presentation.Entities.DisruptedRoute, Tfl.Api.Presentation.Entities",
+              "id": "644",
+              "name": "Richmond Underground Station - Edgware Road (Circle Line) Underground Station",
+              "direction": "outbound",
+              "originationName": "Richmond Underground Station",
+              "destinationName": "Edgware Road (Circle Line) Underground Station",
+              "isEntireRouteSection": false
+            }
+          ],
+          "affectedStops": [
+            {
+              "$type": "Tfl.Api.Presentation.Entities.StopPoint, Tfl.Api.Presentation.Entities",
+              "id": "940GZZLUTNG",
+              "naptanId": "940GZZLUTNG",
+              "commonName": "Turnham Green Underground Station",
+              "stationNaptan": "940GZZLUTNG",
+              "status": true,
+              "lat": 0.0,
+              "lon": 0.0
+            },
+            {
+              "$type": "Tfl.Api.Presentation.Entities.StopPoint, Tfl.Api.Presentation.Entities",
+              "id": "940GZZLUGBY",
+              "naptanId": "940GZZLUGBY",
+              "commonName": "Gunnersbury Underground Station",
+              "stationNaptan": "940GZZLUGBY",
+              "status": true,
+              "lat": 0.0,
+              "lon": 0.0
+            },
+            {
+              "$type": "Tfl.Api.Presentation.Entities.StopPoint, Tfl.Api.Presentation.Entities",
+              "id": "940GZZLUKWG",
+              "naptanId": "940GZZLUKWG",
+              "commonName": "Kew Gardens Underground Station",
+              "stationNaptan": "940GZZLUKWG",
+              "status": true,
+              "lat": 0.0,
+              "lon": 0.0
+            },
+            {
+              "$type": "Tfl.Api.Presentation.Entities.StopPoint, Tfl.Api.Presentation.Entities",
+              "id": "940GZZLURMD",
+              "naptanId": "940GZZLURMD",
+              "commonName": "Richmond Underground Station",
+              "stationNaptan": "940GZZLURMD",
+              "status": true,
+              "lat": 0.0,
+              "lon": 0.0
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "$type": "Tfl.Api.Presentation.Entities.Line, Tfl.Api.Presentation.Entities",
+    "id": "central",
+    "name": "Central",
+    "modeName": "tube",
+    "lineStatuses": [
+      {
+        "$type": "Tfl.Api.Presentation.Entities.LineStatus, Tfl.Api.Presentation.Entities",
+        "id": 0,
+        "statusSeverity": 10,
+        "statusSeverityDescription": "Good Service",
+        "reason": null,
+        "validityPeriods": [],
+        "disruption": null
+      }
+    ]
+  }
+]

@@ -13,7 +13,7 @@ import httpx
 import pytest
 
 from contracts.schemas import DisruptionEvent, DisruptionPayload
-from contracts.schemas.tfl_api import TflDisruption
+from contracts.schemas.tfl_api import TflLineResponse
 from ingestion.producers import (
     DISRUPTIONS_EVENT_TYPE,
     DisruptionsProducer,
@@ -75,7 +75,7 @@ def _tfl_client_failing() -> TflClient:
 
 
 def _expected_payloads(fixture: list[dict[str, Any]]) -> list[DisruptionPayload]:
-    parsed = [TflDisruption.model_validate(item) for item in fixture]
+    parsed = [TflLineResponse.model_validate(item) for item in fixture]
     return disruption_payloads(parsed)
 
 
@@ -96,11 +96,11 @@ def _fixed_clock() -> datetime:
     return _FIXED_TIME
 
 
-async def test_run_once_publishes_one_event_per_payload(
-    disruptions_tube_fixture: list[dict[str, Any]],
+async def test_run_once_publishes_one_event_per_disruption(
+    line_status_tube_detailed_fixture: list[dict[str, Any]],
 ) -> None:
     kafka = _CapturingKafkaProducer()
-    async with _tfl_client_returning(disruptions_tube_fixture) as tfl:
+    async with _tfl_client_returning(line_status_tube_detailed_fixture) as tfl:
         producer = DisruptionsProducer(
             tfl_client=tfl,
             kafka_producer=cast(KafkaEventProducer, kafka),
@@ -108,7 +108,8 @@ async def test_run_once_publishes_one_event_per_payload(
         )
         published = await producer.run_once()
 
-    expected = _expected_payloads(disruptions_tube_fixture)
+    expected = _expected_payloads(line_status_tube_detailed_fixture)
+    assert expected, "fixture must yield at least one disruption"
     assert published == len(expected)
     assert len(kafka.calls) == len(expected)
     assert all(call["topic"] == DisruptionEvent.TOPIC_NAME for call in kafka.calls)
@@ -117,12 +118,32 @@ async def test_run_once_publishes_one_event_per_payload(
         assert call["key"] == call["event"].payload.disruption_id
 
 
+async def test_run_once_published_payloads_carry_affected_routes_and_stops(
+    line_status_tube_detailed_fixture: list[dict[str, Any]],
+) -> None:
+    kafka = _CapturingKafkaProducer()
+    async with _tfl_client_returning(line_status_tube_detailed_fixture) as tfl:
+        producer = DisruptionsProducer(
+            tfl_client=tfl,
+            kafka_producer=cast(KafkaEventProducer, kafka),
+            modes=("tube",),
+        )
+        await producer.run_once()
+
+    assert kafka.calls
+    payloads = [call["event"].payload for call in kafka.calls]
+    assert all(len(p.affected_routes) == 1 and p.affected_routes[0] for p in payloads)
+    assert any(p.affected_stops for p in payloads), (
+        "fixture must include at least one disruption with populated affected stops"
+    )
+
+
 async def test_run_once_uses_injected_clock_and_event_id(
-    disruptions_tube_fixture: list[dict[str, Any]],
+    line_status_tube_detailed_fixture: list[dict[str, Any]],
 ) -> None:
     kafka = _CapturingKafkaProducer()
     factory = _fixed_uuid_factory()
-    async with _tfl_client_returning(disruptions_tube_fixture) as tfl:
+    async with _tfl_client_returning(line_status_tube_detailed_fixture) as tfl:
         producer = DisruptionsProducer(
             tfl_client=tfl,
             kafka_producer=cast(KafkaEventProducer, kafka),
@@ -161,9 +182,9 @@ async def test_run_once_handles_tfl_failure(
 
 
 async def test_run_once_continues_after_kafka_failure_for_one_disruption(
-    disruptions_tube_fixture: list[dict[str, Any]],
+    line_status_tube_detailed_fixture: list[dict[str, Any]],
 ) -> None:
-    payloads = _expected_payloads(disruptions_tube_fixture)
+    payloads = _expected_payloads(line_status_tube_detailed_fixture)
     assert payloads, "fixture must contain at least one disruption"
     failing_key = payloads[0].disruption_id
 
@@ -173,7 +194,7 @@ async def test_run_once_continues_after_kafka_failure_for_one_disruption(
     expected_failures = sum(1 for p in payloads if p.disruption_id == failing_key)
     expected_published = len(payloads) - expected_failures
 
-    async with _tfl_client_returning(disruptions_tube_fixture) as tfl:
+    async with _tfl_client_returning(line_status_tube_detailed_fixture) as tfl:
         producer = DisruptionsProducer(
             tfl_client=tfl,
             kafka_producer=cast(KafkaEventProducer, kafka),
@@ -187,7 +208,7 @@ async def test_run_once_continues_after_kafka_failure_for_one_disruption(
 
 
 async def test_run_forever_respects_period_and_terminates_on_cancel(
-    disruptions_tube_fixture: list[dict[str, Any]],
+    line_status_tube_detailed_fixture: list[dict[str, Any]],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     sleeps: list[float] = []
@@ -202,7 +223,7 @@ async def test_run_forever_respects_period_and_terminates_on_cancel(
     monkeypatch.setattr("ingestion.producers.disruptions.asyncio.sleep", _fake_sleep)
 
     kafka = _CapturingKafkaProducer()
-    async with _tfl_client_returning(disruptions_tube_fixture) as tfl:
+    async with _tfl_client_returning(line_status_tube_detailed_fixture) as tfl:
         producer = DisruptionsProducer(
             tfl_client=tfl,
             kafka_producer=cast(KafkaEventProducer, kafka),
@@ -218,10 +239,10 @@ async def test_run_forever_respects_period_and_terminates_on_cancel(
 
 
 async def test_event_envelope_serialises_to_valid_json(
-    disruptions_tube_fixture: list[dict[str, Any]],
+    line_status_tube_detailed_fixture: list[dict[str, Any]],
 ) -> None:
     kafka = _CapturingKafkaProducer()
-    async with _tfl_client_returning(disruptions_tube_fixture) as tfl:
+    async with _tfl_client_returning(line_status_tube_detailed_fixture) as tfl:
         producer = DisruptionsProducer(
             tfl_client=tfl,
             kafka_producer=cast(KafkaEventProducer, kafka),

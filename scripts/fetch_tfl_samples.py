@@ -26,7 +26,6 @@ OXFORD_CIRCUS_STOP = "940GZZLUOXC"
 REQUESTS: dict[str, str] = {
     "line_status_sample.json": f"/Line/Mode/{MODES}/Status",
     "arrivals_sample.json": f"/StopPoint/{OXFORD_CIRCUS_STOP}/Arrivals",
-    "disruptions_sample.json": "/Line/Mode/tube/Disruption",
 }
 
 FIXTURES_DIR = Path(__file__).resolve().parent.parent / "tests" / "fixtures"
