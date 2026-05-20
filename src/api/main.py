@@ -126,6 +126,16 @@ app.add_middleware(
     allow_headers=["Accept", "Content-Type", "Authorization"],
 )
 
+# Optional debug router that proxies typed calls to the TfL Unified API so
+# raw payload shapes can be inspected from Swagger. Kept out of
+# ``contracts/openapi.yaml`` on purpose and gated on an env flag so it
+# never reaches production.
+if os.environ.get("TFL_DEBUG_PROXY") == "1":
+    from api.debug_tfl import router as _debug_tfl_router  # noqa: PLC0415
+
+    app.include_router(_debug_tfl_router)
+    logfire.info("api_debug_tfl_router_enabled", service="tfl-monitor-api")
+
 
 def _problem(status: int, title: str, detail: str) -> JSONResponse:
     """Build an RFC 7807 ``application/problem+json`` response."""
