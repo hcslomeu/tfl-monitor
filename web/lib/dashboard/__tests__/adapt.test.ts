@@ -7,6 +7,7 @@ import {
 	disruptionsToNews,
 	disruptionToSnapshot,
 	lineStatusesToSummaries,
+	lineSummaryToFallbackSnapshot,
 	severityToBucket,
 	summarizeCounts,
 } from "@/lib/dashboard/adapt";
@@ -64,6 +65,34 @@ describe("lineStatusesToSummaries", () => {
 			color: "#6950A1",
 			status: "severe",
 		});
+	});
+
+	it("threads reason + validFromIso onto the summary so the LineDetail fallback can use them", () => {
+		const [, elizabeth] = lineStatusesToSummaries([
+			SAMPLE_LINES[0],
+			{
+				...SAMPLE_LINES[1],
+				reason: "Elizabeth line: signal failure at Hayes & Harlington.",
+				valid_from: "2026-05-13T17:42:00Z",
+			},
+		]);
+		expect(elizabeth.reason).toBe(
+			"Elizabeth line: signal failure at Hayes & Harlington.",
+		);
+		expect(elizabeth.validFromIso).toBe("2026-05-13T17:42:00Z");
+	});
+
+	it("normalises a missing reason to null so consumers can branch on truthy text", () => {
+		const [victoria] = lineStatusesToSummaries(SAMPLE_LINES);
+		expect(victoria.reason).toBeNull();
+	});
+
+	it("coerces whitespace-only reason to null so consumers cannot trip on a truthy blank string", () => {
+		const [, elizabeth] = lineStatusesToSummaries([
+			SAMPLE_LINES[0],
+			{ ...SAMPLE_LINES[1], reason: "   \n\t  " },
+		]);
+		expect(elizabeth.reason).toBeNull();
 	});
 
 	it("strips trailing ' line' so downstream components don't duplicate it", () => {
@@ -202,6 +231,72 @@ describe("disruptionForLine + disruptionToSnapshot", () => {
 			description: "Para 1.\n\nPara 2.\n\nPara 3.",
 		});
 		expect(snapshot.body).toEqual(["Para 1.", "Para 2.", "Para 3."]);
+	});
+});
+
+describe("lineSummaryToFallbackSnapshot", () => {
+	const baseSummary = {
+		code: "PIC",
+		name: "Piccadilly",
+		color: "#0019A8",
+		status: "suspended" as const,
+		statusText: "Part Suspended",
+		updatedLabel: "updated 6m ago",
+	};
+
+	it("returns undefined when the line has no reason text", () => {
+		expect(lineSummaryToFallbackSnapshot(baseSummary)).toBeUndefined();
+		expect(
+			lineSummaryToFallbackSnapshot({ ...baseSummary, reason: null }),
+		).toBeUndefined();
+		expect(
+			lineSummaryToFallbackSnapshot({ ...baseSummary, reason: "   " }),
+		).toBeUndefined();
+	});
+
+	it("projects the status-feed reason into a DisruptionSnapshot with empty stations", () => {
+		const snapshot = lineSummaryToFallbackSnapshot({
+			...baseSummary,
+			reason:
+				"Piccadilly Line: No service between Northfields and Heathrow Airport while we fix a signal failure at Northfields.",
+			validFromIso: "2026-05-19T23:36:00Z",
+		});
+		expect(snapshot).toBeDefined();
+		if (!snapshot) return;
+		expect(snapshot.headline).toBe("Part Suspended");
+		expect(snapshot.body).toEqual([
+			"Piccadilly Line: No service between Northfields and Heathrow Airport while we fix a signal failure at Northfields.",
+		]);
+		expect(snapshot.stations).toEqual([]);
+		expect(snapshot.sourceLabel).toBe("Source: TfL Unified API (status feed)");
+		expect(snapshot.reportedAtLabel).toMatch(/\d{2}:\d{2}/);
+		expect(snapshot.updatedAtLabel).toBe(snapshot.reportedAtLabel);
+	});
+
+	it("falls back to '—' for reportedAtLabel when validFromIso is missing", () => {
+		const snapshot = lineSummaryToFallbackSnapshot({
+			...baseSummary,
+			reason: "Something happened.",
+		});
+		expect(snapshot?.reportedAtLabel).toBe("—");
+	});
+
+	it("splits multi-paragraph reason text so LineDetail renders each paragraph in its own <p>", () => {
+		// TfL occasionally returns reason text with explicit \n\n separators
+		// — e.g. "Piccadilly Line: suspended.\n\nTickets accepted on London Buses."
+		// Joining into a single array element would collapse the paragraph
+		// break under HTML whitespace rules; splitting matches what
+		// disruptionToSnapshot emits.
+		const snapshot = lineSummaryToFallbackSnapshot({
+			...baseSummary,
+			reason:
+				"Piccadilly Line: suspended between Acton Town and Heathrow.\n\nTickets accepted on London Buses.",
+			validFromIso: "2026-05-19T23:36:00Z",
+		});
+		expect(snapshot?.body).toEqual([
+			"Piccadilly Line: suspended between Acton Town and Heathrow.",
+			"Tickets accepted on London Buses.",
+		]);
 	});
 });
 

@@ -59,7 +59,7 @@ function lineSummaryToLineStatus(line: LineSummary, now: Date): LineStatus {
 		mode: CODE_TO_MODE[line.code] ?? "tube",
 		status_severity: BUCKET_TO_SEVERITY[line.status],
 		status_severity_description: line.statusText,
-		reason: null,
+		reason: line.reason ?? null,
 		valid_from: validFrom.toISOString(),
 		valid_to: validTo.toISOString(),
 	};
