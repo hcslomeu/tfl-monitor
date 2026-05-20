@@ -145,7 +145,7 @@ export function lineStatusesToSummaries(
 			status: severityToBucket(line.status_severity),
 			statusText: line.status_severity_description,
 			updatedLabel: relativeUpdatedLabel(line.valid_from, now),
-			reason: line.reason ?? null,
+			reason: line.reason?.trim() || null,
 			validFromIso: line.valid_from,
 		};
 	});
@@ -171,7 +171,7 @@ export function lineSummaryToFallbackSnapshot(
 		: "—";
 	return {
 		headline: summary.statusText,
-		body: [reason],
+		body: splitParagraphs(reason),
 		reportedAtLabel,
 		stations: [],
 		sourceLabel: "Source: TfL Unified API (status feed)",

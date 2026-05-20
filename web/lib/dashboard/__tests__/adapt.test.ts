@@ -87,6 +87,14 @@ describe("lineStatusesToSummaries", () => {
 		expect(victoria.reason).toBeNull();
 	});
 
+	it("coerces whitespace-only reason to null so consumers cannot trip on a truthy blank string", () => {
+		const [, elizabeth] = lineStatusesToSummaries([
+			SAMPLE_LINES[0],
+			{ ...SAMPLE_LINES[1], reason: "   \n\t  " },
+		]);
+		expect(elizabeth.reason).toBeNull();
+	});
+
 	it("strips trailing ' line' so downstream components don't duplicate it", () => {
 		const summaries = lineStatusesToSummaries([
 			{
@@ -271,6 +279,24 @@ describe("lineSummaryToFallbackSnapshot", () => {
 			reason: "Something happened.",
 		});
 		expect(snapshot?.reportedAtLabel).toBe("—");
+	});
+
+	it("splits multi-paragraph reason text so LineDetail renders each paragraph in its own <p>", () => {
+		// TfL occasionally returns reason text with explicit \n\n separators
+		// — e.g. "Piccadilly Line: suspended.\n\nTickets accepted on London Buses."
+		// Joining into a single array element would collapse the paragraph
+		// break under HTML whitespace rules; splitting matches what
+		// disruptionToSnapshot emits.
+		const snapshot = lineSummaryToFallbackSnapshot({
+			...baseSummary,
+			reason:
+				"Piccadilly Line: suspended between Acton Town and Heathrow.\n\nTickets accepted on London Buses.",
+			validFromIso: "2026-05-19T23:36:00Z",
+		});
+		expect(snapshot?.body).toEqual([
+			"Piccadilly Line: suspended between Acton Town and Heathrow.",
+			"Tickets accepted on London Buses.",
+		]);
 	});
 });
 
