@@ -124,6 +124,9 @@ def test_disruption_payloads_from_detailed_fixture(
         assert payload.category in set(DisruptionCategory)
         assert len(payload.affected_routes) == 1
         assert payload.affected_routes[0]
+    assert len({p.disruption_id for p in payloads}) == len(payloads), (
+        "fixture's same-line dual disruptions must not collapse onto one id"
+    )
     sample = payloads[0]
     DisruptionPayload.model_validate(sample.model_dump())
 
@@ -188,6 +191,62 @@ def test_disruption_id_is_stable_across_calls(
     second = [p.disruption_id for p in disruption_payloads(response)]
 
     assert first == second
+
+
+def test_disruption_id_distinguishes_same_line_dual_disruptions() -> None:
+    """Two disruptions on the same line sharing description/closure/category must
+    not collapse onto one synthetic id when their affected stops differ.
+
+    Matches the TfL-observed District-line case captured in the
+    ``line_status_tube_detailed`` fixture.
+    """
+    base_disruption: dict[str, Any] = {
+        "category": "RealTime",
+        "categoryDescription": "RealTime",
+        "description": "District Line: Severe delays. ",
+        "closureText": "severeDelays",
+        "affectedRoutes": [],
+    }
+    response = _LINE_RESPONSE_ADAPTER.validate_python(
+        [
+            {
+                "id": "district",
+                "name": "District",
+                "modeName": "tube",
+                "lineStatuses": [
+                    {
+                        "statusSeverity": 6,
+                        "statusSeverityDescription": "Severe Delays",
+                        "validityPeriods": [],
+                        "disruption": {
+                            **base_disruption,
+                            "affectedStops": [
+                                {"naptanId": "940GZZLUTNG"},
+                                {"naptanId": "940GZZLURMD"},
+                            ],
+                        },
+                    },
+                    {
+                        "statusSeverity": 6,
+                        "statusSeverityDescription": "Severe Delays",
+                        "validityPeriods": [],
+                        "disruption": {
+                            **base_disruption,
+                            "affectedStops": [
+                                {"naptanId": "940GZZLUEAB"},
+                                {"naptanId": "940GZZLUACT"},
+                            ],
+                        },
+                    },
+                ],
+            }
+        ]
+    )
+
+    payloads = disruption_payloads(response)
+
+    assert len(payloads) == 2
+    assert payloads[0].disruption_id != payloads[1].disruption_id
 
 
 def test_disruption_id_distinguishes_disruptions_across_lines() -> None:

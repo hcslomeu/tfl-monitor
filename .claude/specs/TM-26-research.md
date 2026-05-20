@@ -228,6 +228,9 @@ None. The fix path is clear:
   per disruption, with `affected_routes = [parent Line.id]` and
   `affected_stops` collected from `routeSectionNaptanEntrySequence`.
 - Drop `type` from the synthetic ID hash; rely on
-  `category + closure_text + description + sorted(affected_routes)`.
+  `category + closure_text + description + sorted(affected_routes) +
+  sorted(affected_stops)` — the stops set disambiguates the
+  TfL-observed case of two same-description disruptions on the same
+  line that affect different route sections.
 - Refresh fixtures; rewrite tests around the new shape.
 - No DB schema change, no dbt change, no API change.

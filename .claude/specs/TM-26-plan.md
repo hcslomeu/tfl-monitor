@@ -68,8 +68,12 @@ Files:
       severity on the nested disruption either).
     - `created` and `last_update` = now (UTC), as before.
     - `disruption_id` = SHA-256[:32] of `{category, closure_text,
-      description (stripped), affected_routes (sorted)}`. `type` field
-      removed.
+      description (stripped), affected_routes (sorted), affected_stops
+      (sorted)}`. The legacy `type` field is removed and `affected_stops`
+      is added to disambiguate the TfL-observed case of two
+      same-description disruptions on the same line whose only
+      difference is the impacted stops (District-line, observed in the
+      committed fixture).
   - Delete the old `disruption_payloads(response: list[TflDisruption])`
     function and its private helper `_extract_ids` (only used by the
     deleted function). Replace all imports.

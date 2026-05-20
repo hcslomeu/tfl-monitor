@@ -194,6 +194,7 @@ def disruption_payloads(
                         description=disruption.description,
                         closure_text=closure_text,
                         affected_routes=affected_routes,
+                        affected_stops=affected_stops,
                     ),
                     category=category,
                     category_description=disruption.category_description,
@@ -211,9 +212,12 @@ def disruption_payloads(
 
 
 def _extract_ids(items: list[dict[str, object]], key: str) -> list[str]:
-    """Return the deduplicated string values of ``key`` across dict entries.
+    """Return the deduplicated string values of ``key`` in first-seen order.
 
-    Order is the first-seen order to keep the synthetic-ID inputs stable.
+    Used for ``affected_stops`` extraction; the synthetic-ID hash sorts
+    its inputs separately, so the helper's job is only to drop
+    duplicates and preserve a stable iteration order for the exposed
+    payload field.
     """
     extracted: list[str] = []
     seen: set[str] = set()
@@ -231,15 +235,23 @@ def _synthetic_disruption_id(
     description: str,
     closure_text: str,
     affected_routes: list[str],
+    affected_stops: list[str],
 ) -> str:
     """Build a stable synthetic disruption ID via SHA-256.
 
     The hash inputs are the fields TfL publishes on every nested
     disruption: ``category``, ``closure_text``, the whitespace-stripped
-    ``description``, and the sorted ``affected_routes`` (the parent
-    ``Line.id``). The built-in ``hash()`` is unsuitable here because it
-    is randomised per Python process (``PYTHONHASHSEED``) and therefore
-    unstable across runs and workers.
+    ``description``, the sorted ``affected_routes`` (the parent
+    ``Line.id``), and the sorted ``affected_stops``. ``affected_stops``
+    is part of the digest because a single line can carry multiple
+    ``lineStatuses`` entries whose nested disruptions share
+    ``category`` / ``closure_text`` / ``description`` but list different
+    route sections (e.g. the District-line ``Severe delays Turnham Green
+    and Richmond / Ealing Broadway`` event appears twice on the same
+    line with five and four affected stops respectively); without the
+    stop set in the hash those two distinct incidents would collide on
+    one ``disruption_id``. The built-in ``hash()`` is unsuitable here
+    because it is randomised per Python process (``PYTHONHASHSEED``).
     """
     payload = json.dumps(
         {
@@ -247,6 +259,7 @@ def _synthetic_disruption_id(
             "closure_text": closure_text,
             "description": description.strip(),
             "affected_routes": sorted(affected_routes),
+            "affected_stops": sorted(affected_stops),
         },
         sort_keys=True,
         ensure_ascii=False,
