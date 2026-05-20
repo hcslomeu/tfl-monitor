@@ -38,14 +38,19 @@ class TflValidityPeriod(BaseModel):
 
 
 class TflLineStatusDisruption(BaseModel):
-    """Disruption object nested inside a line-status entry."""
+    """Disruption object nested inside a line-status entry.
+
+    The nested ``affectedRoutes`` array is intentionally dropped from
+    this model: the producer treats the parent ``Line.id`` as the
+    affected line and the nested route-section structure has no
+    downstream consumer. ``extra="ignore"`` silently discards it.
+    """
 
     model_config = _tfl_model_config()
 
     category: str
     category_description: str
     description: str
-    affected_routes: list[dict[str, object]] = Field(default_factory=list)
     affected_stops: list[dict[str, object]] = Field(default_factory=list)
     closure_text: str | None = None
 
