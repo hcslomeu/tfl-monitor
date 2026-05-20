@@ -5,7 +5,7 @@ export interface NewsReportsProps {
 	slotCount?: number;
 }
 
-export function NewsReports({ items, slotCount = 3 }: NewsReportsProps) {
+export function NewsReports({ items, slotCount = 6 }: NewsReportsProps) {
 	const filled = items.slice(0, slotCount);
 	const empties = Math.max(0, slotCount - filled.length);
 	const slots: (NewsItem | null)[] = [
@@ -31,7 +31,9 @@ export function NewsReports({ items, slotCount = 3 }: NewsReportsProps) {
 								{slot ? (
 									<>
 										<div className="tfl-news-title">{slot.title}</div>
-										<div className="tfl-news-body">{slot.body}</div>
+										{slot.body ? (
+											<div className="tfl-news-body">{slot.body}</div>
+										) : null}
 									</>
 								) : (
 									<div className="tfl-news-placeholder">No further updates</div>
