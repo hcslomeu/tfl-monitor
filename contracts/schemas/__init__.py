@@ -21,7 +21,6 @@ from contracts.schemas.disruptions import DisruptionEvent, DisruptionPayload
 from contracts.schemas.line_status import LineStatusEvent, LineStatusPayload
 from contracts.schemas.tfl_api import (
     TflArrivalPrediction,
-    TflDisruption,
     TflLineResponse,
     TflLineStatusDisruption,
     TflLineStatusItem,
@@ -41,7 +40,6 @@ __all__ = [
     "StationId",
     "StatusSeverity",
     "TflArrivalPrediction",
-    "TflDisruption",
     "TflLineResponse",
     "TflLineStatusDisruption",
     "TflLineStatusItem",

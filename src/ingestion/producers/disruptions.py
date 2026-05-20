@@ -1,7 +1,8 @@
 """TfL ``disruptions`` Kafka producer.
 
-Polls :meth:`ingestion.tfl_client.TflClient.fetch_disruptions` on a
-fixed-rate cadence, normalises each tier-1 response via
+Polls :meth:`ingestion.tfl_client.TflClient.fetch_line_disruptions` on a
+fixed-rate cadence, walks the nested
+``Line -> lineStatuses[] -> disruption`` shape via
 :func:`ingestion.tfl_client.normalise.disruption_payloads`, wraps every
 :class:`contracts.schemas.DisruptionPayload` in a
 :class:`contracts.schemas.DisruptionEvent` envelope, and produces the
@@ -88,7 +89,7 @@ class DisruptionsProducer:
             partial count; never raises.
         """
         try:
-            tier1 = await self._tfl_client.fetch_disruptions(self._modes)
+            tier1 = await self._tfl_client.fetch_line_disruptions(self._modes)
         except TflClientError as exc:
             logfire.warn("ingestion.disruptions.tfl_failed", error=repr(exc))
             return 0

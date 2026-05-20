@@ -11,7 +11,6 @@ import pytest
 
 from contracts.schemas.tfl_api import (
     TflArrivalPrediction,
-    TflDisruption,
     TflLineResponse,
 )
 from ingestion.tfl_client import TflClient, TflClientError
@@ -65,22 +64,26 @@ async def test_fetch_arrivals_returns_tier1_models(
     assert len(result) == len(arrivals_oxford_circus_fixture)
 
 
-async def test_fetch_disruptions_returns_tier1_models(
-    disruptions_tube_fixture: list[dict[str, Any]],
+async def test_fetch_line_disruptions_uses_status_endpoint_with_detail(
+    line_status_tube_detailed_fixture: list[dict[str, Any]],
     make_transport: Callable[[Callable[[httpx.Request], httpx.Response]], httpx.MockTransport],
 ) -> None:
     captured: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         captured.append(request)
-        return _json_response(disruptions_tube_fixture)
+        return _json_response(line_status_tube_detailed_fixture)
 
     async with _client(make_transport(handler)) as client:
-        result = await client.fetch_disruptions(["tube"])
+        result = await client.fetch_line_disruptions(["tube"])
 
-    assert captured[0].url.path == "/Line/Mode/tube/Disruption"
-    assert all(isinstance(item, TflDisruption) for item in result)
-    assert len(result) == len(disruptions_tube_fixture)
+    assert captured[0].url.path == "/Line/Mode/tube/Status"
+    assert captured[0].url.params.get("detail") == "true"
+    assert all(isinstance(item, TflLineResponse) for item in result)
+    assert len(result) == len(line_status_tube_detailed_fixture)
+    assert any(status.disruption is not None for item in result for status in item.line_statuses), (
+        "expected at least one nested disruption to be parsed from the fixture"
+    )
 
 
 async def test_app_key_in_query_params(

@@ -27,7 +27,6 @@ from contracts.schemas import (
     LineStatusEvent,
     LineStatusPayload,
     TflArrivalPrediction,
-    TflDisruption,
     TflLineResponse,
     TransportMode,
 )
@@ -57,11 +56,6 @@ def test_line_status_fixture_parses_as_tfl_line() -> None:
 def test_arrivals_fixture_parses_as_tfl_prediction() -> None:
     for item in _load_or_skip("arrivals_sample.json"):
         TflArrivalPrediction.model_validate(item)
-
-
-def test_disruptions_fixture_parses_as_tfl_disruption() -> None:
-    for item in _load_or_skip("disruptions_sample.json"):
-        TflDisruption.model_validate(item)
 
 
 # ---------- Tier-2: internal Kafka event contracts ----------

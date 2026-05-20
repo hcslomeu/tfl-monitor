@@ -19,7 +19,6 @@ from pydantic import TypeAdapter
 
 from contracts.schemas.tfl_api import (
     TflArrivalPrediction,
-    TflDisruption,
     TflLineResponse,
 )
 from ingestion.tfl_client.retry import TflClientError, with_retry
@@ -32,7 +31,6 @@ _DEFAULT_MAX_ATTEMPTS = 3
 
 _LINE_RESPONSE_ADAPTER: TypeAdapter[list[TflLineResponse]] = TypeAdapter(list[TflLineResponse])
 _ARRIVAL_ADAPTER: TypeAdapter[list[TflArrivalPrediction]] = TypeAdapter(list[TflArrivalPrediction])
-_DISRUPTION_ADAPTER: TypeAdapter[list[TflDisruption]] = TypeAdapter(list[TflDisruption])
 
 
 class TflClient:
@@ -95,11 +93,21 @@ class TflClient:
         data = await self._request(f"/StopPoint/{stop_id}/Arrivals")
         return _ARRIVAL_ADAPTER.validate_python(data)
 
-    async def fetch_disruptions(self, modes: Iterable[str]) -> list[TflDisruption]:
-        """Fetch tier-1 disruptions for the given TfL transport modes."""
+    async def fetch_line_disruptions(self, modes: Iterable[str]) -> list[TflLineResponse]:
+        """Fetch line-status records with nested disruption details.
+
+        Hits ``/Line/Mode/{modes}/Status?detail=true``, which is the only
+        free-tier endpoint that returns populated ``affectedRoutes`` and
+        ``affectedStops`` arrays inside each ``lineStatuses[*].disruption``
+        object. The bare ``/Line/Mode/{modes}/Disruption`` endpoint always
+        returns empty arrays on the free tier (see TM-26).
+        """
         modes_param = self._join_modes(modes)
-        data = await self._request(f"/Line/Mode/{modes_param}/Disruption")
-        return _DISRUPTION_ADAPTER.validate_python(data)
+        data = await self._request(
+            f"/Line/Mode/{modes_param}/Status",
+            params={"detail": "true"},
+        )
+        return _LINE_RESPONSE_ADAPTER.validate_python(data)
 
     async def _request(self, path: str, *, params: dict[str, Any] | None = None) -> Any:
         """Issue a GET request with retry, returning the decoded JSON body."""
