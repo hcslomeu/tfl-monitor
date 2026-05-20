@@ -145,8 +145,38 @@ export function lineStatusesToSummaries(
 			status: severityToBucket(line.status_severity),
 			statusText: line.status_severity_description,
 			updatedLabel: relativeUpdatedLabel(line.valid_from, now),
+			reason: line.reason ?? null,
+			validFromIso: line.valid_from,
 		};
 	});
+}
+
+/**
+ * Build a `DisruptionSnapshot` from a line's status-feed `reason` text
+ * when no `/disruptions/recent` row covers the selected line.
+ *
+ * The TfL Unified API's `lineStatuses[].reason` is always the most
+ * authoritative blurb for a non-Good Service line — `/disruptions/recent`
+ * is event-style and frequently lags or omits ongoing incidents. Returns
+ * `undefined` when the line has no reason text so the caller can keep
+ * the "No reported disruption." copy.
+ */
+export function lineSummaryToFallbackSnapshot(
+	summary: LineSummary,
+): DisruptionSnapshot | undefined {
+	const reason = summary.reason?.trim();
+	if (!reason) return undefined;
+	const reportedAtLabel = summary.validFromIso
+		? formatLondonTime(summary.validFromIso, { withTimezoneName: true })
+		: "—";
+	return {
+		headline: summary.statusText,
+		body: [reason],
+		reportedAtLabel,
+		stations: [],
+		sourceLabel: "Source: TfL Unified API (status feed)",
+		updatedAtLabel: reportedAtLabel,
+	};
 }
 
 /**

@@ -16,6 +16,7 @@ import {
 	disruptionsToNews,
 	disruptionToSnapshot,
 	lineStatusesToSummaries,
+	lineSummaryToFallbackSnapshot,
 	summarizeCounts,
 } from "@/lib/dashboard/adapt";
 import { useAutoRefresh } from "@/lib/hooks/use-auto-refresh";
@@ -67,9 +68,12 @@ export default function HomePage() {
 	);
 
 	const selectedDisruption = useMemo(() => {
-		if (!selectedLine || !disruptions.data) return undefined;
-		const match = disruptionForLine(disruptions.data, selectedLine);
-		return match ? disruptionToSnapshot(match) : undefined;
+		if (!selectedLine) return undefined;
+		if (disruptions.data) {
+			const match = disruptionForLine(disruptions.data, selectedLine);
+			if (match) return disruptionToSnapshot(match);
+		}
+		return lineSummaryToFallbackSnapshot(selectedLine);
 	}, [disruptions.data, selectedLine]);
 
 	const newsItems = useMemo(

@@ -17,6 +17,19 @@ export interface LineSummary {
 	status: StatusBucket;
 	statusText: string;
 	updatedLabel: string;
+	/**
+	 * Free-text disruption explanation propagated from `/status/live`'s
+	 * `reason` field. Null for `Good Service` lines. Used as a fallback
+	 * for the LineDetail card when no matching `/disruptions/recent`
+	 * row exists for the selected line.
+	 */
+	reason?: string | null;
+	/**
+	 * ISO timestamp of the underlying `LineStatus.valid_from` field —
+	 * threaded so the fallback snapshot built from `reason` can render
+	 * a "reported HH:MM" label without re-fetching the raw row.
+	 */
+	validFromIso?: string;
 }
 
 export interface StatusSummaryCounts {
