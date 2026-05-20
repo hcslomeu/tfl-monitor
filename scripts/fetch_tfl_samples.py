@@ -26,6 +26,7 @@ OXFORD_CIRCUS_STOP = "940GZZLUOXC"
 REQUESTS: dict[str, str] = {
     "line_status_sample.json": f"/Line/Mode/{MODES}/Status",
     "arrivals_sample.json": f"/StopPoint/{OXFORD_CIRCUS_STOP}/Arrivals",
+    "tfl/line_status_tube_detailed.json": "/Line/Mode/tube/Status?detail=true",
 }
 
 FIXTURES_DIR = Path(__file__).resolve().parent.parent / "tests" / "fixtures"
@@ -47,6 +48,7 @@ def main() -> int:
             response = client.get(path, params={"app_key": app_key})
             response.raise_for_status()
             output = FIXTURES_DIR / filename
+            output.parent.mkdir(parents=True, exist_ok=True)
             output.write_text(
                 json.dumps(response.json(), indent=2, ensure_ascii=False),
                 encoding="utf-8",

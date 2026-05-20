@@ -154,10 +154,13 @@ def disruption_payloads(
       from ``disruption.affectedStops``.
     - ``disruption_id``: first ``32`` hex chars of a SHA-256 digest over
       ``{"category", "closure_text", "description": stripped,
-      "affected_routes": sorted([...])}``. The nested-form payload does
-      not expose the ``type`` field that the legacy ``/Disruption``
-      endpoint carried; the parent ``Line.id`` already disambiguates
-      across lines and ``closure_text`` disambiguates within a line.
+      "affected_routes": sorted([...]), "affected_stops": sorted([...])}``.
+      The nested-form payload does not expose the ``type`` field that
+      the legacy ``/Disruption`` endpoint carried; the parent
+      ``Line.id`` disambiguates across lines and the stop set
+      disambiguates same-line dual disruptions that share
+      ``category``/``closure_text``/``description`` (observed on
+      District in the committed fixture).
     - ``created`` / ``last_update``: current UTC time. Downstream
       consumers must not rely on these for deduplication without a
       TfL-supplied key.
