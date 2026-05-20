@@ -13,6 +13,7 @@ describe("NewsReports", () => {
 						body: "Faulty train at Hayes & Harlington.",
 					},
 				]}
+				slotCount={3}
 			/>,
 		);
 
@@ -21,6 +22,29 @@ describe("NewsReports", () => {
 		).toBeInTheDocument();
 		expect(screen.getByText(/1 today/)).toBeInTheDocument();
 		expect(screen.getAllByText(/No further updates/)).toHaveLength(2);
+	});
+
+	it("omits the body line when an item has no extra context to show", () => {
+		render(
+			<NewsReports
+				items={[
+					{
+						time: "17:58",
+						title: "Circle Line: Minor delays due to train cancellations.",
+						body: "",
+					},
+				]}
+				slotCount={1}
+			/>,
+		);
+
+		expect(
+			screen.getByText(
+				/Circle Line: Minor delays due to train cancellations\./,
+			),
+		).toBeInTheDocument();
+		// No empty body div should leak through — only the title row.
+		expect(document.querySelector(".tfl-news-body")).not.toBeInTheDocument();
 	});
 
 	it("reports the full item count in the meta label even when slots truncate", () => {

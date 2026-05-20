@@ -177,6 +177,32 @@ describe("disruptionForLine + disruptionToSnapshot", () => {
 		expect(snapshot.reportedAtLabel).toMatch(/\d{2}:\d{2}/);
 		expect(snapshot.updatedAtLabel).toMatch(/\d{2}:\d{2}/);
 	});
+
+	it("drops the leading description paragraph when it duplicates summary so LineDetail does not echo the headline", () => {
+		// Same TfL Unified API echo pattern that `disruptionsToNews`
+		// already handles — the headline would otherwise render once
+		// in the .summary div and again as the first <p> body paragraph.
+		const echoed: Disruption = {
+			...disruption,
+			summary: "Piccadilly Line: SUSPENDED between Acton Town and Heathrow.",
+			description:
+				"Piccadilly Line: SUSPENDED between Acton Town and Heathrow.\n\nTickets accepted on London Buses.",
+		};
+		const snapshot = disruptionToSnapshot(echoed);
+		expect(snapshot.headline).toBe(
+			"Piccadilly Line: SUSPENDED between Acton Town and Heathrow.",
+		);
+		expect(snapshot.body).toEqual(["Tickets accepted on London Buses."]);
+	});
+
+	it("keeps the full description when the leading paragraph does not match summary", () => {
+		const snapshot = disruptionToSnapshot({
+			...disruption,
+			summary: "Severe delays westbound",
+			description: "Para 1.\n\nPara 2.\n\nPara 3.",
+		});
+		expect(snapshot.body).toEqual(["Para 1.", "Para 2.", "Para 3."]);
+	});
 });
 
 describe("disruptionsToNews", () => {
@@ -220,14 +246,59 @@ describe("disruptionsToNews", () => {
 		expect(disruptionsToNews([])).toEqual([]);
 	});
 
-	it("trims multi-paragraph descriptions to the first paragraph so the dense news list does not overflow", () => {
+	it("drops the leading paragraph of description when it duplicates summary so title and body do not echo", () => {
+		// TfL's Unified API repeats `summary` as the first paragraph of
+		// `description` in most payloads; the news list would render the
+		// same sentence twice unless we strip it.
+		const echoed: Disruption = {
+			...baseDisruption,
+			summary: "Piccadilly Line: SUSPENDED between Acton Town and Heathrow.",
+			description:
+				"Piccadilly Line: SUSPENDED between Acton Town and Heathrow.\n\nTickets accepted on London Buses and the Elizabeth line.",
+		};
+		const [item] = disruptionsToNews([echoed]);
+		expect(item.title).toBe(
+			"Piccadilly Line: SUSPENDED between Acton Town and Heathrow.",
+		);
+		expect(item.body).toBe(
+			"Tickets accepted on London Buses and the Elizabeth line.",
+		);
+	});
+
+	it("returns an empty body when the description only echoes summary", () => {
+		const onlyEcho: Disruption = {
+			...baseDisruption,
+			summary: "Circle Line: Minor delays due to train cancellations.",
+			description: "Circle Line: Minor delays due to train cancellations.",
+		};
+		const [item] = disruptionsToNews([onlyEcho]);
+		expect(item.body).toBe("");
+	});
+
+	it("joins trailing paragraphs with a blank line so multi-paragraph context is preserved", () => {
 		const verbose: Disruption = {
 			...baseDisruption,
+			summary: "Piccadilly Line: SUSPENDED between Acton Town and Heathrow.",
+			description:
+				"Piccadilly Line: SUSPENDED between Acton Town and Heathrow.\n\nTickets accepted on London Buses.\n\nLast updated 18:42.",
+		};
+		const [item] = disruptionsToNews([verbose]);
+		expect(item.body).toBe(
+			"Tickets accepted on London Buses.\n\nLast updated 18:42.",
+		);
+	});
+
+	it("keeps the full description when the leading paragraph does not match summary", () => {
+		const distinct: Disruption = {
+			...baseDisruption,
+			summary: "Elizabeth line — westbound severe delays",
 			description:
 				"Faulty train at Hayes & Harlington.\n\nTickets accepted on Piccadilly & Bakerloo until service is restored.",
 		};
-		const [item] = disruptionsToNews([verbose]);
-		expect(item.body).toBe("Faulty train at Hayes & Harlington.");
+		const [item] = disruptionsToNews([distinct]);
+		expect(item.body).toBe(
+			"Faulty train at Hayes & Harlington.\n\nTickets accepted on Piccadilly & Bakerloo until service is restored.",
+		);
 	});
 
 	it("keeps line-broken sentences together within a single paragraph", () => {
@@ -244,13 +315,14 @@ describe("disruptionsToNews", () => {
 		);
 	});
 
-	it("trims paragraphs split by CRLF blank lines so Windows-encoded payloads behave like LF ones", () => {
+	it("handles CRLF blank lines so Windows-encoded payloads strip the echoed lead too", () => {
 		const crlf: Disruption = {
 			...baseDisruption,
+			summary: "Piccadilly Line: SUSPENDED between Acton Town and Heathrow.",
 			description:
-				"Faulty train at Hayes & Harlington.\r\n\r\nTickets accepted on Piccadilly & Bakerloo until service is restored.",
+				"Piccadilly Line: SUSPENDED between Acton Town and Heathrow.\r\n\r\nTickets accepted on London Buses.",
 		};
 		const [item] = disruptionsToNews([crlf]);
-		expect(item.body).toBe("Faulty train at Hayes & Harlington.");
+		expect(item.body).toBe("Tickets accepted on London Buses.");
 	});
 });

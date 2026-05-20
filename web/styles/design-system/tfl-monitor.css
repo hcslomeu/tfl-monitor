@@ -354,7 +354,7 @@
 .tfl-news-placeholder { font-family: var(--font-mono); font-size: var(--ui-xs); color: var(--ink-tertiary); padding-top: 2px; }
 .tfl-news-time { font-family: var(--font-mono); font-size: var(--ui-xs); color: var(--ink-tertiary); padding-top: 2px; }
 .tfl-news-title { font-family: var(--font-body); font-size: var(--ui-sm); font-weight: 500; color: var(--ink-primary); margin-bottom: 2px; }
-.tfl-news-body { font-family: var(--font-body); font-size: var(--ui-sm); color: var(--ink-secondary); line-height: 1.45; }
+.tfl-news-body { font-family: var(--font-body); font-size: var(--ui-sm); color: var(--ink-secondary); line-height: 1.45; white-space: pre-line; }
 
 @media (max-width: 880px) {
   .tfl-grid { grid-template-columns: 1fr; }
