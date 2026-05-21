@@ -45,6 +45,17 @@ if [[ ! -f .env ]]; then
   exit 1
 fi
 
+# Reinstall the cron schedule + log-rotation policy on every deploy.
+# bootstrap-tenant.sh only runs once on first provisioning, so without this
+# step changes in the repo never reach /etc on the box. `install` is one
+# atomic rename, so cron/logrotate never read a half-written file mid-update.
+# The step runs before `compose up` so a failing build does not also block
+# host-config updates.
+echo "[$(date -Iseconds)] installing cron schedule"
+sudo install -m 644 "${APP_DIR}/infra/cron.d/tfl-monitor" /etc/cron.d/tfl-monitor
+echo "[$(date -Iseconds)] installing logrotate policy"
+sudo install -m 644 "${APP_DIR}/infra/logrotate.d/tfl-monitor" /etc/logrotate.d/tfl-monitor
+
 echo "[$(date -Iseconds)] docker compose up --build"
 docker compose -f "${COMPOSE_FILE}" up -d --build
 

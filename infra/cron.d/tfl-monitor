@@ -1,12 +1,15 @@
 # /etc/cron.d/tfl-monitor — installed on the Lightsail box by
-# `scripts/bootstrap-tenant.sh`. See ADR 006 + .claude/specs/TM-A5-plan.md
+# `scripts/bootstrap-tenant.sh` (first provision) AND reinstalled by
+# `scripts/deploy.sh` on every GHA deploy so schedule changes in git
+# propagate automatically. See ADR 006 + .claude/specs/TM-A5-plan.md
 # decision #18 for why this replaces Airflow in production.
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-# dbt build every 6 hours — `dbt build` runs models + tests +
+# dbt build every 15 minutes — `dbt build` runs models + tests +
 # snapshots + seeds in DAG order with test gating, so a failing test
 # blocks downstream materialisations. Cron user must own
 # /opt/tfl-monitor for the log redirect since /var/log/ is root-owned
-# and would fail silently.
-0 */6 * * * ubuntu /opt/tfl-monitor/scripts/cron-dbt-run.sh >> /opt/tfl-monitor/cron.log 2>&1
+# and would fail silently. The script uses flock to skip overlapping
+# ticks, so a slow build does not pile up concurrent runs.
+*/15 * * * * ubuntu /opt/tfl-monitor/scripts/cron-dbt-run.sh >> /opt/tfl-monitor/cron.log 2>&1

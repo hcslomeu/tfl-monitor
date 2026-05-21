@@ -7,10 +7,13 @@ ENV PYTHONUNBUFFERED=1 \
 WORKDIR /app
 
 # curl is used by the compose-level healthcheck (`python:3.12-slim` ships without it).
-# The unprivileged runtime user is created in the same layer so subsequent
-# COPY --chown directives can reference it without a heavy recursive chown.
+# procps ships pkill/pgrep, used by scripts/cron-dbt-run.sh to reap a stuck
+# in-container `dbt build` from the host after the 14-minute timeout fires
+# (TM-27 / PR #100). The unprivileged runtime user is created in the same
+# layer so subsequent COPY --chown directives can reference it without a
+# heavy recursive chown.
 RUN apt-get update \
-    && apt-get install --no-install-recommends -y curl \
+    && apt-get install --no-install-recommends -y curl procps \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --uid 1001 --no-create-home --shell /usr/sbin/nologin app
 
