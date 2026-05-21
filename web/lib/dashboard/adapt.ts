@@ -315,6 +315,19 @@ function splitParagraphs(description: string): string[] {
 // little slack for whitespace or hyphenation around the cut.
 const TRUNCATION_TOLERANCE = 5;
 
+// Minimum summary length before we even consider promoting the
+// description's first paragraph as the headline. TfL's truncation only
+// kicks in near the ~250-char cap, with the cut point landing anywhere
+// in the 100-249 char range depending on word boundaries; observed
+// real-world cases have ranged 150-220 chars. For shorter summaries the
+// 5-char tolerance becomes a large fraction of the string and would let
+// unrelated descriptions sharing just a few leading chars be wrongly
+// promoted (e.g. "Closed." vs "Closure on Northern line." shares 4
+// leading chars, satisfying `4 >= 7 - 5`). 100 is the empirical floor
+// that catches every truncation observed in production while rejecting
+// every short-sentinel case seen in fixtures.
+const TRUNCATION_MIN_SUMMARY_LEN = 100;
+
 function commonPrefixLength(a: string, b: string): number {
 	const upper = Math.min(a.length, b.length);
 	let i = 0;
@@ -347,10 +360,11 @@ function chooseHeadlineAndBody(
 	}
 	if (
 		head.length > trimmedSummary.length &&
-		// Guard against degenerate summaries (length <= tolerance) where
-		// the overlap check would be vacuously true at zero overlap and
-		// promote any longer first paragraph regardless of prefix match.
-		trimmedSummary.length > TRUNCATION_TOLERANCE
+		// Only consider promotion when the summary is long enough to plausibly
+		// have been truncated by TfL's ~250-char cap. For shorter summaries
+		// the tolerance becomes a large fraction of the string and would let
+		// unrelated descriptions sharing a few leading chars be wrongly promoted.
+		trimmedSummary.length >= TRUNCATION_MIN_SUMMARY_LEN
 	) {
 		const overlap = commonPrefixLength(trimmedSummary, head);
 		if (overlap >= trimmedSummary.length - TRUNCATION_TOLERANCE) {

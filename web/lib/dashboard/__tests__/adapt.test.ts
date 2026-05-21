@@ -233,6 +233,23 @@ describe("disruptionForLine + disruptionToSnapshot", () => {
 		expect(snapshot.body).toEqual(["Para 1.", "Para 2.", "Para 3."]);
 	});
 
+	it("does not promote an unrelated description when the summary is shorter than TfL's truncation cap", () => {
+		// Real correctness concern raised in PR review: a 7-char summary
+		// "Closed." vs description "Closure on Northern line." shares only
+		// 4 leading chars ("Clos"), but with a 5-char tolerance the overlap
+		// check `4 >= 7 - 5` passes and would wrongly promote the unrelated
+		// description as the headline. Anchoring the floor near TfL's
+		// ~250-char truncation cap rejects this case outright.
+		const shortSummary: Disruption = {
+			...disruption,
+			summary: "Closed.",
+			description: "Closure on Northern line.",
+		};
+		const snapshot = disruptionToSnapshot(shortSummary);
+		expect(snapshot.headline).toBe("Closed.");
+		expect(snapshot.body).toEqual(["Closure on Northern line."]);
+	});
+
 	it("keeps the summary when it is too short for prefix matching to be meaningful", () => {
 		// Guards against a latent edge case: when summary.length <= the
 		// truncation tolerance, `overlap >= summary.length - tolerance`
