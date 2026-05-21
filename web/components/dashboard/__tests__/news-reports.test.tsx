@@ -23,7 +23,7 @@ describe("NewsReports", () => {
 		expect(
 			screen.getByText(/Elizabeth line — westbound severe delays/),
 		).toBeInTheDocument();
-		expect(screen.getByText(/1 today/)).toBeInTheDocument();
+		expect(screen.getByText(/1 in last 12h/)).toBeInTheDocument();
 		expect(screen.queryByText(/No further updates/)).not.toBeInTheDocument();
 		expect(document.querySelectorAll(".tfl-news-list > li")).toHaveLength(1);
 	});
@@ -56,7 +56,7 @@ describe("NewsReports", () => {
 		render(<NewsReports items={[]} />);
 
 		expect(screen.getByText(/No recent updates/)).toBeInTheDocument();
-		expect(screen.getByText(/0 today/)).toBeInTheDocument();
+		expect(screen.getByText(/0 in last 12h/)).toBeInTheDocument();
 	});
 
 	it("renders all supplied items beyond the visible window so the scroll surface stays populated", () => {
@@ -71,7 +71,7 @@ describe("NewsReports", () => {
 
 		render(<NewsReports items={items} />);
 
-		expect(screen.getByText(/8 today/)).toBeInTheDocument();
+		expect(screen.getByText(/8 in last 12h/)).toBeInTheDocument();
 		expect(document.querySelectorAll(".tfl-news-list > li")).toHaveLength(8);
 	});
 });

@@ -9,7 +9,7 @@ export function NewsReports({ items }: NewsReportsProps) {
 		<section className="tfl-card tfl-news">
 			<div className="tfl-card-h">
 				<h4>News &amp; reports from TfL</h4>
-				<span className="meta">{items.length} today</span>
+				<span className="meta">{items.length} in last 12h</span>
 			</div>
 			<ul className="tfl-news-list">
 				{items.length === 0 ? (
@@ -21,7 +21,7 @@ export function NewsReports({ items }: NewsReportsProps) {
 					</li>
 				) : (
 					items.map((item) => (
-						<li key={`${item.time}-${item.title}`}>
+						<li key={`${item.time}-${item.title}-${item.body}`}>
 							<span className="tfl-news-time">{item.time}</span>
 							<div>
 								<div className="tfl-news-title">{item.title}</div>

@@ -271,7 +271,10 @@ export function disruptionsToNews(
 	for (const { d } of dated) {
 		const title = d.summary;
 		const body = extraParagraphs(d.summary, d.description);
-		const key = `${title} ${body}`;
+		// JSON.stringify guarantees a separator that cannot appear inside
+		// either string verbatim, so titles ending in whitespace cannot
+		// collide with bodies starting in whitespace (and vice-versa).
+		const key = JSON.stringify([title, body]);
 		if (seen.has(key)) continue;
 		seen.add(key);
 		items.push({
