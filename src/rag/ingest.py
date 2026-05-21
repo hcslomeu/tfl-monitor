@@ -49,13 +49,19 @@ RAG_SERVICE_NAME = "tfl-monitor-rag-ingestion"
 
 def configure_logfire() -> None:
     """Configure Logfire for the ingestion entrypoint."""
+    raw = os.getenv("LOGFIRE_SAMPLE_RATE")
+    try:
+        rate = float(raw) if raw is not None else 0.5
+    except ValueError:
+        rate = 0.5
+    sample_rate = min(max(rate, 0.0), 1.0)
     logfire.configure(
         service_name=RAG_SERVICE_NAME,
         service_version=os.getenv("APP_VERSION", "0.0.1"),
         environment=os.getenv("ENVIRONMENT", "local"),
         send_to_logfire="if-token-present",
+        sampling=logfire.SamplingOptions(head=sample_rate),
     )
-    logfire.instrument_httpx()
 
 
 async def _amain(
