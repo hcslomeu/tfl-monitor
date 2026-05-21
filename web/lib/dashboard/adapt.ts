@@ -225,10 +225,27 @@ export function disruptionForLine(
 	return disruptions.find((d) => d.affected_routes.includes(lineId));
 }
 
+const NEWS_WINDOW_MS = 12 * 60 * 60 * 1000;
+
 /**
  * Project a list of backend `Disruption` rows into the `NewsReports`
- * view-model. Rows are sorted by `last_update` descending so the most
- * recent updates surface first; the component handles slot truncation.
+ * view-model.
+ *
+ * Two filters run before projection so the news pane stays a
+ * "what's happening now" surface and never echoes itself:
+ *
+ * 1. **12 h window** — ingestion replays the full `/Disruption` payload
+ *    every cycle, so stale rows persist in the DB long after TfL has
+ *    cleared them. Rows whose `last_update` is older than 12 h relative
+ *    to `now` are dropped (boundary inclusive). Rows with an unparseable
+ *    `last_update` are dropped because we cannot prove they are recent.
+ * 2. **Content-exact dedup** — TfL re-publishes ongoing incidents on
+ *    every poll (currently every 5 min), so without dedup the pane
+ *    fills with N copies of the same closure within an hour. Dedup
+ *    walks rows in descending `last_update` order and keeps the first
+ *    occurrence of each `title|body` pair. Keying on rendered content
+ *    rather than `disruption_id` also collapses cases where TfL re-issues
+ *    a closure under a fresh id but with identical text.
  *
  * `time` uses the London-local `HH:MM` format the design canvas
  * specifies. The `body` carries only the *extra* paragraphs of
@@ -236,21 +253,40 @@ export function disruptionForLine(
  * paragraph of `description` in nearly every payload, so projecting
  * the whole description into the body produces a duplicate of the
  * title. We strip the leading paragraph when it matches `summary`
- * and join any remaining paragraphs with a blank line.
+ * and join any remaining paragraphs with a blank line. `now` is
+ * injected so the function stays deterministic under test.
  */
-export function disruptionsToNews(disruptions: Disruption[]): NewsItem[] {
-	const sorted = [...disruptions].sort((a, b) => {
-		const aTime = Date.parse(a.last_update);
-		const bTime = Date.parse(b.last_update);
-		return (
-			(Number.isNaN(bTime) ? 0 : bTime) - (Number.isNaN(aTime) ? 0 : aTime)
+export function disruptionsToNews(
+	disruptions: Disruption[],
+	now: Date = new Date(),
+): NewsItem[] {
+	const cutoffMs = now.getTime() - NEWS_WINDOW_MS;
+	const dated = disruptions
+		.map((d) => ({ d, ts: Date.parse(d.last_update) }))
+		.filter(({ ts }) => !Number.isNaN(ts) && ts >= cutoffMs)
+		.sort((a, b) => b.ts - a.ts);
+
+	const seen = new Set<string>();
+	const items: NewsItem[] = [];
+	for (const { d } of dated) {
+		const { headline, body: bodyParagraphs } = chooseHeadlineAndBody(
+			d.summary,
+			d.description,
 		);
-	});
-	return sorted.map((d) => ({
-		time: formatLondonTime(d.last_update),
-		title: d.summary,
-		body: extraParagraphs(d.summary, d.description),
-	}));
+		const body = bodyParagraphs.join("\n\n");
+		// JSON.stringify guarantees a separator that cannot appear inside
+		// either string verbatim, so titles ending in whitespace cannot
+		// collide with bodies starting in whitespace (and vice-versa).
+		const key = JSON.stringify([headline, body]);
+		if (seen.has(key)) continue;
+		seen.add(key);
+		items.push({
+			time: formatLondonTime(d.last_update),
+			title: headline,
+			body,
+		});
+	}
+	return items;
 }
 
 // Matches blank-line separators in both LF and CRLF payloads. The TfL
@@ -266,12 +302,76 @@ function splitParagraphs(description: string): string[] {
 		.filter((paragraph) => paragraph.length > 0);
 }
 
-function extraParagraphs(summary: string, description: string): string {
+// TfL's Unified API occasionally truncates `summary` mid-word (~250-char
+// cap) while shipping the full sentence in `description`. Treating the
+// truncated string as the canonical headline produces two bad outcomes:
+// the LineDetail card renders the cut headline above the full sentence
+// (visible echo), and dedup in `disruptionsToNews` keeps every copy
+// because the truncation point varies subtly between polls.
+//
+// Tolerance value: characters that may differ at the truncation boundary
+// before we abandon the promotion. 5 covers the common case of TfL
+// cutting "Tickets" → "Tic" (3 chars match before divergence) plus a
+// little slack for whitespace or hyphenation around the cut.
+const TRUNCATION_TOLERANCE = 5;
+
+// Minimum summary length before we even consider promoting the
+// description's first paragraph as the headline. TfL's truncation only
+// kicks in near the ~250-char cap, with the cut point landing anywhere
+// in the 100-249 char range depending on word boundaries; observed
+// real-world cases have ranged 150-220 chars. For shorter summaries the
+// 5-char tolerance becomes a large fraction of the string and would let
+// unrelated descriptions sharing just a few leading chars be wrongly
+// promoted (e.g. "Closed." vs "Closure on Northern line." shares 4
+// leading chars, satisfying `4 >= 7 - 5`). 100 is the empirical floor
+// that catches every truncation observed in production while rejecting
+// every short-sentinel case seen in fixtures.
+const TRUNCATION_MIN_SUMMARY_LEN = 100;
+
+function commonPrefixLength(a: string, b: string): number {
+	const upper = Math.min(a.length, b.length);
+	let i = 0;
+	while (i < upper && a.charCodeAt(i) === b.charCodeAt(i)) i += 1;
+	return i;
+}
+
+/**
+ * Choose the canonical headline + body for a disruption.
+ *
+ * Returns the trimmed `summary` as headline and any paragraphs of
+ * `description` past the leading echo as body. When TfL's `summary`
+ * looks truncated against `description` (the two share a long common
+ * prefix and `description`'s first paragraph is the longer string),
+ * promote that first paragraph to the headline so the card and the
+ * news pane render the full sentence instead of the cut one.
+ */
+function chooseHeadlineAndBody(
+	summary: string,
+	description: string,
+): { headline: string; body: string[] } {
+	const trimmedSummary = summary.trim();
 	const paragraphs = splitParagraphs(description);
-	if (paragraphs.length === 0) return "";
+	if (paragraphs.length === 0) {
+		return { headline: trimmedSummary, body: [] };
+	}
 	const head = paragraphs[0];
-	const rest = head === summary.trim() ? paragraphs.slice(1) : paragraphs;
-	return rest.join("\n\n");
+	if (head === trimmedSummary) {
+		return { headline: trimmedSummary, body: paragraphs.slice(1) };
+	}
+	if (
+		head.length > trimmedSummary.length &&
+		// Only consider promotion when the summary is long enough to plausibly
+		// have been truncated by TfL's ~250-char cap. For shorter summaries
+		// the tolerance becomes a large fraction of the string and would let
+		// unrelated descriptions sharing a few leading chars be wrongly promoted.
+		trimmedSummary.length >= TRUNCATION_MIN_SUMMARY_LEN
+	) {
+		const overlap = commonPrefixLength(trimmedSummary, head);
+		if (overlap >= trimmedSummary.length - TRUNCATION_TOLERANCE) {
+			return { headline: head, body: paragraphs.slice(1) };
+		}
+	}
+	return { headline: trimmedSummary, body: paragraphs };
 }
 
 /**
@@ -280,22 +380,19 @@ function extraParagraphs(summary: string, description: string): string {
  * richer registry — Phase 5 keeps the projection minimal; richer
  * naming comes when the disruption stream is wired end-to-end.
  *
- * The leading paragraph of `description` is dropped when it exactly
- * matches `summary` — TfL's Unified API repeats the summary as the
- * first paragraph of `description` for most payloads, so without this
- * the LineDetail card would render the headline once and then again
- * as the first body paragraph.
+ * Headline + body are picked by `chooseHeadlineAndBody`, which strips
+ * the leading paragraph of `description` when it echoes `summary` and
+ * promotes `description`'s first paragraph to the headline when TfL
+ * ships a summary truncated mid-word.
  */
 export function disruptionToSnapshot(d: Disruption): DisruptionSnapshot {
-	const paragraphs = splitParagraphs(d.description);
-	const body =
-		paragraphs[0] === d.summary.trim() ? paragraphs.slice(1) : paragraphs;
+	const { headline, body } = chooseHeadlineAndBody(d.summary, d.description);
 	const stations = d.affected_stops.map((stop) => ({
 		name: stop,
 		code: stop,
 	}));
 	return {
-		headline: d.summary,
+		headline,
 		body,
 		reportedAtLabel: formatLondonTime(d.created, { withTimezoneName: true }),
 		stations,
