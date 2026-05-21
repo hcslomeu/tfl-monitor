@@ -11,7 +11,7 @@ src/api/
 ├─ main.py             # FastAPI app, lifespan, route handlers
 ├─ db.py               # Async psycopg pool + per-endpoint fetchers
 ├─ schemas.py          # Pydantic response models (mirror contracts/openapi.yaml)
-├─ observability.py    # Logfire wiring (FastAPI / psycopg / httpx)
+├─ observability.py    # Logfire wiring (FastAPI only; sampled)
 └─ agent/              # LangGraph agent — see src/api/agent/README.md
 ```
 
@@ -60,17 +60,21 @@ test in `tests/api/test_openapi_drift.py`.
 
 ## Observability
 
-Three lines in `observability.py`:
-
 ```python
+logfire.configure(..., sampling=build_sampling_options(_DEFAULT_SAMPLE_RATE))
 logfire.instrument_fastapi(app)
-logfire.instrument_psycopg()
-logfire.instrument_httpx()
 ```
 
-This auto-emits one span per request, query, and outbound HTTP call. Token
-costs and tool decisions land in LangSmith via the agent — see
-[`src/api/agent/README.md`](./agent).
+`instrument_fastapi` emits one span per request. Sampling is the shared
+`SamplingOptions.level_or_duration` tail strategy from `src/common/sampling.py`:
+warn+ spans and traces longer than five seconds are kept at 100%, everything
+else falls back to `LOGFIRE_SAMPLE_RATE` (default `0.1`).
+
+Outbound HTTP visibility (Anthropic, OpenAI, Pinecone, TfL) lives in
+LangSmith — see [`src/api/agent/README.md`](./agent). Per-query psycopg
+spans were removed in favour of per-endpoint timing on the FastAPI side
+because the free-tier ingest budget could not absorb one span per SQL
+statement.
 
 ## Run
 
