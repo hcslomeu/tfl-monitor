@@ -6,14 +6,16 @@ import os
 
 import logfire
 
-__all__ = ["build_sampling_options", "read_sample_rate"]
+__all__ = ["build_sampling_options"]
 
 
-def read_sample_rate(default: float) -> float:
+def _read_sample_rate(default: float) -> float:
     """Read ``LOGFIRE_SAMPLE_RATE`` and clamp to ``[0.0, 1.0]``.
 
     Falls back to ``default`` when the variable is unset or unparseable so
-    a malformed value never disables observability outright.
+    a malformed value never disables observability outright. Module-private
+    because :func:`build_sampling_options` is the only product consumer;
+    tests reach in via ``common.sampling._read_sample_rate``.
 
     Args:
         default: Sample rate used when the env var is missing or malformed.
@@ -50,5 +52,5 @@ def build_sampling_options(default_rate: float) -> logfire.SamplingOptions:
     """
     return logfire.SamplingOptions.level_or_duration(
         level_threshold="warn",
-        background_rate=read_sample_rate(default_rate),
+        background_rate=_read_sample_rate(default_rate),
     )
