@@ -101,6 +101,16 @@ function metaFor(lineId: string): LineMeta {
 	return { code: `${UNKNOWN_CODE_PREFIX}${lineId}`, color: FALLBACK_COLOR };
 }
 
+/**
+ * Public accessor for the line-meta registry used by chip rendering
+ * (e.g. ``LineDetail`` affected-routes pills). Falls back to a sentinel
+ * code + neutral colour for unknown line ids so the UI degrades
+ * without throwing.
+ */
+export function getLineMeta(lineId: string): LineMeta {
+	return metaFor(lineId);
+}
+
 function lineIdForCode(code: string): string | undefined {
 	const known = LINE_ID_BY_CODE[code];
 	if (known) return known;
@@ -398,8 +408,8 @@ function chooseHeadlineAndBody(
 export function disruptionToSnapshot(d: Disruption): DisruptionSnapshot {
 	const { headline, body } = chooseHeadlineAndBody(d.summary, d.description);
 	const stations = d.affected_stops.map((stop) => ({
-		name: stop,
-		code: stop,
+		name: stop.name ?? stop.naptan_id,
+		code: stop.naptan_id,
 	}));
 	return {
 		headline,
@@ -408,5 +418,8 @@ export function disruptionToSnapshot(d: Disruption): DisruptionSnapshot {
 		stations,
 		sourceLabel: "Source: TfL Unified API",
 		updatedAtLabel: formatLondonTime(d.last_update, { withTimezoneName: true }),
+		closureText: d.closure_text || undefined,
+		affectedRoutes:
+			d.affected_routes.length > 0 ? d.affected_routes : undefined,
 	};
 }

@@ -52,6 +52,16 @@ export interface DisruptionSnapshot {
 	stations: DisruptionStation[];
 	sourceLabel: string;
 	updatedAtLabel: string;
+	/**
+	 * TfL-published "no service between A and B" notice. Empty string
+	 * (or undefined) collapses the banner.
+	 */
+	closureText?: string;
+	/**
+	 * Line ids impacted by this disruption (one chip per id). Empty
+	 * array (or undefined) hides the chip row.
+	 */
+	affectedRoutes?: string[];
 }
 
 export interface BusItem {

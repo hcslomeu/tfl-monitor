@@ -76,4 +76,51 @@ describe("LineDetail", () => {
 		).not.toBeInTheDocument();
 		expect(screen.queryByText("Affected stations")).not.toBeInTheDocument();
 	});
+
+	it("renders a closure banner when closureText is non-empty", () => {
+		render(
+			<LineDetail
+				line={LINE}
+				disruption={{
+					...DISRUPTION,
+					closureText: "No service between Paddington and Reading.",
+				}}
+			/>,
+		);
+
+		const banner = screen.getByRole("alert");
+		expect(banner).toHaveTextContent(
+			/No service between Paddington and Reading/,
+		);
+	});
+
+	it("does not render a closure banner when closureText is absent", () => {
+		render(<LineDetail line={LINE} disruption={DISRUPTION} />);
+
+		expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+	});
+
+	it("renders an affected-lines list when affectedRoutes is populated", () => {
+		render(
+			<LineDetail
+				line={LINE}
+				disruption={{
+					...DISRUPTION,
+					affectedRoutes: ["piccadilly", "victoria"],
+				}}
+			/>,
+		);
+
+		const list = screen.getByRole("list", { name: /affected lines/i });
+		const items = list.querySelectorAll("li");
+		expect(items).toHaveLength(2);
+	});
+
+	it("does not render the affected-lines block when affectedRoutes is empty or absent", () => {
+		render(<LineDetail line={LINE} disruption={DISRUPTION} />);
+
+		expect(
+			screen.queryByRole("list", { name: /affected lines/i }),
+		).not.toBeInTheDocument();
+	});
 });

@@ -181,7 +181,7 @@ describe("disruptionForLine + disruptionToSnapshot", () => {
 		description: "Para 1.\n\nPara 2.",
 		summary: "Severe delays westbound",
 		affected_routes: ["elizabeth"],
-		affected_stops: ["940GZZLUHBN"],
+		affected_stops: [{ naptan_id: "940GZZLUHBN", name: "Holborn" }],
 		closure_text: "",
 		severity: 6,
 		created: "2026-05-13T16:58:00Z",
@@ -200,7 +200,7 @@ describe("disruptionForLine + disruptionToSnapshot", () => {
 		expect(snapshot.headline).toBe("Severe delays westbound");
 		expect(snapshot.body).toEqual(["Para 1.", "Para 2."]);
 		expect(snapshot.stations).toEqual([
-			{ name: "940GZZLUHBN", code: "940GZZLUHBN" },
+			{ name: "Holborn", code: "940GZZLUHBN" },
 		]);
 		expect(snapshot.sourceLabel).toBe("Source: TfL Unified API");
 		expect(snapshot.reportedAtLabel).toMatch(/\d{2}:\d{2}/);

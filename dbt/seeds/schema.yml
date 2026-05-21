@@ -1,0 +1,39 @@
+version: 2
+
+seeds:
+  - name: tfl_stations
+    description: |
+      Static NaPTAN ↔ station-name reference for the four rail modes the
+      dashboard cares about (tube, elizabeth-line, overground, dlr).
+      Sourced once from /StopPoint/Mode/{mode} via
+      scripts/build_stations_seed.py; covers actual station NaPTANs
+      (NaptanMetroStation / NaptanRailStation / NaptanRailAccessArea /
+      TransportInterchange). Bus stops are deliberately excluded — the
+      backend resolver falls back to /StopPoint/Search for any NaPTAN
+      not present here.
+    config:
+      column_types:
+        naptan_id: varchar
+        name: varchar
+        line_ids: varchar
+        modes: varchar
+    columns:
+      - name: naptan_id
+        description: "TfL NaPTAN code (primary key)."
+        tests:
+          - not_null
+          - unique
+      - name: name
+        description: |
+          Human-readable station name, stripped of " Underground Station"
+          / " DLR Station" / " Rail Station" suffixes.
+        tests:
+          - not_null
+      - name: line_ids
+        description: "Comma-separated list of TfL line ids the station serves."
+        tests:
+          - not_null
+      - name: modes
+        description: "Comma-separated list of TfL transport modes the station serves."
+        tests:
+          - not_null

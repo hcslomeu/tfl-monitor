@@ -20,6 +20,7 @@ from pydantic import TypeAdapter
 from contracts.schemas.tfl_api import (
     TflArrivalPrediction,
     TflLineResponse,
+    TflStopPoint,
 )
 from ingestion.tfl_client.retry import TflClientError, with_retry
 
@@ -31,6 +32,7 @@ _DEFAULT_MAX_ATTEMPTS = 3
 
 _LINE_RESPONSE_ADAPTER: TypeAdapter[list[TflLineResponse]] = TypeAdapter(list[TflLineResponse])
 _ARRIVAL_ADAPTER: TypeAdapter[list[TflArrivalPrediction]] = TypeAdapter(list[TflArrivalPrediction])
+_STOP_POINT_ADAPTER: TypeAdapter[TflStopPoint] = TypeAdapter(TflStopPoint)
 
 
 class TflClient:
@@ -92,6 +94,19 @@ class TflClient:
             raise TflClientError("stop_id must be a non-empty string")
         data = await self._request(f"/StopPoint/{stop_id}/Arrivals")
         return _ARRIVAL_ADAPTER.validate_python(data)
+
+    async def fetch_stop_point(self, naptan_id: str) -> TflStopPoint:
+        """Fetch a single tier-1 stop point by NaPTAN code.
+
+        Used by the API-side station resolver when a NaPTAN surfaced in
+        a disruption payload is not present in the static dim_stations
+        seed. Returns the full stop-point record (only ``naptan_id`` and
+        ``common_name`` are typed; the rest is discarded).
+        """
+        if not naptan_id:
+            raise TflClientError("naptan_id must be a non-empty string")
+        data = await self._request(f"/StopPoint/{naptan_id}")
+        return _STOP_POINT_ADAPTER.validate_python(data)
 
     async def fetch_line_disruptions(self, modes: Iterable[str]) -> list[TflLineResponse]:
         """Fetch line-status records with nested disruption details.

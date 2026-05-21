@@ -63,6 +63,20 @@ class LineReliabilityResponse(BaseModel):
     severity_histogram: dict[str, int]
 
 
+class AffectedStop(BaseModel):
+    """NaPTAN code resolved to a human-readable name when possible.
+
+    ``name`` is ``None`` when neither the dim_stations seed nor the TfL
+    /StopPoint fallback could resolve the NaPTAN. The frontend renders
+    the raw ``naptan_id`` in that case.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    naptan_id: str
+    name: str | None = None
+
+
 class DisruptionResponse(BaseModel):
     """Single disruption record surfaced by ``/api/v1/disruptions/recent``."""
 
@@ -74,7 +88,7 @@ class DisruptionResponse(BaseModel):
     description: str
     summary: str
     affected_routes: list[str]
-    affected_stops: list[str]
+    affected_stops: list[AffectedStop]
     closure_text: str
     severity: int = Field(ge=0)
     created: datetime

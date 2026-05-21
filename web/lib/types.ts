@@ -183,13 +183,24 @@ export interface components {
             description: string;
             summary: string;
             affected_routes: string[];
-            affected_stops: string[];
+            affected_stops: components["schemas"]["AffectedStop"][];
             closure_text: string;
             severity: number;
             /** Format: date-time */
             created: string;
             /** Format: date-time */
             last_update: string;
+        };
+        /**
+         * @description NaPTAN code resolved to a human-readable station name when
+         *     possible. ``name`` is ``null`` when neither the static
+         *     dim_stations seed nor the TfL /StopPoint fallback could match
+         *     the code (e.g. deprecated NaPTANs); the frontend renders the
+         *     raw ``naptan_id`` in that case.
+         */
+        AffectedStop: {
+            naptan_id: string;
+            name?: string | null;
         };
         BusPunctuality: {
             stop_id: string;
@@ -446,8 +457,14 @@ export interface operations {
                      *           "piccadilly"
                      *         ],
                      *         "affected_stops": [
-                     *           "940GZZLUATN",
-                     *           "940GZZLUACT"
+                     *           {
+                     *             "naptan_id": "940GZZLUATN",
+                     *             "name": "Acton Town"
+                     *           },
+                     *           {
+                     *             "naptan_id": "940GZZLUACT",
+                     *             "name": "Acton Central"
+                     *           }
                      *         ],
                      *         "closure_text": "",
                      *         "severity": 6,
@@ -464,7 +481,10 @@ export interface operations {
                      *           "elizabeth"
                      *         ],
                      *         "affected_stops": [
-                     *           "910GPADTON"
+                     *           {
+                     *             "naptan_id": "910GPADTON",
+                     *             "name": "Paddington"
+                     *           }
                      *         ],
                      *         "closure_text": "",
                      *         "severity": 6,
@@ -496,7 +516,10 @@ export interface operations {
                      *           "piccadilly"
                      *         ],
                      *         "affected_stops": [
-                     *           "940GZZLUHBN"
+                     *           {
+                     *             "naptan_id": "940GZZLUHBN",
+                     *             "name": "Holborn"
+                     *           }
                      *         ],
                      *         "closure_text": "",
                      *         "severity": 9,

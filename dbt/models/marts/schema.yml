@@ -154,6 +154,32 @@ models:
         tests:
           - not_null
 
+  - name: dim_stations
+    description: |
+      Station dimension table wrapping the tfl_stations seed. Used by
+      the API resolver layer (src/api/stations.py) to map NaPTAN codes
+      embedded in disruption payloads to human-readable station names.
+      Bus-stop NaPTANs are deliberately excluded from the seed — the
+      backend falls back to /StopPoint/Search for any miss.
+    columns:
+      - name: naptan_id
+        description: "TfL NaPTAN code (primary key)."
+        tests:
+          - not_null
+          - unique
+      - name: name
+        description: "Human-readable station name."
+        tests:
+          - not_null
+      - name: line_ids
+        description: "Comma-separated list of TfL line ids served."
+        tests:
+          - not_null
+      - name: modes
+        description: "Comma-separated list of TfL transport modes served."
+        tests:
+          - not_null
+
   - name: mart_bus_metrics_daily
     description: |
       Daily bus-arrival prediction KPIs per (calendar_date UTC,
