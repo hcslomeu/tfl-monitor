@@ -378,7 +378,17 @@
 .tfl-news-list li.is-empty { color: var(--ink-tertiary); }
 .tfl-news-placeholder { font-family: var(--font-mono); font-size: var(--ui-xs); color: var(--ink-tertiary); padding-top: 2px; }
 .tfl-news-time { font-family: var(--font-mono); font-size: var(--ui-xs); color: var(--ink-tertiary); padding-top: 2px; }
-.tfl-news-title { font-family: var(--font-body); font-size: var(--ui-sm); font-weight: 500; color: var(--ink-primary); margin-bottom: 2px; }
+.tfl-news-title {
+  font-family: var(--font-body); font-size: var(--ui-sm); font-weight: 500;
+  color: var(--ink-primary); margin-bottom: 2px;
+  /* Clamp matches `.tfl-news-body` — a multi-station TfL summary would
+     otherwise push `<li>` past `--tfl-news-row-h: 64px` and silently
+     break the 5-visible-rows guarantee. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  overflow: hidden;
+}
 .tfl-news-body {
   font-family: var(--font-body); font-size: var(--ui-sm); color: var(--ink-secondary);
   line-height: 1.45; white-space: pre-line;
