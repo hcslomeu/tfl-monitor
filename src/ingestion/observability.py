@@ -6,7 +6,11 @@ import os
 
 import logfire
 
+from common.sampling import build_sampling_options
+
 INGESTION_SERVICE_NAME = "tfl-monitor-ingestion"
+
+_DEFAULT_SAMPLE_RATE = 0.1
 
 
 def configure_logfire(*, instrument_psycopg: bool = False) -> None:
@@ -22,6 +26,7 @@ def configure_logfire(*, instrument_psycopg: bool = False) -> None:
         service_version=os.getenv("APP_VERSION", "0.0.1"),
         environment=os.getenv("ENVIRONMENT", "local"),
         send_to_logfire="if-token-present",
+        sampling=build_sampling_options(_DEFAULT_SAMPLE_RATE),
     )
     if instrument_psycopg:
         logfire.instrument_psycopg("psycopg")

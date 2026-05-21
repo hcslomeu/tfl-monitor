@@ -133,7 +133,6 @@ class ArrivalsProducer:
                         arrival_id=payload.arrival_id,
                         error=repr(exc),
                     )
-        logfire.info("ingestion.arrivals.cycle", published=published)
         return published
 
     async def run_forever(self) -> NoReturn:
@@ -153,7 +152,6 @@ class ArrivalsProducer:
 
 async def _amain() -> None:
     configure_logfire()
-    logfire.instrument_httpx()
 
     bootstrap = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "")
     if not bootstrap:

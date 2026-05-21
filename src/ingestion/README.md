@@ -87,9 +87,15 @@ untouched — only the entrypoint changes.
 ## Observability
 
 `observability.py` exposes per-topic span namespaces and **redacts the
-`app_key`** before any span is emitted. Logfire instruments httpx
-automatically, so the redaction guards against the auto-instrumented spans
-as well.
+`app_key`** before any span is emitted. The httpx auto-instrumentation was
+removed because the manual `tfl.request` span already wraps every TfL call;
+`app_key` redaction happens inside that wrapper, so removing the auto layer
+does not weaken the secret-handling contract.
+
+Sampling is the shared `SamplingOptions.level_or_duration` tail strategy
+from `src/common/sampling.py`: warn+ spans and traces longer than five
+seconds are kept at 100%, everything else falls back to
+`LOGFIRE_SAMPLE_RATE` (default `0.1`).
 
 ```python
 @logfire.instrument(

@@ -122,7 +122,6 @@ class DisruptionsProducer:
                     disruption_id=payload.disruption_id,
                     error=repr(exc),
                 )
-        logfire.info("ingestion.disruptions.cycle", published=published)
         return published
 
     async def run_forever(self) -> NoReturn:
@@ -142,7 +141,6 @@ class DisruptionsProducer:
 
 async def _amain() -> None:
     configure_logfire()
-    logfire.instrument_httpx()
 
     bootstrap = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "")
     if not bootstrap:
