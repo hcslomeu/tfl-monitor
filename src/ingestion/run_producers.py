@@ -28,7 +28,6 @@ from ingestion.tfl_client import TflClient
 
 async def _amain() -> NoReturn:
     configure_logfire()
-    logfire.instrument_httpx()
 
     bootstrap = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "")
     if not bootstrap:

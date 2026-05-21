@@ -20,7 +20,10 @@ services:
       - tfl-monitor
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
-      interval: 30s
+      # 120s keeps the API still self-monitored but cuts the /health hit
+      # rate to 1/4 of the previous 30s tick — every hit is a Logfire span
+      # via instrument_fastapi, so this is pure ingest-volume reduction.
+      interval: 120s
       timeout: 5s
       retries: 3
 

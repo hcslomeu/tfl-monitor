@@ -28,6 +28,7 @@ import httpx
 import logfire
 from openai import AsyncOpenAI
 
+from common.sampling import build_sampling_options
 from rag.config import RagSettings, load_settings
 from rag.embed import embed_texts
 from rag.fetch import (
@@ -46,6 +47,8 @@ __all__ = ["main", "run_ingestion"]
 DEFAULT_SOURCES_PATH = Path("src/rag/sources.json")
 RAG_SERVICE_NAME = "tfl-monitor-rag-ingestion"
 
+_DEFAULT_SAMPLE_RATE = 0.5
+
 
 def configure_logfire() -> None:
     """Configure Logfire for the ingestion entrypoint."""
@@ -54,8 +57,8 @@ def configure_logfire() -> None:
         service_version=os.getenv("APP_VERSION", "0.0.1"),
         environment=os.getenv("ENVIRONMENT", "local"),
         send_to_logfire="if-token-present",
+        sampling=build_sampling_options(_DEFAULT_SAMPLE_RATE),
     )
-    logfire.instrument_httpx()
 
 
 async def _amain(
