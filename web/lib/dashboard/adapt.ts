@@ -345,7 +345,13 @@ function chooseHeadlineAndBody(
 	if (head === trimmedSummary) {
 		return { headline: trimmedSummary, body: paragraphs.slice(1) };
 	}
-	if (head.length > trimmedSummary.length) {
+	if (
+		head.length > trimmedSummary.length &&
+		// Guard against degenerate summaries (length <= tolerance) where
+		// the overlap check would be vacuously true at zero overlap and
+		// promote any longer first paragraph regardless of prefix match.
+		trimmedSummary.length > TRUNCATION_TOLERANCE
+	) {
 		const overlap = commonPrefixLength(trimmedSummary, head);
 		if (overlap >= trimmedSummary.length - TRUNCATION_TOLERANCE) {
 			return { headline: head, body: paragraphs.slice(1) };

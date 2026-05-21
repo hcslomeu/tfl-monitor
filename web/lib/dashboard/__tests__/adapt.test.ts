@@ -233,6 +233,26 @@ describe("disruptionForLine + disruptionToSnapshot", () => {
 		expect(snapshot.body).toEqual(["Para 1.", "Para 2.", "Para 3."]);
 	});
 
+	it("keeps the summary when it is too short for prefix matching to be meaningful", () => {
+		// Guards against a latent edge case: when summary.length <= the
+		// truncation tolerance, `overlap >= summary.length - tolerance`
+		// is vacuously true at overlap = 0, which would promote any longer
+		// first paragraph regardless of actual prefix match. TfL never
+		// emits summaries this short in practice, but the guard makes the
+		// intent explicit and prevents future regressions.
+		const tiny: Disruption = {
+			...disruption,
+			summary: "OK",
+			description:
+				"Something completely unrelated about a closure on the Piccadilly line.",
+		};
+		const snapshot = disruptionToSnapshot(tiny);
+		expect(snapshot.headline).toBe("OK");
+		expect(snapshot.body).toEqual([
+			"Something completely unrelated about a closure on the Piccadilly line.",
+		]);
+	});
+
 	it("promotes the full description to the headline when TfL ships a summary truncated mid-word", () => {
 		// Real TfL payload observed on Windrush Line at 15:14 BST: the
 		// `summary` is cut mid-word ("...line. Tic") while `description`
