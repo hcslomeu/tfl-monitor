@@ -232,6 +232,27 @@ describe("disruptionForLine + disruptionToSnapshot", () => {
 		});
 		expect(snapshot.body).toEqual(["Para 1.", "Para 2.", "Para 3."]);
 	});
+
+	it("promotes the full description to the headline when TfL ships a summary truncated mid-word", () => {
+		// Real TfL payload observed on Windrush Line at 15:14 BST: the
+		// `summary` is cut mid-word ("...line. Tic") while `description`
+		// carries the full sentence ("...line. Tickets will be accepted on
+		// London Underground via reasonable routes."). The exact-equality
+		// echo strip used to miss this, so the LineDetail card showed the
+		// truncated headline and then echoed the full version in the body.
+		const truncated: Disruption = {
+			...disruption,
+			summary:
+				"Windrush Line: No service between Sydenham and West Croydon due to an earlier obstruction from the track at Sydenham. SEVERE delays on the rest of the line. Tic",
+			description:
+				"Windrush Line: No service between Sydenham and West Croydon due to an earlier obstruction from the track at Sydenham. SEVERE delays on the rest of the line. Tickets will be accepted on London Underground via reasonable routes.",
+		};
+		const snapshot = disruptionToSnapshot(truncated);
+		expect(snapshot.headline).toBe(
+			"Windrush Line: No service between Sydenham and West Croydon due to an earlier obstruction from the track at Sydenham. SEVERE delays on the rest of the line. Tickets will be accepted on London Underground via reasonable routes.",
+		);
+		expect(snapshot.body).toEqual([]);
+	});
 });
 
 describe("lineSummaryToFallbackSnapshot", () => {
@@ -524,5 +545,37 @@ describe("disruptionsToNews", () => {
 			"Piccadilly Line: SUSPENDED.",
 			"Mildmay line: Part suspended.",
 		]);
+	});
+
+	it("collapses TfL-truncated summary duplicates onto the full description as title", () => {
+		// Real Windrush payload from 2026-05-21: four rows ingested in two
+		// 5-min polls share an identical full description but a `summary`
+		// that TfL cut mid-word ("...line. Tic"). Pre-fix, the dedup key
+		// preserved the truncated summary so the four rows survived; the
+		// fix promotes the full description's first paragraph to the title
+		// so every copy collapses into one row carrying the full sentence.
+		const full =
+			"Windrush Line: No service between Sydenham and West Croydon due to an earlier obstruction from the track at Sydenham. SEVERE delays on the rest of the line. Tickets will be accepted on London Underground via reasonable routes.";
+		const truncated =
+			"Windrush Line: No service between Sydenham and West Croydon due to an earlier obstruction from the track at Sydenham. SEVERE delays on the rest of the line. Tic";
+		const mk = (id: string, lastUpdate: string): Disruption => ({
+			...baseDisruption,
+			disruption_id: id,
+			summary: truncated,
+			description: full,
+			last_update: lastUpdate,
+		});
+		const items = disruptionsToNews(
+			[
+				mk("w-1", "2026-05-13T18:50:00Z"),
+				mk("w-2", "2026-05-13T18:51:00Z"),
+				mk("w-3", "2026-05-13T18:52:00Z"),
+				mk("w-4", "2026-05-13T18:53:00Z"),
+			],
+			NOW,
+		);
+		expect(items).toHaveLength(1);
+		expect(items[0].title).toBe(full);
+		expect(items[0].body).toBe("");
 	});
 });

@@ -269,17 +269,20 @@ export function disruptionsToNews(
 	const seen = new Set<string>();
 	const items: NewsItem[] = [];
 	for (const { d } of dated) {
-		const title = d.summary;
-		const body = extraParagraphs(d.summary, d.description);
+		const { headline, body: bodyParagraphs } = chooseHeadlineAndBody(
+			d.summary,
+			d.description,
+		);
+		const body = bodyParagraphs.join("\n\n");
 		// JSON.stringify guarantees a separator that cannot appear inside
 		// either string verbatim, so titles ending in whitespace cannot
 		// collide with bodies starting in whitespace (and vice-versa).
-		const key = JSON.stringify([title, body]);
+		const key = JSON.stringify([headline, body]);
 		if (seen.has(key)) continue;
 		seen.add(key);
 		items.push({
 			time: formatLondonTime(d.last_update),
-			title,
+			title: headline,
 			body,
 		});
 	}
@@ -299,12 +302,56 @@ function splitParagraphs(description: string): string[] {
 		.filter((paragraph) => paragraph.length > 0);
 }
 
-function extraParagraphs(summary: string, description: string): string {
+// TfL's Unified API occasionally truncates `summary` mid-word (~250-char
+// cap) while shipping the full sentence in `description`. Treating the
+// truncated string as the canonical headline produces two bad outcomes:
+// the LineDetail card renders the cut headline above the full sentence
+// (visible echo), and dedup in `disruptionsToNews` keeps every copy
+// because the truncation point varies subtly between polls.
+//
+// Tolerance value: characters that may differ at the truncation boundary
+// before we abandon the promotion. 5 covers the common case of TfL
+// cutting "Tickets" → "Tic" (3 chars match before divergence) plus a
+// little slack for whitespace or hyphenation around the cut.
+const TRUNCATION_TOLERANCE = 5;
+
+function commonPrefixLength(a: string, b: string): number {
+	const upper = Math.min(a.length, b.length);
+	let i = 0;
+	while (i < upper && a.charCodeAt(i) === b.charCodeAt(i)) i += 1;
+	return i;
+}
+
+/**
+ * Choose the canonical headline + body for a disruption.
+ *
+ * Returns the trimmed `summary` as headline and any paragraphs of
+ * `description` past the leading echo as body. When TfL's `summary`
+ * looks truncated against `description` (the two share a long common
+ * prefix and `description`'s first paragraph is the longer string),
+ * promote that first paragraph to the headline so the card and the
+ * news pane render the full sentence instead of the cut one.
+ */
+function chooseHeadlineAndBody(
+	summary: string,
+	description: string,
+): { headline: string; body: string[] } {
+	const trimmedSummary = summary.trim();
 	const paragraphs = splitParagraphs(description);
-	if (paragraphs.length === 0) return "";
+	if (paragraphs.length === 0) {
+		return { headline: trimmedSummary, body: [] };
+	}
 	const head = paragraphs[0];
-	const rest = head === summary.trim() ? paragraphs.slice(1) : paragraphs;
-	return rest.join("\n\n");
+	if (head === trimmedSummary) {
+		return { headline: trimmedSummary, body: paragraphs.slice(1) };
+	}
+	if (head.length > trimmedSummary.length) {
+		const overlap = commonPrefixLength(trimmedSummary, head);
+		if (overlap >= trimmedSummary.length - TRUNCATION_TOLERANCE) {
+			return { headline: head, body: paragraphs.slice(1) };
+		}
+	}
+	return { headline: trimmedSummary, body: paragraphs };
 }
 
 /**
@@ -313,22 +360,19 @@ function extraParagraphs(summary: string, description: string): string {
  * richer registry — Phase 5 keeps the projection minimal; richer
  * naming comes when the disruption stream is wired end-to-end.
  *
- * The leading paragraph of `description` is dropped when it exactly
- * matches `summary` — TfL's Unified API repeats the summary as the
- * first paragraph of `description` for most payloads, so without this
- * the LineDetail card would render the headline once and then again
- * as the first body paragraph.
+ * Headline + body are picked by `chooseHeadlineAndBody`, which strips
+ * the leading paragraph of `description` when it echoes `summary` and
+ * promotes `description`'s first paragraph to the headline when TfL
+ * ships a summary truncated mid-word.
  */
 export function disruptionToSnapshot(d: Disruption): DisruptionSnapshot {
-	const paragraphs = splitParagraphs(d.description);
-	const body =
-		paragraphs[0] === d.summary.trim() ? paragraphs.slice(1) : paragraphs;
+	const { headline, body } = chooseHeadlineAndBody(d.summary, d.description);
 	const stations = d.affected_stops.map((stop) => ({
 		name: stop,
 		code: stop,
 	}));
 	return {
-		headline: d.summary,
+		headline,
 		body,
 		reportedAtLabel: formatLondonTime(d.created, { withTimezoneName: true }),
 		stations,
