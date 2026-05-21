@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import os
 
 import logfire
@@ -31,6 +32,8 @@ def _read_sample_rate(default: float) -> float:
             rate = float(raw)
         except ValueError:
             rate = default
+    if not math.isfinite(rate):
+        rate = default
     return min(max(rate, 0.0), 1.0)
 
 
