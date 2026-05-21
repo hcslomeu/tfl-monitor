@@ -1,0 +1,15 @@
+# /etc/logrotate.d/tfl-monitor — installed on the Lightsail box by
+# scripts/deploy.sh on every GHA deploy. Bounds cron.log growth at the
+# 15-min dbt cadence (~96 runs/day) so the box's 50 GB disk is never
+# eaten by build output alone. The system logrotate cron entry in
+# /etc/cron.daily/logrotate picks this up automatically.
+
+/opt/tfl-monitor/cron.log {
+    weekly
+    rotate 4
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+}

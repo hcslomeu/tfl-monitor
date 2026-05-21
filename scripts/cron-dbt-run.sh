@@ -13,13 +13,32 @@ set -euo pipefail
 LOG_TAG="tfl-monitor-cron"
 LOCK_FILE="/tmp/tfl-monitor-dbt.lock"
 
+# Fail loud if flock is missing — otherwise every cron tick would log
+# "skipping" with exit 0 and silently disable dbt builds forever.
+if ! command -v flock >/dev/null 2>&1; then
+  echo "[$(date -Iseconds)] $LOG_TAG ERROR: flock not installed" >&2
+  exit 127
+fi
+
 # Non-blocking flock prevents overlapping runs from piling up when a build
 # takes longer than the cron interval (currently 15 min). FD 9 stays open
 # for the lifetime of the script, so the lock is released on any exit.
-exec 9>"$LOCK_FILE"
-if ! flock -n 9; then
+# Append (`>>`) instead of truncate (`>`) so we never touch the file's
+# contents while another process holds the lock — flock cares about the
+# fd, not the bytes.
+exec 9>>"$LOCK_FILE"
+set +e
+flock -n 9
+flock_status=$?
+set -e
+if [[ $flock_status -eq 1 ]]; then
+  # exit 1 is the documented "lock busy" return from flock -n
   echo "[$(date -Iseconds)] $LOG_TAG dbt build already running, skipping"
   exit 0
+elif [[ $flock_status -ne 0 ]]; then
+  # Anything else is a real error (signal, syscall failure, …)
+  echo "[$(date -Iseconds)] $LOG_TAG ERROR: flock failed (exit $flock_status)" >&2
+  exit $flock_status
 fi
 
 echo "[$(date -Iseconds)] $LOG_TAG dbt build start"

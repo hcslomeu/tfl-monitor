@@ -1,5 +1,7 @@
 # /etc/cron.d/tfl-monitor — installed on the Lightsail box by
-# `scripts/bootstrap-tenant.sh`. See ADR 006 + .claude/specs/TM-A5-plan.md
+# `scripts/bootstrap-tenant.sh` (first provision) AND reinstalled by
+# `scripts/deploy.sh` on every GHA deploy so schedule changes in git
+# propagate automatically. See ADR 006 + .claude/specs/TM-A5-plan.md
 # decision #18 for why this replaces Airflow in production.
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
