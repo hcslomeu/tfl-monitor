@@ -63,30 +63,28 @@
   .tfl-nav-status { display: none; }
 }
 
-/* ---------- Columns: 2-row subgrid so row 1 (LineGrid ↔ LineDetail)
-   stretches equal across both columns, row 2 (left-bottom ↔ chat) gets
-   its natural height. --------------------------------------------- */
-.tfl-left-col,
+/* ---------- Right column: Disruption (capped at 50%) above Chat
+   (consumes the rest). Status occupies the full-height left column on
+   its own, so the two columns are no longer height-coupled via subgrid. */
 .tfl-right-col {
-  display: grid;
-  grid-template-rows: subgrid;
-  grid-row: 1 / -1;
+  display: flex;
+  flex-direction: column;
   gap: var(--space-4);
   min-width: 0;
   min-height: 0;
 }
-.tfl-left-bottom {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
+.tfl-right-col > .tfl-card {
+  /* LineDetail. The cap is upper-bounded only — when the disruption body
+     is short the card collapses to content and Chat keeps the slack. */
+  max-height: 50%;
   min-height: 0;
+  overflow: auto;
 }
-
-.tfl-right-col .tfl-chat-stack {
+.tfl-right-col > .tfl-chat-stack {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  flex: 1 1 0;
+  flex: 1 1 auto;
   min-height: 0;
 }
 .tfl-right-col .tfl-chat-stack .tfl-chat-card { flex: 1 1 auto; min-height: 0; }
@@ -212,16 +210,29 @@
 .tfl-chatbox-send:hover { background: #FFA15B; }
 .tfl-chatbox-send:active { transform: scale(0.94); }
 
-.tfl-grid {
-  max-width: 80rem; margin: 0 auto;
+/* ---------- Shell: vertical stack of grid + news + bus bands. The
+   outer page padding lives here so each band can render flush at full
+   width while still respecting the 80rem reading measure. */
+.tfl-shell {
+  max-width: 80rem;
+  margin: 0 auto;
   padding: 5rem var(--space-5) var(--space-7);
-  display: grid; grid-template-columns: 1fr 1fr;
-  /* Both rows size to content. Subgrid children align so row 1 (LineGrid ↔ LineDetail)
-     is the height of whichever card is taller — typically the line list. */
-  grid-template-rows: auto auto;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.tfl-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: var(--space-4);
   align-items: stretch;
-  width: 100%;
+}
+
+.tfl-news-band,
+.tfl-bus-band {
+  display: block;
 }
 
 .tfl-card {
@@ -338,23 +349,47 @@
 .tfl-bus-route { font-family: var(--font-mono); font-size: var(--ui-sm); font-weight: 500; color: var(--ink-primary); }
 .tfl-bus-text  { font-family: var(--font-body); font-size: var(--ui-sm); color: var(--ink-secondary); line-height: 1.4; }
 
-/* ---------- News & reports ---------------------------------------- */
-.tfl-news { display: flex; flex-direction: column; }
-.tfl-news-list { list-style: none; margin: 0; padding: 0; flex: 1; display: flex; flex-direction: column; }
+/* ---------- News & reports
+   The list is the fixed-height scroll surface: --tfl-news-row-h drives
+   both each row's `min-height` and the list's `max-height` cap (5 rows).
+   Scrollbar is hidden in both Firefox (`scrollbar-width: none`) and
+   WebKit/Blink (`::-webkit-scrollbar`) — overflow is still functional,
+   only chromeless. */
+.tfl-news { display: flex; flex-direction: column; --tfl-news-row-h: 64px; }
+.tfl-news-list {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-direction: column;
+  max-height: calc(5 * var(--tfl-news-row-h));
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.tfl-news-list::-webkit-scrollbar { display: none; }
 .tfl-news-list li {
   display: grid; grid-template-columns: 52px 1fr;
   gap: 12px;
   padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--border-default);
-  flex: 1;
   align-items: flex-start;
+  min-height: var(--tfl-news-row-h);
+  box-sizing: border-box;
 }
 .tfl-news-list li:last-child { border-bottom: none; }
 .tfl-news-list li.is-empty { color: var(--ink-tertiary); }
 .tfl-news-placeholder { font-family: var(--font-mono); font-size: var(--ui-xs); color: var(--ink-tertiary); padding-top: 2px; }
 .tfl-news-time { font-family: var(--font-mono); font-size: var(--ui-xs); color: var(--ink-tertiary); padding-top: 2px; }
 .tfl-news-title { font-family: var(--font-body); font-size: var(--ui-sm); font-weight: 500; color: var(--ink-primary); margin-bottom: 2px; }
-.tfl-news-body { font-family: var(--font-body); font-size: var(--ui-sm); color: var(--ink-secondary); line-height: 1.45; white-space: pre-line; }
+.tfl-news-body {
+  font-family: var(--font-body); font-size: var(--ui-sm); color: var(--ink-secondary);
+  line-height: 1.45; white-space: pre-line;
+  /* Cap the body to a single visible line so every row settles on the
+     fixed min-height — the full text remains in the accessibility tree
+     and is restored if `-webkit-line-clamp` is unsupported. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  overflow: hidden;
+}
 
 @media (max-width: 880px) {
   .tfl-grid { grid-template-columns: 1fr; }

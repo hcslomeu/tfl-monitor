@@ -86,24 +86,26 @@ export default function HomePage() {
 	return (
 		<div className="tfl-app">
 			<TopNav summary={counts} clockLabel={clockLabel} repoUrl={REPO_URL} />
-			<main className="tfl-grid">
-				<div className="tfl-left-col">
+			<main className="tfl-shell">
+				<section className="tfl-grid">
 					<LineGrid
 						lines={lineSummaries}
 						selected={selectedCode ?? undefined}
 						onSelect={setSelectedCode}
 					/>
-					<div className="tfl-left-bottom">
-						<BusBanner buses={MOCK_BUSES} />
-						<NewsReports items={newsItems} />
+					<div className="tfl-right-col">
+						{selectedLine ? (
+							<LineDetail line={selectedLine} disruption={selectedDisruption} />
+						) : null}
+						<ChatPanel />
 					</div>
-				</div>
-				<div className="tfl-right-col">
-					{selectedLine ? (
-						<LineDetail line={selectedLine} disruption={selectedDisruption} />
-					) : null}
-					<ChatPanel />
-				</div>
+				</section>
+				<section className="tfl-news-band">
+					<NewsReports items={newsItems} />
+				</section>
+				<section className="tfl-bus-band">
+					<BusBanner buses={MOCK_BUSES} />
+				</section>
 			</main>
 			<WorkInProgress
 				label="TfL Monitor — still being built"

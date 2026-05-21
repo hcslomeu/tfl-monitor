@@ -301,6 +301,11 @@ describe("lineSummaryToFallbackSnapshot", () => {
 });
 
 describe("disruptionsToNews", () => {
+	// Fixed clock anchor 2h after the baseDisruption last_update so the
+	// 12h window keeps the row by default. Individual tests override `now`
+	// when they need to exercise the cutoff boundary.
+	const NOW = new Date("2026-05-13T18:58:00Z");
+
 	const baseDisruption: Disruption = {
 		disruption_id: "test-news-1",
 		category: "RealTime",
@@ -323,7 +328,7 @@ describe("disruptionsToNews", () => {
 			description: "No service between Kennington and Moorgate.",
 			last_update: "2026-05-13T15:20:00Z",
 		};
-		const items = disruptionsToNews([earlier, baseDisruption]);
+		const items = disruptionsToNews([earlier, baseDisruption], NOW);
 		expect(items).toHaveLength(2);
 		expect(items[0].title).toBe("Elizabeth line — westbound severe delays");
 		expect(items[0].body).toBe("Faulty train at Hayes & Harlington.");
@@ -331,27 +336,26 @@ describe("disruptionsToNews", () => {
 		expect(items[1].title).toBe("Northern line — Bank branch part-suspended");
 	});
 
-	it("falls back to '—' when last_update is unparseable", () => {
+	it("drops rows whose last_update is unparseable so the 12h window stays honest", () => {
+		// Pre-TM-28 we surfaced these with `time: "—"`; the new window
+		// filter has to assume an unknown timestamp is outside the window,
+		// otherwise a broken payload could silently extend the surface.
 		const broken: Disruption = { ...baseDisruption, last_update: "not-a-date" };
-		const [item] = disruptionsToNews([broken]);
-		expect(item.time).toBe("—");
+		expect(disruptionsToNews([broken], NOW)).toEqual([]);
 	});
 
 	it("returns an empty list when no disruptions are supplied", () => {
-		expect(disruptionsToNews([])).toEqual([]);
+		expect(disruptionsToNews([], NOW)).toEqual([]);
 	});
 
 	it("drops the leading paragraph of description when it duplicates summary so title and body do not echo", () => {
-		// TfL's Unified API repeats `summary` as the first paragraph of
-		// `description` in most payloads; the news list would render the
-		// same sentence twice unless we strip it.
 		const echoed: Disruption = {
 			...baseDisruption,
 			summary: "Piccadilly Line: SUSPENDED between Acton Town and Heathrow.",
 			description:
 				"Piccadilly Line: SUSPENDED between Acton Town and Heathrow.\n\nTickets accepted on London Buses and the Elizabeth line.",
 		};
-		const [item] = disruptionsToNews([echoed]);
+		const [item] = disruptionsToNews([echoed], NOW);
 		expect(item.title).toBe(
 			"Piccadilly Line: SUSPENDED between Acton Town and Heathrow.",
 		);
@@ -366,7 +370,7 @@ describe("disruptionsToNews", () => {
 			summary: "Circle Line: Minor delays due to train cancellations.",
 			description: "Circle Line: Minor delays due to train cancellations.",
 		};
-		const [item] = disruptionsToNews([onlyEcho]);
+		const [item] = disruptionsToNews([onlyEcho], NOW);
 		expect(item.body).toBe("");
 	});
 
@@ -377,7 +381,7 @@ describe("disruptionsToNews", () => {
 			description:
 				"Piccadilly Line: SUSPENDED between Acton Town and Heathrow.\n\nTickets accepted on London Buses.\n\nLast updated 18:42.",
 		};
-		const [item] = disruptionsToNews([verbose]);
+		const [item] = disruptionsToNews([verbose], NOW);
 		expect(item.body).toBe(
 			"Tickets accepted on London Buses.\n\nLast updated 18:42.",
 		);
@@ -390,7 +394,7 @@ describe("disruptionsToNews", () => {
 			description:
 				"Faulty train at Hayes & Harlington.\n\nTickets accepted on Piccadilly & Bakerloo until service is restored.",
 		};
-		const [item] = disruptionsToNews([distinct]);
+		const [item] = disruptionsToNews([distinct], NOW);
 		expect(item.body).toBe(
 			"Faulty train at Hayes & Harlington.\n\nTickets accepted on Piccadilly & Bakerloo until service is restored.",
 		);
@@ -404,7 +408,7 @@ describe("disruptionsToNews", () => {
 			...baseDisruption,
 			description: "Train at Hayes & Harlington.\nAlternatives: take the bus.",
 		};
-		const [item] = disruptionsToNews([wrapped]);
+		const [item] = disruptionsToNews([wrapped], NOW);
 		expect(item.body).toBe(
 			"Train at Hayes & Harlington.\nAlternatives: take the bus.",
 		);
@@ -417,7 +421,108 @@ describe("disruptionsToNews", () => {
 			description:
 				"Piccadilly Line: SUSPENDED between Acton Town and Heathrow.\r\n\r\nTickets accepted on London Buses.",
 		};
-		const [item] = disruptionsToNews([crlf]);
+		const [item] = disruptionsToNews([crlf], NOW);
 		expect(item.body).toBe("Tickets accepted on London Buses.");
+	});
+
+	it("drops rows whose last_update is older than 12 hours so the news list stays current", () => {
+		// Ingestion replays the entire /Disruption payload every cycle, so
+		// stale rows linger in the DB long after TfL has cleared them on
+		// the live status feed. The news pane is a "what's happening now"
+		// surface, so we cap visibility at 12 h.
+		const stale: Disruption = {
+			...baseDisruption,
+			disruption_id: "stale",
+			last_update: "2026-05-13T06:57:00Z", // 12h 1m before NOW
+		};
+		const fresh: Disruption = {
+			...baseDisruption,
+			disruption_id: "fresh",
+			summary: "Northern line — Bank branch part-suspended",
+			last_update: "2026-05-13T18:30:00Z", // 28m before NOW
+		};
+		const items = disruptionsToNews([stale, fresh], NOW);
+		expect(items).toHaveLength(1);
+		expect(items[0].title).toBe("Northern line — Bank branch part-suspended");
+	});
+
+	it("keeps a row exactly 12 hours old so the window cutoff is inclusive at the boundary", () => {
+		// Avoids losing legitimate ongoing incidents to clock drift between
+		// the consumer's `last_update` write and the browser's `now`.
+		const boundary: Disruption = {
+			...baseDisruption,
+			last_update: "2026-05-13T06:58:00Z", // exactly 12h before NOW
+		};
+		expect(disruptionsToNews([boundary], NOW)).toHaveLength(1);
+	});
+
+	it("collapses content-exact duplicates keeping the most recent occurrence", () => {
+		// TfL re-publishes the same disruption on every poll (currently 5 min)
+		// with a refreshed `last_update`. Without dedup the news pane fills
+		// with N copies of the same Mildmay / Piccadilly closure within an
+		// hour. We dedup on the rendered content (title + body) rather than
+		// `disruption_id` because TfL sometimes re-issues a closure under a
+		// new id with identical text.
+		const mildmayLater: Disruption = {
+			...baseDisruption,
+			disruption_id: "mildmay-3",
+			summary: "Mildmay line: Part suspended between Highbury and Stratford.",
+			description:
+				"Mildmay line: Part suspended between Highbury and Stratford.",
+			last_update: "2026-05-13T18:55:00Z",
+		};
+		const mildmayMid: Disruption = {
+			...baseDisruption,
+			disruption_id: "mildmay-2",
+			summary: "Mildmay line: Part suspended between Highbury and Stratford.",
+			description:
+				"Mildmay line: Part suspended between Highbury and Stratford.",
+			last_update: "2026-05-13T18:50:00Z",
+		};
+		const mildmayEarliest: Disruption = {
+			...baseDisruption,
+			disruption_id: "mildmay-1",
+			summary: "Mildmay line: Part suspended between Highbury and Stratford.",
+			description:
+				"Mildmay line: Part suspended between Highbury and Stratford.",
+			last_update: "2026-05-13T18:45:00Z",
+		};
+
+		const items = disruptionsToNews(
+			[mildmayEarliest, mildmayMid, mildmayLater],
+			NOW,
+		);
+		expect(items).toHaveLength(1);
+		// London-local for 18:55 UTC on 2026-05-13 (BST = UTC+1).
+		expect(items[0].time).toBe("19:55");
+	});
+
+	it("keeps distinct disruptions even when one repeats — image-4 fixture: 3× Mildmay + 3× Piccadilly → 2 rows", () => {
+		const mk = (
+			id: string,
+			summary: string,
+			lastUpdate: string,
+		): Disruption => ({
+			...baseDisruption,
+			disruption_id: id,
+			summary,
+			description: summary,
+			last_update: lastUpdate,
+		});
+		const items = disruptionsToNews(
+			[
+				mk("mil-1", "Mildmay line: Part suspended.", "2026-05-13T18:40:00Z"),
+				mk("mil-2", "Mildmay line: Part suspended.", "2026-05-13T18:45:00Z"),
+				mk("mil-3", "Mildmay line: Part suspended.", "2026-05-13T18:50:00Z"),
+				mk("pic-1", "Piccadilly Line: SUSPENDED.", "2026-05-13T18:42:00Z"),
+				mk("pic-2", "Piccadilly Line: SUSPENDED.", "2026-05-13T18:47:00Z"),
+				mk("pic-3", "Piccadilly Line: SUSPENDED.", "2026-05-13T18:52:00Z"),
+			],
+			NOW,
+		);
+		expect(items.map((i) => i.title)).toEqual([
+			"Piccadilly Line: SUSPENDED.",
+			"Mildmay line: Part suspended.",
+		]);
 	});
 });

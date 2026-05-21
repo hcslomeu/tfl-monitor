@@ -225,10 +225,27 @@ export function disruptionForLine(
 	return disruptions.find((d) => d.affected_routes.includes(lineId));
 }
 
+const NEWS_WINDOW_MS = 12 * 60 * 60 * 1000;
+
 /**
  * Project a list of backend `Disruption` rows into the `NewsReports`
- * view-model. Rows are sorted by `last_update` descending so the most
- * recent updates surface first; the component handles slot truncation.
+ * view-model.
+ *
+ * Two filters run before projection so the news pane stays a
+ * "what's happening now" surface and never echoes itself:
+ *
+ * 1. **12 h window** — ingestion replays the full `/Disruption` payload
+ *    every cycle, so stale rows persist in the DB long after TfL has
+ *    cleared them. Rows whose `last_update` is older than 12 h relative
+ *    to `now` are dropped (boundary inclusive). Rows with an unparseable
+ *    `last_update` are dropped because we cannot prove they are recent.
+ * 2. **Content-exact dedup** — TfL re-publishes ongoing incidents on
+ *    every poll (currently every 5 min), so without dedup the pane
+ *    fills with N copies of the same closure within an hour. Dedup
+ *    walks rows in descending `last_update` order and keeps the first
+ *    occurrence of each `title|body` pair. Keying on rendered content
+ *    rather than `disruption_id` also collapses cases where TfL re-issues
+ *    a closure under a fresh id but with identical text.
  *
  * `time` uses the London-local `HH:MM` format the design canvas
  * specifies. The `body` carries only the *extra* paragraphs of
@@ -236,21 +253,34 @@ export function disruptionForLine(
  * paragraph of `description` in nearly every payload, so projecting
  * the whole description into the body produces a duplicate of the
  * title. We strip the leading paragraph when it matches `summary`
- * and join any remaining paragraphs with a blank line.
+ * and join any remaining paragraphs with a blank line. `now` is
+ * injected so the function stays deterministic under test.
  */
-export function disruptionsToNews(disruptions: Disruption[]): NewsItem[] {
-	const sorted = [...disruptions].sort((a, b) => {
-		const aTime = Date.parse(a.last_update);
-		const bTime = Date.parse(b.last_update);
-		return (
-			(Number.isNaN(bTime) ? 0 : bTime) - (Number.isNaN(aTime) ? 0 : aTime)
-		);
-	});
-	return sorted.map((d) => ({
-		time: formatLondonTime(d.last_update),
-		title: d.summary,
-		body: extraParagraphs(d.summary, d.description),
-	}));
+export function disruptionsToNews(
+	disruptions: Disruption[],
+	now: Date = new Date(),
+): NewsItem[] {
+	const cutoffMs = now.getTime() - NEWS_WINDOW_MS;
+	const dated = disruptions
+		.map((d) => ({ d, ts: Date.parse(d.last_update) }))
+		.filter(({ ts }) => !Number.isNaN(ts) && ts >= cutoffMs)
+		.sort((a, b) => b.ts - a.ts);
+
+	const seen = new Set<string>();
+	const items: NewsItem[] = [];
+	for (const { d } of dated) {
+		const title = d.summary;
+		const body = extraParagraphs(d.summary, d.description);
+		const key = `${title} ${body}`;
+		if (seen.has(key)) continue;
+		seen.add(key);
+		items.push({
+			time: formatLondonTime(d.last_update),
+			title,
+			body,
+		});
+	}
+	return items;
 }
 
 // Matches blank-line separators in both LF and CRLF payloads. The TfL
