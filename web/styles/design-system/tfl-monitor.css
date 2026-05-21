@@ -74,11 +74,20 @@
   min-height: 0;
 }
 .tfl-right-col > .tfl-card {
-  /* LineDetail. The cap is upper-bounded only — when the disruption body
-     is short the card collapses to content and Chat keeps the slack. */
-  max-height: 50%;
+  /* LineDetail base rules — the 50% cap is scoped to the two-column
+     layout only (see media query below). At ≤880px the grid collapses
+     to one column so the right column is content-sized and a percentage
+     cap would resolve against an undefined parent height, clipping the
+     card unpredictably. */
   min-height: 0;
   overflow: auto;
+}
+@media (min-width: 881px) {
+  .tfl-right-col > .tfl-card {
+    /* Upper-bound only — short disruption bodies still collapse to
+       content and Chat keeps the freed slack. */
+    max-height: 50%;
+  }
 }
 .tfl-right-col > .tfl-chat-stack {
   display: flex;
