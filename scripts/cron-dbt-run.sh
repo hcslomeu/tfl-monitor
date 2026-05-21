@@ -12,6 +12,7 @@ set -euo pipefail
 
 LOG_TAG="tfl-monitor-cron"
 LOCK_FILE="/tmp/tfl-monitor-dbt.lock"
+API_CONTAINER="${API_CONTAINER:-tfl-monitor-api-1}"
 # Cap each build at 14 min so the 15-min cron tick is never starved by a
 # hung `docker exec`. Without this, a stuck process would hold FD 9 forever
 # and every future tick would land in the "skipping" branch above.
@@ -52,15 +53,23 @@ cd /opt/tfl-monitor
 # UV_PROJECT_ENVIRONMENT=/usr/local — no `uv run` wrapping needed.
 # `timeout` exits 124 when the duration is hit and the process is killed,
 # at which point our exit closes FD 9 and releases the flock for the next tick.
+# Important: `docker exec` does NOT forward SIGTERM to the in-container
+# process by default and runs without a TTY here, so killing the `docker
+# exec` client does not reap the dbt process inside the container. After a
+# timeout we therefore signal the in-container `dbt build` directly so the
+# next cron tick does not race a still-running build on the same warehouse.
 set +e
-timeout "${DBT_BUILD_TIMEOUT}" docker exec tfl-monitor-api-1 dbt build \
+timeout "${DBT_BUILD_TIMEOUT}" docker exec "${API_CONTAINER}" dbt build \
   --profiles-dir /app/dbt \
   --project-dir /app/dbt \
   --target prod
 dbt_status=$?
 set -e
 if [[ $dbt_status -eq 124 ]]; then
-  echo "[$(date -Iseconds)] $LOG_TAG ERROR: dbt build timed out after ${DBT_BUILD_TIMEOUT}" >&2
+  echo "[$(date -Iseconds)] $LOG_TAG ERROR: dbt build timed out after ${DBT_BUILD_TIMEOUT} — killing in-container dbt" >&2
+  docker exec "${API_CONTAINER}" pkill -TERM -f 'dbt build' 2>/dev/null || true
+  sleep 2
+  docker exec "${API_CONTAINER}" pkill -KILL -f 'dbt build' 2>/dev/null || true
   exit 124
 elif [[ $dbt_status -ne 0 ]]; then
   echo "[$(date -Iseconds)] $LOG_TAG ERROR: dbt build failed (exit $dbt_status)" >&2

@@ -23,9 +23,10 @@ raw table but the API serves warehouse data up to 6 h stale.
 
 | File | Change |
 |---|---|
-| `infra/cron.d/tfl-monitor` | Schedule `0 */6 * * *` → `*/15 * * * *` |
-| `scripts/cron-dbt-run.sh` | Add `flock -n` guard to skip overlapping runs |
-| `scripts/deploy.sh` | Reinstall cron file on every deploy (close the deploy gap) |
+| `infra/cron.d/tfl-monitor` | Schedule `0 */6 * * *` → `*/15 * * * *`; updated header to note dual install path (bootstrap + deploy) |
+| `scripts/cron-dbt-run.sh` | Add `flock -n` guard to skip overlapping runs, with `flock` precheck + explicit exit-code handling; wrap `dbt build` in `timeout 14m` + post-timeout `pkill` of the in-container dbt process so a hung build cannot starve subsequent ticks |
+| `scripts/deploy.sh` | Reinstall cron file AND new logrotate policy on every deploy using `install(1)` (atomic) — closes the deploy gap and bounds log growth |
+| `infra/logrotate.d/tfl-monitor` (new) | Weekly rotation with 4-rotation retention + compression + copytruncate for `/opt/tfl-monitor/cron.log` — required by the 24× higher write rate (4 → 96 runs/day) |
 
 ---
 
@@ -109,9 +110,12 @@ Previous worst-case: **6 h**.
 - Splitting into staging-only (fast) vs full-build (slow) cron entries — adds complexity for
   modest gain given all models are incremental.
 - `dbt run` without tests — explicitly rejected; CLAUDE.md warns this lets bad data cascade.
-- Custom monitoring/alerting for cron failures — `cron.log` on the box is sufficient;
-  Logfire spans cover individual builds.
-- Changing the GHA workflow — `deploy.sh` handles the cron reinstall, no workflow change needed.
+- Custom monitoring/alerting for cron failures — `cron.log` on the box is sufficient
+  (rotated weekly via the new logrotate policy); Logfire spans cover individual builds.
+- Changing the GHA workflow — `deploy.sh` handles the cron + logrotate reinstall, no
+  workflow change needed.
+- Switching cron logging to syslog/journald — `copytruncate` in the logrotate policy
+  keeps the existing file-redirect setup working with no script changes.
 
 ---
 
