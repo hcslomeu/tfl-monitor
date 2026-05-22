@@ -286,6 +286,52 @@ async def test_event_envelope_serialises_to_valid_json(
     assert roundtrip.event_type == ARRIVALS_EVENT_TYPE
 
 
+def test_constructor_reads_period_from_env_when_not_overridden(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Prod slows the producer to 15min via the env var; the constructor
+    must honour it without a code change. Tested at instantiation time
+    (not module load) so a fresh env always wins."""
+    monkeypatch.setenv("ARRIVALS_POLL_PERIOD_SECONDS", "900")
+
+    producer = ArrivalsProducer(
+        tfl_client=cast(TflClient, object()),
+        kafka_producer=cast(KafkaEventProducer, object()),
+    )
+
+    assert producer._period_seconds == 900.0  # noqa: SLF001
+
+
+def test_constructor_falls_back_to_default_on_malformed_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A typo / non-numeric env value must not brick the producer."""
+    monkeypatch.setenv("ARRIVALS_POLL_PERIOD_SECONDS", "fifteen")
+
+    producer = ArrivalsProducer(
+        tfl_client=cast(TflClient, object()),
+        kafka_producer=cast(KafkaEventProducer, object()),
+    )
+
+    assert producer._period_seconds == 30.0  # noqa: SLF001
+
+
+def test_constructor_falls_back_to_default_on_non_positive_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``0`` / negative env values fall back to the safe default rather
+    than raise — a misconfig should not prevent the bundled runner from
+    starting line_status + disruptions alongside arrivals."""
+    monkeypatch.setenv("ARRIVALS_POLL_PERIOD_SECONDS", "0")
+
+    producer = ArrivalsProducer(
+        tfl_client=cast(TflClient, object()),
+        kafka_producer=cast(KafkaEventProducer, object()),
+    )
+
+    assert producer._period_seconds == 30.0  # noqa: SLF001
+
+
 def test_constructor_rejects_non_positive_period() -> None:
     with pytest.raises(ValueError):
         ArrivalsProducer(

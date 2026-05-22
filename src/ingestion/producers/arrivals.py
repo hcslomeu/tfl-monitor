@@ -44,7 +44,38 @@ __all__ = [
 ]
 
 ARRIVALS_EVENT_TYPE = "arrivals.snapshot"
-ARRIVALS_POLL_PERIOD_SECONDS = 30.0
+
+_DEFAULT_POLL_PERIOD_SECONDS = 30.0
+
+
+def _read_poll_period_env() -> float:
+    """Read ``ARRIVALS_POLL_PERIOD_SECONDS`` from the environment.
+
+    The poll period is env-configurable to let production slow ingestion
+    down to a non-bleeding rate (Supabase free tier caps storage; PR #105
+    + this hotfix together cut Logfire span volume by another order of
+    magnitude). Local dev keeps the 30 s default unless explicitly
+    overridden.
+
+    Returns:
+        Positive number of seconds between polls. Falls back to the
+        30 s default on missing, empty, non-numeric, or non-positive
+        values so a malformed env var cannot brick the producer.
+    """
+    raw = os.environ.get("ARRIVALS_POLL_PERIOD_SECONDS")
+    if not raw:
+        return _DEFAULT_POLL_PERIOD_SECONDS
+    try:
+        value = float(raw)
+    except ValueError:
+        return _DEFAULT_POLL_PERIOD_SECONDS
+    return value if value > 0 else _DEFAULT_POLL_PERIOD_SECONDS
+
+
+# Module-level alias preserved for back-compat with imports. Reflects
+# the env at import time; callers wanting runtime overrides should
+# pass ``period_seconds`` to :class:`ArrivalsProducer` explicitly.
+ARRIVALS_POLL_PERIOD_SECONDS = _read_poll_period_env()
 
 # Major Underground hubs covering high passenger volume across the
 # zone-1 core. NaPTAN stop-area identifiers (TfL surface IDs).
@@ -70,18 +101,22 @@ class ArrivalsProducer:
         tfl_client: TflClient,
         kafka_producer: KafkaEventProducer,
         stops: Sequence[str] = DEFAULT_ARRIVAL_STOPS,
-        period_seconds: float = ARRIVALS_POLL_PERIOD_SECONDS,
+        period_seconds: float | None = None,
         clock: Callable[[], datetime] = _utc_now,
         event_id_factory: Callable[[], UUID] = uuid.uuid4,
     ) -> None:
-        if period_seconds <= 0:
+        # ``period_seconds=None`` reads ``ARRIVALS_POLL_PERIOD_SECONDS``
+        # at construction time so prod ``.env`` flips (e.g. 30s → 900s)
+        # apply at the next container recreate without a code change.
+        resolved_period = period_seconds if period_seconds is not None else _read_poll_period_env()
+        if resolved_period <= 0:
             raise ValueError("period_seconds must be > 0")
         if not stops:
             raise ValueError("stops must contain at least one NaPTAN id")
         self._tfl_client = tfl_client
         self._kafka_producer = kafka_producer
         self._stops = tuple(stops)
-        self._period_seconds = period_seconds
+        self._period_seconds = resolved_period
         self._clock = clock
         self._event_id_factory = event_id_factory
 
