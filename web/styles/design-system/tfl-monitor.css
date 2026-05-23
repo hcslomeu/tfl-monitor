@@ -63,9 +63,15 @@
   .tfl-nav-status { display: none; }
 }
 
-/* ---------- Right column: Disruption (capped at 50%) above Chat
-   (consumes the rest). Status occupies the full-height left column on
-   its own, so the two columns are no longer height-coupled via subgrid. */
+/* ---------- Right column: LineDetail and Chat split the column 50/50
+   regardless of content size. An earlier `max-height: 50%` cap on the
+   LineDetail card let short disruption bodies collapse and the chat
+   absorbed the slack — which meant the chat resized every time the
+   user switched lines. Locking both children to `flex: 1 1 0` makes
+   the split content-independent: each child gets `(right-col height -
+   gap) / 2` and content that overflows scrolls inside the pane via
+   the invisible scrollbars declared on `.tfl-right-col > .tfl-card`
+   and `.tfl-chat-transcript`. */
 .tfl-right-col {
   display: flex;
   flex-direction: column;
@@ -74,26 +80,20 @@
   min-height: 0;
 }
 .tfl-right-col > .tfl-card {
-  /* LineDetail base rules — the 50% cap is scoped to the two-column
-     layout only (see media query below). At ≤880px the grid collapses
-     to one column so the right column is content-sized and a percentage
-     cap would resolve against an undefined parent height, clipping the
-     card unpredictably. */
+  flex: 1 1 0;
   min-height: 0;
   overflow: auto;
+  /* Invisible scrollbar — content is still scrollable, just chromeless,
+     mirroring the pattern used by `.tfl-news-list`. */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
-@media (min-width: 881px) {
-  .tfl-right-col > .tfl-card {
-    /* Upper-bound only — short disruption bodies still collapse to
-       content and Chat keeps the freed slack. */
-    max-height: 50%;
-  }
-}
+.tfl-right-col > .tfl-card::-webkit-scrollbar { display: none; }
 .tfl-right-col > .tfl-chat-stack {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-height: 0;
 }
 .tfl-right-col .tfl-chat-stack .tfl-chat-card { flex: 1 1 auto; min-height: 0; }
@@ -115,7 +115,12 @@
   min-height: 0;
   overflow-y: auto;
   display: flex; flex-direction: column; gap: 12px;
+  /* Invisible scrollbar — keeps the transcript scrollable when long
+     conversations spill past the 50/50 right-col allocation. */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
+.tfl-chat-transcript::-webkit-scrollbar { display: none; }
 .tfl-msg { display: flex; align-items: flex-start; gap: 10px; }
 .tfl-msg-user { justify-content: flex-end; }
 .tfl-msg-bot  { justify-content: flex-start; }
@@ -235,9 +240,25 @@
 .tfl-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
+  /* Row height = max of children's min-content. `.tfl-left-col` is not
+     scrollable so its min-content equals its full content height (line
+     list + header); `.tfl-right-col` is `min-height: 0` with a
+     scrollable LineDetail card and a collapsible chat stack, so its
+     min-content resolves much smaller. The row therefore tracks the
+     left column's natural height, leaving no blank space inside the
+     line list while the right column stretches into the same height
+     and splits 50/50 between LineDetail and the chat stack. */
+  grid-template-rows: min-content;
+  grid-auto-rows: min-content;
   gap: var(--space-4);
   align-items: stretch;
 }
+
+/* Positional hook mirroring `.tfl-right-col` so the two-column layout
+   reads symmetrically in markup. Visual styling stays on `.tfl-card`;
+   the row-sizing strategy on `.tfl-grid` above is what makes the left
+   column render at its natural content height. */
+.tfl-left-col { min-height: 0; }
 
 .tfl-news-band,
 .tfl-bus-band {
@@ -390,24 +411,10 @@
 .tfl-news-title {
   font-family: var(--font-body); font-size: var(--ui-sm); font-weight: 500;
   color: var(--ink-primary); margin-bottom: 2px;
-  /* Clamp matches `.tfl-news-body` — a multi-station TfL summary would
-     otherwise push `<li>` past `--tfl-news-row-h: 64px` and silently
-     break the 5-visible-rows guarantee. */
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 1;
-  overflow: hidden;
 }
 .tfl-news-body {
   font-family: var(--font-body); font-size: var(--ui-sm); color: var(--ink-secondary);
   line-height: 1.45; white-space: pre-line;
-  /* Cap the body to a single visible line so every row settles on the
-     fixed min-height — the full text remains in the accessibility tree
-     and is restored if `-webkit-line-clamp` is unsupported. */
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 1;
-  overflow: hidden;
 }
 
 @media (max-width: 880px) {
