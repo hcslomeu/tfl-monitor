@@ -411,6 +411,7 @@ export function disruptionToSnapshot(d: Disruption): DisruptionSnapshot {
 		name: stop.name ?? stop.naptan_id,
 		code: stop.naptan_id,
 	}));
+	const trimmedClosure = d.closure_text?.trim();
 	return {
 		headline,
 		body,
@@ -418,7 +419,7 @@ export function disruptionToSnapshot(d: Disruption): DisruptionSnapshot {
 		stations,
 		sourceLabel: "Source: TfL Unified API",
 		updatedAtLabel: formatLondonTime(d.last_update, { withTimezoneName: true }),
-		closureText: d.closure_text || undefined,
+		closureText: trimmedClosure ? trimmedClosure : undefined,
 		affectedRoutes:
 			d.affected_routes.length > 0 ? d.affected_routes : undefined,
 	};

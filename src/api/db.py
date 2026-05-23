@@ -305,10 +305,14 @@ async def fetch_recent_disruptions(
             category_description=row["category_description"],
             description=row["description"],
             summary=row["summary"],
-            affected_routes=_as_str_list(row["affected_routes"]),
+            # ``dict.fromkeys`` dedupes while preserving order — TfL
+            # occasionally repeats the same route/NaPTAN in a payload,
+            # which would otherwise trigger React key collisions in
+            # ``LineDetail``.
+            affected_routes=list(dict.fromkeys(_as_str_list(row["affected_routes"]))),
             affected_stops=[
                 AffectedStop(naptan_id=nid, name=name_by_naptan.get(nid))
-                for nid in _as_str_list(row["affected_stops"])
+                for nid in dict.fromkeys(_as_str_list(row["affected_stops"]))
             ],
             closure_text=row["closure_text"],
             severity=int(row["severity"]),

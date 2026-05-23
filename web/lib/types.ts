@@ -458,12 +458,12 @@ export interface operations {
                      *         ],
                      *         "affected_stops": [
                      *           {
-                     *             "naptan_id": "940GZZLUATN",
+                     *             "naptan_id": "940GZZLUACT",
                      *             "name": "Acton Town"
                      *           },
                      *           {
-                     *             "naptan_id": "940GZZLUACT",
-                     *             "name": "Acton Central"
+                     *             "naptan_id": "940GZZLUBSC",
+                     *             "name": "Barons Court"
                      *           }
                      *         ],
                      *         "closure_text": "",

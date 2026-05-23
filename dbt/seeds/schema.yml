@@ -9,8 +9,8 @@ seeds:
       scripts/build_stations_seed.py; covers actual station NaPTANs
       (NaptanMetroStation / NaptanRailStation / NaptanRailAccessArea /
       TransportInterchange). Bus stops are deliberately excluded — the
-      backend resolver falls back to /StopPoint/Search for any NaPTAN
-      not present here.
+      backend resolver falls back to /StopPoint/{naptan_id} for any
+      NaPTAN not present here.
     config:
       column_types:
         naptan_id: varchar

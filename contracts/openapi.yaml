@@ -207,8 +207,8 @@ paths:
                   summary: "Severe delays on Piccadilly line"
                   affected_routes: [piccadilly]
                   affected_stops:
-                    - { naptan_id: "940GZZLUATN", name: "Acton Town" }
-                    - { naptan_id: "940GZZLUACT", name: "Acton Central" }
+                    - { naptan_id: "940GZZLUACT", name: "Acton Town" }
+                    - { naptan_id: "940GZZLUBSC", name: "Barons Court" }
                   closure_text: ""
                   severity: 6
                   created: "2026-04-22T06:15:00Z"

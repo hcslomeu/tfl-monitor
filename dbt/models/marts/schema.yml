@@ -160,7 +160,7 @@ models:
       the API resolver layer (src/api/stations.py) to map NaPTAN codes
       embedded in disruption payloads to human-readable station names.
       Bus-stop NaPTANs are deliberately excluded from the seed — the
-      backend falls back to /StopPoint/Search for any miss.
+      backend falls back to /StopPoint/{naptan_id} for any miss.
     columns:
       - name: naptan_id
         description: "TfL NaPTAN code (primary key)."

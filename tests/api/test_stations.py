@@ -6,10 +6,12 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+import httpx
 import pytest
 
 from api import stations
 from contracts.schemas.tfl_api import TflStopPoint
+from ingestion.tfl_client.client import TflClientError
 
 
 @dataclass
@@ -158,3 +160,85 @@ async def test_misses_are_cached_only_when_fallback_is_wired(
     assert no_fallback == {"490NEW": None}
     assert with_fallback == {"490NEW": "New Stop"}
     assert fake_client.calls == ["490NEW"]
+
+
+@pytest.mark.asyncio
+async def test_transient_failures_are_not_cached(
+    fake_pool_factory: Callable[..., Any],
+) -> None:
+    """A 5xx / timeout / network error must not poison the cache — the
+    next request should retry the lookup rather than surfacing ``None``
+    permanently after a single hiccup."""
+
+    @dataclass
+    class FlakyClient:
+        recovered_name: str = "Recovered Station"
+        calls: list[str] = field(default_factory=list)
+
+        async def fetch_stop_point(self, naptan_id: str) -> TflStopPoint:
+            self.calls.append(naptan_id)
+            if len(self.calls) == 1:
+                fake_request = httpx.Request("GET", f"/StopPoint/{naptan_id}")
+                fake_response = httpx.Response(503, request=fake_request)
+                http_exc = httpx.HTTPStatusError(
+                    "Service Unavailable", request=fake_request, response=fake_response
+                )
+                raise TflClientError("TfL request failed: HTTP 503") from http_exc
+            return TflStopPoint(naptan_id=naptan_id, common_name=self.recovered_name)
+
+    pool = fake_pool_factory([], [])  # two empty seed batches → both calls miss
+    fake_client = FlakyClient()
+
+    first = await stations.resolve_naptans(
+        pool=pool,
+        tfl_client=fake_client,  # type: ignore[arg-type]
+        naptan_ids=["490FLAKY"],
+    )
+    second = await stations.resolve_naptans(
+        pool=pool,
+        tfl_client=fake_client,  # type: ignore[arg-type]
+        naptan_ids=["490FLAKY"],
+    )
+
+    assert first == {"490FLAKY": None}
+    assert second == {"490FLAKY": "Recovered Station"}
+    assert fake_client.calls == ["490FLAKY", "490FLAKY"]
+
+
+@pytest.mark.asyncio
+async def test_definitive_404_is_cached(
+    fake_pool_factory: Callable[..., Any],
+) -> None:
+    """A 404 confirms the NaPTAN does not exist — cache the miss so the
+    next request short-circuits without another TfL round-trip."""
+
+    @dataclass
+    class NotFoundClient:
+        calls: list[str] = field(default_factory=list)
+
+        async def fetch_stop_point(self, naptan_id: str) -> TflStopPoint:
+            self.calls.append(naptan_id)
+            fake_request = httpx.Request("GET", f"/StopPoint/{naptan_id}")
+            fake_response = httpx.Response(404, request=fake_request)
+            http_exc = httpx.HTTPStatusError(
+                "Not Found", request=fake_request, response=fake_response
+            )
+            raise TflClientError("TfL request failed: HTTP 404") from http_exc
+
+    pool = fake_pool_factory([], [])
+    fake_client = NotFoundClient()
+
+    first = await stations.resolve_naptans(
+        pool=pool,
+        tfl_client=fake_client,  # type: ignore[arg-type]
+        naptan_ids=["490DEPRECATED"],
+    )
+    second = await stations.resolve_naptans(
+        pool=pool,
+        tfl_client=fake_client,  # type: ignore[arg-type]
+        naptan_ids=["490DEPRECATED"],
+    )
+
+    assert first == {"490DEPRECATED": None}
+    assert second == {"490DEPRECATED": None}
+    assert fake_client.calls == ["490DEPRECATED"]

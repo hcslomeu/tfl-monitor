@@ -116,8 +116,21 @@ describe("LineDetail", () => {
 		expect(items).toHaveLength(2);
 	});
 
-	it("does not render the affected-lines block when affectedRoutes is empty or absent", () => {
+	it("does not render the affected-lines block when affectedRoutes is absent", () => {
 		render(<LineDetail line={LINE} disruption={DISRUPTION} />);
+
+		expect(
+			screen.queryByRole("list", { name: /affected lines/i }),
+		).not.toBeInTheDocument();
+	});
+
+	it("does not render the affected-lines block when affectedRoutes is an empty array", () => {
+		render(
+			<LineDetail
+				line={LINE}
+				disruption={{ ...DISRUPTION, affectedRoutes: [] }}
+			/>,
+		);
 
 		expect(
 			screen.queryByRole("list", { name: /affected lines/i }),
