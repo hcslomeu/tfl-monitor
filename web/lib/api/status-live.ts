@@ -29,7 +29,12 @@ const MOCK_UPDATED_AGO_MS = 2 * 60_000;
 const CODE_TO_MODE: Record<string, Mode> = {
 	ELZ: "elizabeth-line",
 	DLR: "dlr",
-	OVG: "overground",
+	LIB: "overground",
+	LIO: "overground",
+	MIL: "overground",
+	SUF: "overground",
+	WEA: "overground",
+	WIN: "overground",
 };
 
 const CODE_TO_LINE_ID: Record<string, string> = {
@@ -46,7 +51,12 @@ const CODE_TO_LINE_ID: Record<string, string> = {
 	VIC: "victoria",
 	WAT: "waterloo-city",
 	DLR: "dlr",
-	OVG: "london-overground",
+	LIB: "liberty",
+	LIO: "lioness",
+	MIL: "mildmay",
+	SUF: "suffragette",
+	WEA: "weaver",
+	WIN: "windrush",
 };
 
 function lineSummaryToLineStatus(line: LineSummary, now: Date): LineStatus {

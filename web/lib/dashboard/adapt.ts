@@ -39,7 +39,17 @@ const LINE_META_BY_ID: Record<string, LineMeta> = {
 	victoria: { code: "VIC", color: "#039BE5" },
 	"waterloo-city": { code: "WAT", color: "#76D0BD" },
 	dlr: { code: "DLR", color: "#00AFAD" },
+	// Post-Nov-2024 Overground split. The legacy `london-overground`
+	// line_id is kept as a defensive entry: TfL still returns it from
+	// some endpoints (e.g. ad-hoc `/Disruption` payloads) and dropping
+	// it would force those rows down the unknown-fallback grey path.
 	"london-overground": { code: "OVG", color: "#EE7C0E" },
+	liberty: { code: "LIB", color: "#61686B" },
+	lioness: { code: "LIO", color: "#FAA61A" },
+	mildmay: { code: "MIL", color: "#0072BC" },
+	suffragette: { code: "SUF", color: "#25BD3B" },
+	weaver: { code: "WEA", color: "#9B0058" },
+	windrush: { code: "WIN", color: "#ED1B2D" },
 };
 
 const UNKNOWN_CODE_PREFIX = "UNK:";
