@@ -29,6 +29,16 @@ const MOCK_UPDATED_AGO_MS = 2 * 60_000;
 const CODE_TO_MODE: Record<string, Mode> = {
 	ELZ: "elizabeth-line",
 	DLR: "dlr",
+	LIB: "overground",
+	LIO: "overground",
+	MIL: "overground",
+	SUF: "overground",
+	WEA: "overground",
+	WIN: "overground",
+	// Defensive: keep the legacy single-line code mapping. The November
+	// 2024 split replaced this with six named lines on the live feed,
+	// but a stale fixture or legacy backend response should still
+	// resolve to `overground` rather than the `tube` fallback.
 	OVG: "overground",
 };
 
@@ -46,6 +56,16 @@ const CODE_TO_LINE_ID: Record<string, string> = {
 	VIC: "victoria",
 	WAT: "waterloo-city",
 	DLR: "dlr",
+	LIB: "liberty",
+	LIO: "lioness",
+	MIL: "mildmay",
+	SUF: "suffragette",
+	WEA: "weaver",
+	WIN: "windrush",
+	// Defensive: pair the legacy `OVG` code mapping above so a stale
+	// fixture / legacy backend response resolves to the same
+	// `london-overground` ID that `LINE_META_BY_ID` (adapt.ts) still
+	// carries for the rolled-up badge.
 	OVG: "london-overground",
 };
 

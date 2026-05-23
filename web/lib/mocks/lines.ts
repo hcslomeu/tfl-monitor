@@ -118,10 +118,56 @@ export const MOCK_LINES: LineSummary[] = [
 		statusText: "Good service",
 		updatedLabel: "updated 2m ago",
 	},
+	// Post-Nov-2024 Overground split: six named lines replacing the
+	// single "London Overground" badge. Colours follow TfL's 2024 brand
+	// reveal. Order matches the mode-precedence + alphabetical-within-
+	// mode sort applied by `lineStatusesToSummaries` (adapt.ts) so the
+	// fixture matches the order the adapter would produce from a real
+	// `/status/live` payload.
 	{
-		code: "OVG",
-		name: "London Overground",
-		color: "#EE7C0E",
+		code: "LIB",
+		name: "Liberty",
+		color: "#61686B",
+		status: "good",
+		statusText: "Good service",
+		updatedLabel: "updated 2m ago",
+	},
+	{
+		code: "LIO",
+		name: "Lioness",
+		color: "#FAA61A",
+		status: "good",
+		statusText: "Good service",
+		updatedLabel: "updated 2m ago",
+	},
+	{
+		code: "MIL",
+		name: "Mildmay",
+		color: "#0072BC",
+		status: "good",
+		statusText: "Good service",
+		updatedLabel: "updated 2m ago",
+	},
+	{
+		code: "SUF",
+		name: "Suffragette",
+		color: "#25BD3B",
+		status: "good",
+		statusText: "Good service",
+		updatedLabel: "updated 2m ago",
+	},
+	{
+		code: "WEA",
+		name: "Weaver",
+		color: "#9B0058",
+		status: "good",
+		statusText: "Good service",
+		updatedLabel: "updated 2m ago",
+	},
+	{
+		code: "WIN",
+		name: "Windrush",
+		color: "#ED1B2D",
 		status: "good",
 		statusText: "Good service",
 		updatedLabel: "updated 2m ago",

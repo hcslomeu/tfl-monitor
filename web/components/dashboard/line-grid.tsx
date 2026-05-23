@@ -23,7 +23,7 @@ function activateOnEnterOrSpace(
 
 export function LineGrid({ lines, selected, onSelect }: LineGridProps) {
 	return (
-		<section className="tfl-card">
+		<section className="tfl-card tfl-left-col">
 			<div className="tfl-card-h">
 				<h4>Tube, Overground, DLR &amp; Elizabeth</h4>
 				<span className="meta">tap a line</span>
