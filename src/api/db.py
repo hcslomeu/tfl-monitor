@@ -15,12 +15,15 @@ from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
 from api.schemas import (
+    AffectedStop,
     BusPunctualityResponse,
     DisruptionResponse,
     LineReliabilityResponse,
     LineStatusResponse,
     Mode,
 )
+from api.stations import resolve_naptans
+from ingestion.tfl_client.client import TflClient
 
 # Bus punctuality is reported over a fixed 7-day window. The OpenAPI
 # contract does not declare a ``window`` query parameter, and the
@@ -274,12 +277,26 @@ async def fetch_recent_disruptions(
     *,
     limit: int,
     mode: Mode | None,
+    tfl_client: TflClient | None = None,
 ) -> list[DisruptionResponse]:
-    """Return the most recent disruptions, optionally scoped to a mode."""
+    """Return the most recent disruptions, optionally scoped to a mode.
+
+    Each row's ``affected_stops`` NaPTAN list is resolved to station
+    names via :func:`api.stations.resolve_naptans`. Codes the resolver
+    cannot match (neither seed nor TfL fallback) surface with
+    ``name=None`` so the frontend can fall back to the raw NaPTAN.
+    """
     params = {"limit": limit, "mode": mode}
     async with pool.connection() as conn, conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(DISRUPTIONS_SQL, params)
         rows: list[dict[str, Any]] = await cur.fetchall()
+
+    all_naptan_ids = {nid for row in rows for nid in _as_str_list(row["affected_stops"])}
+    name_by_naptan = await resolve_naptans(
+        pool=pool,
+        tfl_client=tfl_client,
+        naptan_ids=all_naptan_ids,
+    )
 
     return [
         DisruptionResponse(
@@ -288,8 +305,15 @@ async def fetch_recent_disruptions(
             category_description=row["category_description"],
             description=row["description"],
             summary=row["summary"],
-            affected_routes=_as_str_list(row["affected_routes"]),
-            affected_stops=_as_str_list(row["affected_stops"]),
+            # ``dict.fromkeys`` dedupes while preserving order — TfL
+            # occasionally repeats the same route/NaPTAN in a payload,
+            # which would otherwise trigger React key collisions in
+            # ``LineDetail``.
+            affected_routes=list(dict.fromkeys(_as_str_list(row["affected_routes"]))),
+            affected_stops=[
+                AffectedStop(naptan_id=nid, name=name_by_naptan.get(nid))
+                for nid in dict.fromkeys(_as_str_list(row["affected_stops"]))
+            ],
             closure_text=row["closure_text"],
             severity=int(row["severity"]),
             created=row["created"],

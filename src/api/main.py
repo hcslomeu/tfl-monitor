@@ -44,6 +44,7 @@ from api.schemas import (
     Mode,
     Problem,
 )
+from ingestion.tfl_client.client import TflClient
 
 MAX_HISTORY_WINDOW = timedelta(days=30)
 
@@ -70,6 +71,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     pool = build_pool(dsn)
     await pool.open()
     app.state.db_pool = pool
+
+    # Open the TfL client only when an app key is wired. The station
+    # resolver falls back gracefully to seed-only when the client is
+    # ``None``, so an unset ``TFL_APP_KEY`` does not block the API.
+    tfl_app_key = os.environ.get("TFL_APP_KEY")
+    if tfl_app_key:
+        tfl_client = TflClient(app_key=tfl_app_key)
+        await tfl_client.__aenter__()
+        app.state.tfl_client = tfl_client
+    else:
+        app.state.tfl_client = None
     # Lazy import: pulls langchain_anthropic + llama_index transitively.
     # Keeping it out of module scope shaves cold-start when DATABASE_URL
     # is unset (smoke tests, /health-only deploys).
@@ -92,6 +104,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
+        if app.state.tfl_client is not None:
+            await app.state.tfl_client.__aexit__(None, None, None)
+            app.state.tfl_client = None
         await pool.close()
         app.state.db_pool = None
         app.state.agent = None
@@ -110,6 +125,7 @@ app = FastAPI(
 # attribute. Tests that need a live pool / agent monkeypatch these slots.
 app.state.db_pool = None
 app.state.agent = None
+app.state.tfl_client = None
 
 configure_observability(app)
 
@@ -224,7 +240,13 @@ async def get_recent_disruptions(
     pool = request.app.state.db_pool
     if pool is None:
         return _problem(503, "Service Unavailable", "Database pool is not available")
-    return await fetch_recent_disruptions(pool, limit=limit, mode=mode)
+    tfl_client = getattr(request.app.state, "tfl_client", None)
+    return await fetch_recent_disruptions(
+        pool,
+        limit=limit,
+        mode=mode,
+        tfl_client=tfl_client,
+    )
 
 
 @app.get(

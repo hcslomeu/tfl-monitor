@@ -342,6 +342,59 @@
 .tfl-disruption .summary { color: var(--danger); font-weight: 500; margin-bottom: var(--space-3); font-size: var(--ui-sm); }
 .tfl-disruption p { font-size: var(--ui-sm); color: var(--ink-secondary); line-height: 1.55; max-width: none; margin-bottom: var(--space-3); }
 
+.tfl-closure {
+  margin: 0 var(--space-5) var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
+  color: var(--danger);
+  font-family: var(--font-body);
+  font-size: var(--ui-sm);
+  font-weight: 500;
+}
+
+.tfl-affected-routes {
+  padding: var(--space-3) var(--space-5);
+  border-top: 1px solid var(--border-default);
+}
+.tfl-affected-routes h5 {
+  font-family: var(--font-mono);
+  font-size: var(--ui-xs);
+  color: var(--ink-tertiary);
+  margin: 0 0 var(--space-3);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 500;
+}
+.tfl-affected-routes ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.tfl-route-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 4px;
+  border-radius: 999px;
+  border: 1px solid var(--border-default);
+  font-family: var(--font-mono);
+  font-size: var(--ui-xs);
+  letter-spacing: 0.04em;
+  color: var(--ink-primary);
+  background: var(--surface-elevated);
+}
+.tfl-route-chip-stripe {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
 .tfl-stations {
   padding: var(--space-4) var(--space-5);
   border-top: 1px solid var(--border-default);

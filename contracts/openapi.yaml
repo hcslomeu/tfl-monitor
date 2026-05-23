@@ -206,7 +206,9 @@ paths:
                   description: "Signal failure at Acton Town, reduced service on Piccadilly."
                   summary: "Severe delays on Piccadilly line"
                   affected_routes: [piccadilly]
-                  affected_stops: ["940GZZLUATN", "940GZZLUACT"]
+                  affected_stops:
+                    - { naptan_id: "940GZZLUACT", name: "Acton Town" }
+                    - { naptan_id: "940GZZLUBSC", name: "Barons Court" }
                   closure_text: ""
                   severity: 6
                   created: "2026-04-22T06:15:00Z"
@@ -217,7 +219,8 @@ paths:
                   description: "Earlier incident at Paddington affecting Elizabeth line."
                   summary: "Minor delays on Elizabeth line"
                   affected_routes: [elizabeth]
-                  affected_stops: ["910GPADTON"]
+                  affected_stops:
+                    - { naptan_id: "910GPADTON", name: "Paddington" }
                   closure_text: ""
                   severity: 6
                   created: "2026-04-22T05:40:00Z"
@@ -239,7 +242,8 @@ paths:
                   description: "Lifts out of service at Holborn."
                   summary: "Step-free access affected"
                   affected_routes: [piccadilly]
-                  affected_stops: ["940GZZLUHBN"]
+                  affected_stops:
+                    - { naptan_id: "940GZZLUHBN", name: "Holborn" }
                   closure_text: ""
                   severity: 9
                   created: "2026-04-22T04:00:00Z"
@@ -437,13 +441,29 @@ components:
           items: { type: string }
         affected_stops:
           type: array
-          items: { type: string }
+          items:
+            $ref: "#/components/schemas/AffectedStop"
         closure_text: { type: string }
         severity:
           type: integer
           minimum: 0
         created: { type: string, format: date-time }
         last_update: { type: string, format: date-time }
+
+    AffectedStop:
+      type: object
+      description: |
+        NaPTAN code resolved to a human-readable station name when
+        possible. ``name`` is ``null`` when neither the static
+        dim_stations seed nor the TfL /StopPoint fallback could match
+        the code (e.g. deprecated NaPTANs); the frontend renders the
+        raw ``naptan_id`` in that case.
+      required: [naptan_id]
+      properties:
+        naptan_id: { type: string }
+        name:
+          type: string
+          nullable: true
 
     BusPunctuality:
       type: object

@@ -79,6 +79,21 @@ class TflLineResponse(BaseModel):
     line_statuses: list[TflLineStatusItem] = Field(default_factory=list)
 
 
+class TflStopPoint(BaseModel):
+    """Stop-point record returned by ``/StopPoint/{naptan_id}``.
+
+    Used by the station resolver fallback when a NaPTAN code surfaced
+    in a disruption payload is not present in the static dim_stations
+    seed (e.g. bus stops, deprecated rail entries). Only the two fields
+    the resolver needs are typed; the rest of the payload is ignored.
+    """
+
+    model_config = _tfl_model_config()
+
+    naptan_id: str
+    common_name: str
+
+
 class TflArrivalPrediction(BaseModel):
     """Prediction record returned by ``/StopPoint/{id}/Arrivals``."""
 

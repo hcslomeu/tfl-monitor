@@ -113,3 +113,20 @@ def attach_agent() -> Iterator[Any]:
         yield _attach
     finally:
         app.state.agent = original
+
+
+@pytest.fixture(autouse=True)
+def _clear_stations_cache() -> Iterator[None]:
+    """Reset the process-lifetime NaPTAN cache between tests.
+
+    ``api.stations`` keeps a module-level dict for cross-request reuse,
+    which would otherwise leak resolved (or unresolved) NaPTAN entries
+    between unit tests and make assertion ordering brittle.
+    """
+    from api import stations
+
+    stations._cache_clear()  # noqa: SLF001
+    try:
+        yield
+    finally:
+        stations._cache_clear()  # noqa: SLF001

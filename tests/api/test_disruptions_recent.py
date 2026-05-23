@@ -136,6 +136,9 @@ def test_closure_text_passes_through_as_string(
 def test_jsonb_arrays_deserialise_to_lists(
     fake_pool_factory: Callable[..., Any], attach_pool: Callable[[Any], None]
 ) -> None:
+    """affected_routes round-trips as a list of strings; affected_stops
+    surfaces as ``AffectedStop`` objects with ``name=None`` when the
+    dim_stations seed has no match (here: empty seed batch primed)."""
     pool = fake_pool_factory(
         [
             _row(
@@ -143,7 +146,8 @@ def test_jsonb_arrays_deserialise_to_lists(
                 affected_routes=["piccadilly", "victoria"],
                 affected_stops=["940GZZLUATN", "940GZZLUACT"],
             )
-        ]
+        ],
+        [],
     )
     attach_pool(pool)
 
@@ -152,7 +156,63 @@ def test_jsonb_arrays_deserialise_to_lists(
     assert response.status_code == 200
     body = response.json()
     assert body[0]["affected_routes"] == ["piccadilly", "victoria"]
-    assert body[0]["affected_stops"] == ["940GZZLUATN", "940GZZLUACT"]
+    assert body[0]["affected_stops"] == [
+        {"naptan_id": "940GZZLUATN", "name": None},
+        {"naptan_id": "940GZZLUACT", "name": None},
+    ]
+
+
+def test_affected_stops_resolved_via_dim_stations(
+    fake_pool_factory: Callable[..., Any], attach_pool: Callable[[Any], None]
+) -> None:
+    """When the dim_stations seed matches a NaPTAN, the response
+    surfaces the human-readable name alongside the original code."""
+    pool = fake_pool_factory(
+        [
+            _row(
+                "2026-04-22-PIC-001",
+                affected_stops=["940GZZLUOXC", "940GZZLUHBN"],
+            )
+        ],
+        [
+            {"naptan_id": "940GZZLUOXC", "name": "Oxford Circus"},
+            {"naptan_id": "940GZZLUHBN", "name": "Holborn"},
+        ],
+    )
+    attach_pool(pool)
+
+    response = TestClient(app).get("/api/v1/disruptions/recent")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert {(s["naptan_id"], s["name"]) for s in body[0]["affected_stops"]} == {
+        ("940GZZLUOXC", "Oxford Circus"),
+        ("940GZZLUHBN", "Holborn"),
+    }
+
+
+def test_affected_stops_partial_seed_match_keeps_naptan_for_misses(
+    fake_pool_factory: Callable[..., Any], attach_pool: Callable[[Any], None]
+) -> None:
+    """A NaPTAN absent from dim_stations and without a TfL fallback
+    surfaces as ``name=None`` so the frontend can show the raw code."""
+    pool = fake_pool_factory(
+        [
+            _row(
+                "2026-04-22-PIC-001",
+                affected_stops=["940GZZLUOXC", "490UNKNOWN"],
+            )
+        ],
+        [{"naptan_id": "940GZZLUOXC", "name": "Oxford Circus"}],
+    )
+    attach_pool(pool)
+
+    response = TestClient(app).get("/api/v1/disruptions/recent")
+
+    assert response.status_code == 200
+    body = response.json()
+    by_naptan = {s["naptan_id"]: s["name"] for s in body[0]["affected_stops"]}
+    assert by_naptan == {"940GZZLUOXC": "Oxford Circus", "490UNKNOWN": None}
 
 
 def test_missing_pool_returns_503(attach_pool: Callable[[Any], None]) -> None:

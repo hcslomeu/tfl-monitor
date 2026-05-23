@@ -22,7 +22,10 @@ function toMockDisruption(now: Date): Disruption {
 		description: MOCK_DISRUPTION.body.join("\n\n"),
 		summary: MOCK_DISRUPTION.headline,
 		affected_routes: ["elizabeth"],
-		affected_stops: MOCK_DISRUPTION.stations.map((station) => station.code),
+		affected_stops: MOCK_DISRUPTION.stations.map((station) => ({
+			naptan_id: station.code,
+			name: station.name,
+		})),
 		closure_text: "",
 		severity: 6,
 		created: now.toISOString(),

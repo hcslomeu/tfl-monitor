@@ -1,3 +1,5 @@
+import { getLineMeta } from "@/lib/dashboard/adapt";
+
 import type { DisruptionSnapshot, LineSummary } from "./types";
 
 export type LineDetailState = "ready" | "loading" | "error";
@@ -46,6 +48,11 @@ export function LineDetail({
 				</div>
 			) : disruption ? (
 				<>
+					{disruption.closureText && (
+						<div className="tfl-closure" role="alert">
+							{disruption.closureText}
+						</div>
+					)}
 					<div className="tfl-disruption">
 						<div className="summary">{disruption.headline}</div>
 						{disruption.body.map((paragraph, index) => (
@@ -53,6 +60,30 @@ export function LineDetail({
 							<p key={`${index}-${paragraph}`}>{paragraph}</p>
 						))}
 					</div>
+					{disruption.affectedRoutes &&
+						disruption.affectedRoutes.length > 0 && (
+							<div className="tfl-affected-routes">
+								<h5>Affected lines</h5>
+								<ul aria-label="Affected lines">
+									{disruption.affectedRoutes.map((lineId) => {
+										const meta = getLineMeta(lineId);
+										return (
+											<li
+												key={lineId}
+												className="tfl-route-chip"
+												style={{ borderColor: meta.color }}
+											>
+												<span
+													className="tfl-route-chip-stripe"
+													style={{ background: meta.color }}
+												/>
+												{meta.code}
+											</li>
+										);
+									})}
+								</ul>
+							</div>
+						)}
 					{disruption.stations.length > 0 && (
 						<div className="tfl-stations">
 							<h5>Affected stations</h5>
