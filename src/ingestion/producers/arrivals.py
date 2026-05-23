@@ -20,6 +20,7 @@ via Logfire and the daemon continues on the next tick.
 from __future__ import annotations
 
 import asyncio
+import math
 import os
 import time
 import uuid
@@ -69,7 +70,9 @@ def _read_poll_period_env() -> float:
         value = float(raw)
     except ValueError:
         return _DEFAULT_POLL_PERIOD_SECONDS
-    return value if value > 0 else _DEFAULT_POLL_PERIOD_SECONDS
+    if not math.isfinite(value) or value <= 0:
+        return _DEFAULT_POLL_PERIOD_SECONDS
+    return value
 
 
 # Module-level alias preserved for back-compat with imports. Reflects
@@ -109,8 +112,8 @@ class ArrivalsProducer:
         # at construction time so prod ``.env`` flips (e.g. 30s → 900s)
         # apply at the next container recreate without a code change.
         resolved_period = period_seconds if period_seconds is not None else _read_poll_period_env()
-        if resolved_period <= 0:
-            raise ValueError("period_seconds must be > 0")
+        if not math.isfinite(resolved_period) or resolved_period <= 0:
+            raise ValueError("period_seconds must be a positive finite number")
         if not stops:
             raise ValueError("stops must contain at least one NaPTAN id")
         self._tfl_client = tfl_client

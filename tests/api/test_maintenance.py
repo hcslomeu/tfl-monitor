@@ -7,8 +7,16 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 
 import pytest
+from psycopg.sql import Composable
 
 from api import maintenance
+
+
+def _stmt_str(stmt: object) -> str:
+    """Render a SQL Composable (or plain string) to a flat string for tests."""
+    if isinstance(stmt, Composable):
+        return stmt.as_string(None)
+    return str(stmt)
 
 
 @dataclass
@@ -23,13 +31,14 @@ class _FakeCursor:
     async def __aexit__(self, *_args: object) -> None:
         return None
 
-    async def execute(self, sql: str) -> None:
-        self.executed.append(sql)
+    async def execute(self, stmt: object, params: tuple[object, ...] | None = None) -> None:
+        rendered = _stmt_str(stmt)
+        self.executed.append(rendered)
         # Set rowcount based on the executed DELETE so the test asserts
         # on per-rule counts. VACUUM keeps the previous rowcount; it
         # is never consumed by callers.
         for marker, count in self.rowcount_by_sql.items():
-            if marker in sql and sql.startswith("DELETE"):
+            if marker in rendered and rendered.startswith("DELETE"):
                 self.rowcount = count
                 break
 
@@ -65,7 +74,9 @@ async def _patch_connect(
 async def test_prune_runs_delete_then_vacuum_per_rule(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    cursor = _FakeCursor(rowcount_by_sql={"raw.arrivals": 100, "raw.line_status": 5})
+    # Identifiers are quoted by psycopg.sql.Identifier; markers must match
+    # the rendered form, not the dotted shortcut.
+    cursor = _FakeCursor(rowcount_by_sql={'"raw"."arrivals"': 100, '"raw"."line_status"': 5})
     async with _patch_connect(monkeypatch, cursor):
         deleted = await maintenance.prune(
             dsn="fake://",
@@ -76,12 +87,14 @@ async def test_prune_runs_delete_then_vacuum_per_rule(
         )
 
     assert deleted == {"raw.arrivals": 100, "raw.line_status": 5}
-    # Each rule produces exactly DELETE then VACUUM, in order.
+    # Each rule produces exactly DELETE then VACUUM, in order. Identifiers
+    # are quoted by psycopg.sql.Identifier (the security-hardening fix);
+    # parameter placeholder %s carries the days literal.
     assert cursor.executed == [
-        "DELETE FROM raw.arrivals WHERE ingested_at < now() - INTERVAL '7 days'",
-        "VACUUM raw.arrivals",
-        "DELETE FROM raw.line_status WHERE ingested_at < now() - INTERVAL '30 days'",
-        "VACUUM raw.line_status",
+        'DELETE FROM "raw"."arrivals" WHERE ingested_at < now() - %s::interval',
+        'VACUUM "raw"."arrivals"',
+        'DELETE FROM "raw"."line_status" WHERE ingested_at < now() - %s::interval',
+        'VACUUM "raw"."line_status"',
     ]
 
 
@@ -115,6 +128,26 @@ def test_default_rules_cover_every_high_volume_raw_table() -> None:
     expected_tables = {"arrivals", "line_status", "disruptions"}
     tables = {rule.table for rule in maintenance.DEFAULT_RULES}
     assert tables == expected_tables
+
+
+def test_retention_rule_rejects_non_identifier_schema() -> None:
+    """Belt-and-braces on top of psycopg.sql.Identifier: an attacker who
+    bypasses the static DEFAULT_RULES list still cannot smuggle a quoted
+    string through the schema or table slot."""
+    with pytest.raises(ValueError, match="schema"):
+        maintenance.RetentionRule(schema='raw"; DROP TABLE x;--', table="arrivals", days=7)
+
+
+def test_retention_rule_rejects_non_identifier_table() -> None:
+    with pytest.raises(ValueError, match="table"):
+        maintenance.RetentionRule(schema="raw", table="arrivals; DROP", days=7)
+
+
+def test_retention_rule_rejects_non_positive_days() -> None:
+    with pytest.raises(ValueError, match="days"):
+        maintenance.RetentionRule(schema="raw", table="arrivals", days=0)
+    with pytest.raises(ValueError, match="days"):
+        maintenance.RetentionRule(schema="raw", table="arrivals", days=-1)
 
 
 def test_arrivals_retention_window_tightest() -> None:

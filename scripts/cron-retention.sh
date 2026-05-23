@@ -46,7 +46,15 @@ timeout "${RETENTION_TIMEOUT}" docker exec "${API_CONTAINER}" \
 retention_status=$?
 set -e
 if [[ $retention_status -eq 124 ]]; then
-  echo "[$(date -Iseconds)] $LOG_TAG ERROR: retention timed out after ${RETENTION_TIMEOUT}" >&2
+  # `docker exec` does NOT forward SIGTERM to the in-container process by
+  # default, so killing the `docker exec` client on host timeout leaves the
+  # actual maintenance run still attached to the warehouse. Signal it from
+  # inside the container so the next tick does not race a stuck DELETE on
+  # the same table. Mirrors `cron-dbt-run.sh`.
+  echo "[$(date -Iseconds)] $LOG_TAG ERROR: retention timed out after ${RETENTION_TIMEOUT} — killing in-container process" >&2
+  docker exec "${API_CONTAINER}" pkill -TERM -f 'api.maintenance' 2>/dev/null || true
+  sleep 2
+  docker exec "${API_CONTAINER}" pkill -KILL -f 'api.maintenance' 2>/dev/null || true
   exit 124
 elif [[ $retention_status -ne 0 ]]; then
   echo "[$(date -Iseconds)] $LOG_TAG ERROR: retention failed (exit $retention_status)" >&2

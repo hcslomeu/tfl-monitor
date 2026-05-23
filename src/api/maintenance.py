@@ -17,11 +17,21 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 from dataclasses import dataclass
 from typing import Final
 
 import logfire
 import psycopg
+from psycopg import sql
+
+MAINTENANCE_SERVICE_NAME = "tfl-monitor-maintenance"
+
+# Defensive identifier guard. Belt-and-braces on top of
+# ``psycopg.sql.Identifier`` which already quotes safely; this rejects
+# any caller that tries to construct a ``RetentionRule`` with a non-
+# identifier schema/table name before it ever reaches the cursor.
+_IDENTIFIER_RE = re.compile(r"^[a-z_][a-z0-9_]*$")
 
 
 @dataclass(frozen=True)
@@ -31,6 +41,13 @@ class RetentionRule:
     schema: str
     table: str
     days: int
+
+    def __post_init__(self) -> None:
+        for label, value in (("schema", self.schema), ("table", self.table)):
+            if not _IDENTIFIER_RE.match(value):
+                raise ValueError(f"{label} must match {_IDENTIFIER_RE.pattern}; got {value!r}")
+        if self.days <= 0:
+            raise ValueError(f"days must be > 0; got {self.days}")
 
     @property
     def qualified(self) -> str:
@@ -73,28 +90,48 @@ async def prune(
 
 
 async def _prune_one(conn: psycopg.AsyncConnection, rule: RetentionRule) -> int:
-    delete_sql = (
-        f"DELETE FROM {rule.qualified} WHERE ingested_at < now() - INTERVAL '{rule.days} days'"
+    table_ident = sql.Identifier(rule.schema, rule.table)
+    delete_stmt = sql.SQL("DELETE FROM {table} WHERE ingested_at < now() - %s::interval").format(
+        table=table_ident
     )
-    vacuum_sql = f"VACUUM {rule.qualified}"
+    vacuum_stmt = sql.SQL("VACUUM {table}").format(table=table_ident)
+    interval_literal = f"{rule.days} days"
     with logfire.span(
         "maintenance.prune.rule",
         table=rule.qualified,
         retention_days=rule.days,
     ):
         async with conn.cursor() as cur:
-            await cur.execute(delete_sql)
+            await cur.execute(delete_stmt, (interval_literal,))
             count = cur.rowcount
             logfire.info(
                 "maintenance.prune.deleted",
                 table=rule.qualified,
                 deleted_rows=count,
             )
-            await cur.execute(vacuum_sql)
+            await cur.execute(vacuum_stmt)
     return count
 
 
+def _configure_logfire() -> None:
+    """Initialise Logfire for the maintenance entrypoint.
+
+    Cron invokes ``python -m api.maintenance`` as a standalone process —
+    no FastAPI lifespan or ingestion runner ever sets Logfire up here.
+    Without this call the spans below are dropped with a
+    ``LogfireNotConfiguredWarning`` and the cron run is observability-blind.
+    """
+    logfire.configure(
+        service_name=MAINTENANCE_SERVICE_NAME,
+        service_version=os.getenv("APP_VERSION", "0.0.1"),
+        environment=os.getenv("ENVIRONMENT", "local"),
+        send_to_logfire="if-token-present",
+    )
+    logfire.instrument_psycopg("psycopg")
+
+
 async def _amain() -> int:
+    _configure_logfire()
     dsn = os.environ.get("DATABASE_URL", "")
     if not dsn:
         raise SystemExit("DATABASE_URL is required")

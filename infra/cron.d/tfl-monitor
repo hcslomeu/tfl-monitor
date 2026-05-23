@@ -17,6 +17,7 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # Nightly retention sweep — drops raw.* rows older than per-table
 # windows (api.maintenance.DEFAULT_RULES) and VACUUMs each table.
 # Keeps the warehouse bounded under the Supabase free-tier ceiling;
-# dbt marts already carry the long-term aggregates. Runs at 03:00 UTC
-# to avoid colliding with the */15 dbt cron's even-quarter hours.
+# dbt marts already carry the long-term aggregates. Runs at 03:03 UTC
+# (3 minutes past the hour, off the */15 dbt cron's even-quarter ticks
+# so the retention sweep never races a `dbt build` for the same row).
 3 3 * * * ubuntu /opt/tfl-monitor/scripts/cron-retention.sh >> /opt/tfl-monitor/cron.log 2>&1

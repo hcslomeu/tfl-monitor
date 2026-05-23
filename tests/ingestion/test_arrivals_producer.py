@@ -332,6 +332,34 @@ def test_constructor_falls_back_to_default_on_non_positive_env(
     assert producer._period_seconds == 30.0  # noqa: SLF001
 
 
+@pytest.mark.parametrize("value", ["inf", "-inf", "nan", "Infinity", "NaN"])
+def test_constructor_falls_back_to_default_on_non_finite_env(
+    monkeypatch: pytest.MonkeyPatch, value: str
+) -> None:
+    """``float('inf')`` would silently disable polling forever; ``nan``
+    breaks the ``> 0`` comparison. Both must collapse to the default."""
+    monkeypatch.setenv("ARRIVALS_POLL_PERIOD_SECONDS", value)
+
+    producer = ArrivalsProducer(
+        tfl_client=cast(TflClient, object()),
+        kafka_producer=cast(KafkaEventProducer, object()),
+    )
+
+    assert producer._period_seconds == 30.0  # noqa: SLF001
+
+
+@pytest.mark.parametrize("value", [float("inf"), float("nan")])
+def test_constructor_rejects_non_finite_explicit_period(value: float) -> None:
+    """An explicit ``period_seconds=inf/nan`` is a programmer error and
+    must raise, distinct from the env-var path that falls back silently."""
+    with pytest.raises(ValueError, match="finite"):
+        ArrivalsProducer(
+            tfl_client=cast(TflClient, object()),
+            kafka_producer=cast(KafkaEventProducer, object()),
+            period_seconds=value,
+        )
+
+
 def test_constructor_rejects_non_positive_period() -> None:
     with pytest.raises(ValueError):
         ArrivalsProducer(
