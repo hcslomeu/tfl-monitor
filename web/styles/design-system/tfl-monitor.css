@@ -418,6 +418,14 @@
 }
 
 @media (max-width: 880px) {
-  .tfl-grid { grid-template-columns: 1fr; }
+  /* Stacked layout — drop the min-content row caps so each pane can
+     claim its natural height instead of collapsing to the smallest
+     min-content contribution (the right-column card scrolls internally
+     and would otherwise resolve near zero on mobile). */
+  .tfl-grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+    grid-auto-rows: auto;
+  }
   .tfl-bus-row { grid-template-columns: 1fr; }
 }

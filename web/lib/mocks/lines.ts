@@ -120,9 +120,10 @@ export const MOCK_LINES: LineSummary[] = [
 	},
 	// Post-Nov-2024 Overground split: six named lines replacing the
 	// single "London Overground" badge. Colours follow TfL's 2024 brand
-	// reveal. Order mirrors the alphabetical-within-mode rule in
-	// `MODE_PRECEDENCE` (adapt.ts) so the fixture matches the order the
-	// adapter would produce from a real `/status/live` payload.
+	// reveal. Order matches the mode-precedence + alphabetical-within-
+	// mode sort applied by `lineStatusesToSummaries` (adapt.ts) so the
+	// fixture matches the order the adapter would produce from a real
+	// `/status/live` payload.
 	{
 		code: "LIB",
 		name: "Liberty",

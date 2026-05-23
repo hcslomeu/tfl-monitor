@@ -35,6 +35,11 @@ const CODE_TO_MODE: Record<string, Mode> = {
 	SUF: "overground",
 	WEA: "overground",
 	WIN: "overground",
+	// Defensive: keep the legacy single-line code mapping. The November
+	// 2024 split replaced this with six named lines on the live feed,
+	// but a stale fixture or legacy backend response should still
+	// resolve to `overground` rather than the `tube` fallback.
+	OVG: "overground",
 };
 
 const CODE_TO_LINE_ID: Record<string, string> = {
@@ -57,6 +62,11 @@ const CODE_TO_LINE_ID: Record<string, string> = {
 	SUF: "suffragette",
 	WEA: "weaver",
 	WIN: "windrush",
+	// Defensive: pair the legacy `OVG` code mapping above so a stale
+	// fixture / legacy backend response resolves to the same
+	// `london-overground` ID that `LINE_META_BY_ID` (adapt.ts) still
+	// carries for the rolled-up badge.
+	OVG: "london-overground",
 };
 
 function lineSummaryToLineStatus(line: LineSummary, now: Date): LineStatus {

@@ -6,7 +6,7 @@ import { MOCK_LINES } from "@/lib/mocks/lines";
 
 describe("design-system mock fixtures", () => {
 	it("ships 19 line summaries with unique codes", () => {
-		// 13 tube + Elizabeth + DLR + 6 Overground (post-Nov-2024 split).
+		// 11 tube + Elizabeth + DLR + 6 Overground (post-Nov-2024 split).
 		expect(MOCK_LINES).toHaveLength(19);
 		const codes = new Set(MOCK_LINES.map((line) => line.code));
 		expect(codes.size).toBe(MOCK_LINES.length);

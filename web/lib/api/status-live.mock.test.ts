@@ -22,7 +22,7 @@ describe("getStatusLive — USE_MOCKS branch", () => {
 		const result = await getStatusLive();
 
 		expect(fetchMock).not.toHaveBeenCalled();
-		// 13 tube + Elizabeth + DLR + 6 Overground (post-Nov-2024 split).
+		// 11 tube + Elizabeth + DLR + 6 Overground (post-Nov-2024 split).
 		expect(result.length).toBe(19);
 	});
 
