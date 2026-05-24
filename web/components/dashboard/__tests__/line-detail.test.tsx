@@ -16,7 +16,7 @@ const DISRUPTION: DisruptionSnapshot = {
 	headline: "Severe delays westbound between Paddington and Reading",
 	body: ["A faulty train at Hayes & Harlington is causing severe delays."],
 	reportedAtLabel: "17:58 BST",
-	stations: [{ name: "Paddington", code: "PAD", note: "interchange" }],
+	stations: [{ name: "Paddington", code: "PAD" }],
 	sourceLabel: "Source: TfL Unified API",
 	updatedAtLabel: "18:42:14 BST",
 };
@@ -34,7 +34,10 @@ describe("LineDetail", () => {
 			),
 		).toBeInTheDocument();
 		expect(screen.getByText("Affected stations")).toBeInTheDocument();
-		expect(screen.getByText(/PAD · interchange/)).toBeInTheDocument();
+		// Resolved station name renders; the raw NaPTAN code is no longer
+		// surfaced — the user-facing name carries all the signal.
+		expect(screen.getByText("Paddington")).toBeInTheDocument();
+		expect(screen.queryByText("PAD")).not.toBeInTheDocument();
 	});
 
 	it("surfaces the humanised relative updated label in the header", () => {
@@ -77,7 +80,7 @@ describe("LineDetail", () => {
 		expect(screen.queryByText("Affected stations")).not.toBeInTheDocument();
 	});
 
-	it("renders a closure banner when closureText is non-empty", () => {
+	it("never renders the closure_text alert (collapsed in the redesign)", () => {
 		render(
 			<LineDetail
 				line={LINE}
@@ -88,19 +91,10 @@ describe("LineDetail", () => {
 			/>,
 		);
 
-		const banner = screen.getByRole("alert");
-		expect(banner).toHaveTextContent(
-			/No service between Paddington and Reading/,
-		);
-	});
-
-	it("does not render a closure banner when closureText is absent", () => {
-		render(<LineDetail line={LINE} disruption={DISRUPTION} />);
-
 		expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 	});
 
-	it("renders an affected-lines list when affectedRoutes is populated", () => {
+	it("renders co-affected lines when affectedRoutes includes other lines", () => {
 		render(
 			<LineDetail
 				line={LINE}
@@ -111,20 +105,70 @@ describe("LineDetail", () => {
 			/>,
 		);
 
-		const list = screen.getByRole("list", { name: /affected lines/i });
+		const list = screen.getByRole("list", { name: /also affected/i });
 		const items = list.querySelectorAll("li");
 		expect(items).toHaveLength(2);
 	});
 
-	it("does not render the affected-lines block when affectedRoutes is absent", () => {
-		render(<LineDetail line={LINE} disruption={DISRUPTION} />);
+	it("filters the current line out of the co-affected list", () => {
+		render(
+			<LineDetail
+				line={LINE}
+				disruption={{
+					...DISRUPTION,
+					// `elizabeth` is the current line; only `piccadilly` should
+					// surface as a chip — the header already names Elizabeth.
+					affectedRoutes: ["elizabeth", "piccadilly"],
+				}}
+			/>,
+		);
+
+		const list = screen.getByRole("list", { name: /also affected/i });
+		const items = list.querySelectorAll("li");
+		expect(items).toHaveLength(1);
+		expect(items[0]).toHaveTextContent(/PIC/);
+	});
+
+	it("hides the block entirely when only the current line is affected", () => {
+		render(
+			<LineDetail
+				line={LINE}
+				disruption={{ ...DISRUPTION, affectedRoutes: ["elizabeth"] }}
+			/>,
+		);
 
 		expect(
-			screen.queryByRole("list", { name: /affected lines/i }),
+			screen.queryByRole("list", { name: /also affected/i }),
 		).not.toBeInTheDocument();
 	});
 
-	it("does not render the affected-lines block when affectedRoutes is an empty array", () => {
+	it("does not render the co-affected block when affectedRoutes is absent", () => {
+		render(<LineDetail line={LINE} disruption={DISRUPTION} />);
+
+		expect(
+			screen.queryByRole("list", { name: /also affected/i }),
+		).not.toBeInTheDocument();
+	});
+
+	it("dedupes affectedRoutes before rendering chips", () => {
+		render(
+			<LineDetail
+				line={LINE}
+				disruption={{
+					...DISRUPTION,
+					// TfL occasionally repeats the same line in `affected_routes`;
+					// the chip row should render each one once.
+					affectedRoutes: ["piccadilly", "piccadilly", "victoria"],
+				}}
+			/>,
+		);
+
+		const list = screen.getByRole("list", { name: /also affected/i });
+		const items = list.querySelectorAll("li");
+		expect(items).toHaveLength(2);
+	});
+
+	it("does not render the co-affected block when affectedRoutes is an empty array", () => {
 		render(
 			<LineDetail
 				line={LINE}
@@ -133,7 +177,7 @@ describe("LineDetail", () => {
 		);
 
 		expect(
-			screen.queryByRole("list", { name: /affected lines/i }),
+			screen.queryByRole("list", { name: /also affected/i }),
 		).not.toBeInTheDocument();
 	});
 });

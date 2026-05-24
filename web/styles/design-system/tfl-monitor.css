@@ -235,6 +235,10 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+  /* Hard guard against any grandchild's `min-content` blowing past the
+     viewport on narrow screens — keeps cards from extending beyond the
+     visible width and dragging the footer in to match. */
+  min-width: 0;
 }
 
 .tfl-grid {
@@ -273,6 +277,10 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
+  /* Prevent any descendant's min-content (long line name + status
+     pill) from dragging the card past the grid column's width on
+     narrow viewports. */
+  min-width: 0;
 }
 .tfl-card-h {
   display: flex; align-items: center; justify-content: space-between;
@@ -300,14 +308,27 @@
 /* ---------- Line list ---------------------------------------------- */
 .tfl-line-list { display: flex; flex-direction: column; }
 .tfl-line {
-  display: grid; grid-template-columns: 4px 1fr auto;
+  display: grid; grid-template-columns: 4px minmax(0, 1fr) auto;
   align-items: center; gap: 12px;
   padding: 8px var(--space-4);
   border-bottom: 1px solid var(--border-default);
   cursor: pointer;
   transition: background var(--dur-fast);
+  min-width: 0;
 }
-.tfl-line-name-wrap { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.tfl-line-name-wrap {
+  display: flex; align-items: baseline; gap: 10px;
+  min-width: 0;
+  overflow: hidden;
+}
+.tfl-line-name-wrap .tfl-line-name,
+.tfl-line-name-wrap .tfl-line-updated {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.tfl-line-status { white-space: nowrap; }
 .tfl-line:last-child { border-bottom: none; }
 .tfl-line:hover, .tfl-line.active { background: var(--canvas-elevated); }
 .tfl-line-stripe { width: 4px; height: 22px; border-radius: 2px; }
@@ -341,18 +362,6 @@
 .tfl-disruption { padding: var(--space-4) var(--space-5); }
 .tfl-disruption .summary { color: var(--danger); font-weight: 500; margin-bottom: var(--space-3); font-size: var(--ui-sm); }
 .tfl-disruption p { font-size: var(--ui-sm); color: var(--ink-secondary); line-height: 1.55; max-width: none; margin-bottom: var(--space-3); }
-
-.tfl-closure {
-  margin: 0 var(--space-5) var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--danger) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
-  color: var(--danger);
-  font-family: var(--font-body);
-  font-size: var(--ui-sm);
-  font-weight: 500;
-}
 
 .tfl-affected-routes {
   padding: var(--space-3) var(--space-5);
@@ -400,14 +409,25 @@
   border-top: 1px solid var(--border-default);
 }
 .tfl-stations h5 { font-family: var(--font-mono); font-size: var(--ui-xs); color: var(--ink-tertiary); margin: 0 0 var(--space-3); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 500; }
-.tfl-stations ul { list-style: none; padding: 0; margin: 0; }
-.tfl-stations li {
-  display: flex; align-items: center; gap: 10px;
-  padding: 6px 0; font-family: var(--font-body); font-size: var(--ui-sm);
-  color: var(--ink-primary); border-bottom: 1px dashed var(--border-default);
+/* Two-column grid packs long station lists into less vertical space.
+   `auto-fill` + min(220px, 100%) lets each row collapse to one column
+   when the card is narrower than ~440px without a media query. */
+.tfl-stations ul {
+  list-style: none; padding: 0; margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr));
+  column-gap: var(--space-4);
 }
-.tfl-stations li:last-child { border-bottom: none; }
-.tfl-stations li .code { font-family: var(--font-mono); font-size: var(--ui-xs); color: var(--ink-tertiary); margin-left: auto; }
+.tfl-stations li {
+  padding: 6px 0;
+  font-family: var(--font-body); font-size: var(--ui-sm);
+  color: var(--ink-primary);
+  border-bottom: 1px dashed var(--border-default);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .tfl-detail-foot {
   padding: var(--space-3) var(--space-5);
@@ -438,7 +458,11 @@
    Scrollbar is hidden in both Firefox (`scrollbar-width: none`) and
    WebKit/Blink (`::-webkit-scrollbar`) — overflow is still functional,
    only chromeless. */
-.tfl-news { display: flex; flex-direction: column; --tfl-news-row-h: 64px; }
+/* Row-height bump from 64 → 80px accommodates the body's 2-line clamp
+   below (title 1 line + body 2 lines ≈ 60px text + 20px vertical
+   padding). Keeps the 5-row max cap (`5 × 80 = 400px`) the only
+   dimension the news pane reserves vertically. */
+.tfl-news { display: flex; flex-direction: column; --tfl-news-row-h: 80px; }
 .tfl-news-list {
   list-style: none; margin: 0; padding: 0;
   display: flex; flex-direction: column;
@@ -449,25 +473,48 @@
 }
 .tfl-news-list::-webkit-scrollbar { display: none; }
 .tfl-news-list li {
-  display: grid; grid-template-columns: 52px 1fr;
+  display: grid; grid-template-columns: 52px minmax(0, 1fr);
   gap: 12px;
   padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--border-default);
   align-items: flex-start;
   min-height: var(--tfl-news-row-h);
   box-sizing: border-box;
+  min-width: 0;
 }
 .tfl-news-list li:last-child { border-bottom: none; }
 .tfl-news-list li.is-empty { color: var(--ink-tertiary); }
 .tfl-news-placeholder { font-family: var(--font-mono); font-size: var(--ui-xs); color: var(--ink-tertiary); padding-top: 2px; }
 .tfl-news-time { font-family: var(--font-mono); font-size: var(--ui-xs); color: var(--ink-tertiary); padding-top: 2px; }
+/* The 2nd grid column wrapping title + body is an unclassed `<div>` in
+   `news-reports.tsx`. Grid items default to `min-width: auto`, which
+   lets a long word refuse to shrink and overflow the `minmax(0, 1fr)`
+   track on iOS Safari — pin it to 0 explicitly so the ellipsis/clamp
+   chain below actually engages. */
+.tfl-news-list li > div { min-width: 0; }
+
+/* Title clamps to one line and the body to two — preserves enough
+   context to read a disruption summary while still respecting the row's
+   `--tfl-news-row-h` cap. `min-width: 0` + `overflow: hidden` are
+   required for the clamp to actually engage inside the grid cell. */
+.tfl-news-title,
+.tfl-news-body {
+  min-width: 0;
+  overflow: hidden;
+}
 .tfl-news-title {
   font-family: var(--font-body); font-size: var(--ui-sm); font-weight: 500;
   color: var(--ink-primary); margin-bottom: 2px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .tfl-news-body {
   font-family: var(--font-body); font-size: var(--ui-sm); color: var(--ink-secondary);
-  line-height: 1.45; white-space: pre-line;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 @media (max-width: 880px) {
@@ -481,4 +528,21 @@
     grid-auto-rows: auto;
   }
   .tfl-bus-row { grid-template-columns: 1fr; }
+}
+
+/* Tighten outer shell padding on small viewports so cards have room to
+   breathe within the actual visible width — `var(--space-5)` on the
+   sides leaves ~327px of content on a 375px iPhone, which is enough for
+   most rows but cramps the right-aligned status pills. */
+@media (max-width: 480px) {
+  .tfl-shell {
+    padding: 5rem var(--space-3) var(--space-7);
+  }
+  /* Pack the line list tighter horizontally too — the stripe + name
+     wrap + status pill triplet has the narrowest of the dashboard's
+     min-content budgets. */
+  .tfl-line {
+    padding: 8px var(--space-3);
+    gap: 8px;
+  }
 }
