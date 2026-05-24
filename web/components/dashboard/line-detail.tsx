@@ -64,7 +64,11 @@ export function LineDetail({
 							<h5>Affected stations</h5>
 							<ul aria-label="Affected stations">
 								{disruption.stations.map((station) => (
-									<li key={station.code}>{station.name}</li>
+									// `title` surfaces the full name on hover for
+									// truncated rows (e.g. "Heathrow Terminals 2 & 3").
+									<li key={station.code} title={station.name}>
+										{station.name}
+									</li>
 								))}
 							</ul>
 						</div>
@@ -99,7 +103,9 @@ function AffectedRoutesChips({
 }: AffectedRoutesChipsProps) {
 	if (!routes || routes.length === 0) return null;
 	const currentCodeUpper = currentLineCode.toUpperCase();
-	const otherRoutes = routes.filter(
+	// Dedupe before filtering so a TfL payload that lists the same line
+	// twice doesn't render duplicate chips with colliding React keys.
+	const otherRoutes = Array.from(new Set(routes)).filter(
 		(lineId) => getLineMeta(lineId).code.toUpperCase() !== currentCodeUpper,
 	);
 	if (otherRoutes.length === 0) return null;

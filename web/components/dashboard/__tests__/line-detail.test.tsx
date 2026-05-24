@@ -150,6 +150,24 @@ describe("LineDetail", () => {
 		).not.toBeInTheDocument();
 	});
 
+	it("dedupes affectedRoutes before rendering chips", () => {
+		render(
+			<LineDetail
+				line={LINE}
+				disruption={{
+					...DISRUPTION,
+					// TfL occasionally repeats the same line in `affected_routes`;
+					// the chip row should render each one once.
+					affectedRoutes: ["piccadilly", "piccadilly", "victoria"],
+				}}
+			/>,
+		);
+
+		const list = screen.getByRole("list", { name: /also affected/i });
+		const items = list.querySelectorAll("li");
+		expect(items).toHaveLength(2);
+	});
+
 	it("does not render the co-affected block when affectedRoutes is an empty array", () => {
 		render(
 			<LineDetail

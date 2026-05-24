@@ -458,7 +458,11 @@
    Scrollbar is hidden in both Firefox (`scrollbar-width: none`) and
    WebKit/Blink (`::-webkit-scrollbar`) — overflow is still functional,
    only chromeless. */
-.tfl-news { display: flex; flex-direction: column; --tfl-news-row-h: 64px; }
+/* Row-height bump from 64 → 80px accommodates the body's 2-line clamp
+   below (title 1 line + body 2 lines ≈ 60px text + 20px vertical
+   padding). Keeps the 5-row max cap (`5 × 80 = 400px`) the only
+   dimension the news pane reserves vertically. */
+.tfl-news { display: flex; flex-direction: column; --tfl-news-row-h: 80px; }
 .tfl-news-list {
   list-style: none; margin: 0; padding: 0;
   display: flex; flex-direction: column;
@@ -482,24 +486,35 @@
 .tfl-news-list li.is-empty { color: var(--ink-tertiary); }
 .tfl-news-placeholder { font-family: var(--font-mono); font-size: var(--ui-xs); color: var(--ink-tertiary); padding-top: 2px; }
 .tfl-news-time { font-family: var(--font-mono); font-size: var(--ui-xs); color: var(--ink-tertiary); padding-top: 2px; }
-/* Title + body clamp to a single line each so a long TfL summary cannot
-   overflow its row's `--tfl-news-row-h` cap and overlap the next row
-   on narrow viewports. `min-width: 0` + `overflow: hidden` are required
-   inside a grid cell for `text-overflow: ellipsis` to take effect. */
+/* The 2nd grid column wrapping title + body is an unclassed `<div>` in
+   `news-reports.tsx`. Grid items default to `min-width: auto`, which
+   lets a long word refuse to shrink and overflow the `minmax(0, 1fr)`
+   track on iOS Safari — pin it to 0 explicitly so the ellipsis/clamp
+   chain below actually engages. */
+.tfl-news-list li > div { min-width: 0; }
+
+/* Title clamps to one line and the body to two — preserves enough
+   context to read a disruption summary while still respecting the row's
+   `--tfl-news-row-h` cap. `min-width: 0` + `overflow: hidden` are
+   required for the clamp to actually engage inside the grid cell. */
 .tfl-news-title,
 .tfl-news-body {
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .tfl-news-title {
   font-family: var(--font-body); font-size: var(--ui-sm); font-weight: 500;
   color: var(--ink-primary); margin-bottom: 2px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .tfl-news-body {
   font-family: var(--font-body); font-size: var(--ui-sm); color: var(--ink-secondary);
   line-height: 1.45;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 @media (max-width: 880px) {
