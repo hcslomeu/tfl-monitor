@@ -1,5 +1,5 @@
 import { Analytics } from "@vercel/analytics/next";
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Inter, JetBrains_Mono } from "next/font/google";
 import localFont from "next/font/local";
 
@@ -65,6 +65,12 @@ const SITE_URL = "https://tfl-monitor.humbertolomeu.com";
 const SITE_TITLE = "TfL Monitor — London transport at a glance";
 const SITE_DESCRIPTION =
 	"Real-time London transport status dashboard — Tube, Overground, DLR, Elizabeth line, buses, and disruptions.";
+
+export const viewport: Viewport = {
+	width: "device-width",
+	initialScale: 1,
+	viewportFit: "cover",
+};
 
 export const metadata: Metadata = {
 	metadataBase: new URL(SITE_URL),
