@@ -16,9 +16,12 @@
 /* Kill any momentary horizontal scroll on iOS Safari's first paint —
    a single overflowing descendant (e.g. a long word in a news row
    before fonts settle) would otherwise widen the document past the
-   viewport, making the cards look "too wide" on initial load. */
-html,
-body {
+   viewport, making the cards look "too wide" on initial load. Setting
+   on `html` is enough; the `hidden` line is a fallback for iOS Safari
+   < 16 where `clip` is dropped as an unrecognised value. */
+html {
+	overflow-x: hidden;
+	/* biome-ignore lint/suspicious/noDuplicateProperties: intentional progressive-enhancement fallback — iOS Safari <16 ignores `clip` and falls back to `hidden`, modern engines use `clip`. */
 	overflow-x: clip;
 }
 
