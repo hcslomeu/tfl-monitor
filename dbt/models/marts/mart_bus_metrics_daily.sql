@@ -12,7 +12,7 @@
 
 with bus_lines as (
     select line_id
-    from {{ source('tfl', 'lines') }}
+    from {{ source('tfl_ref', 'lines') }}
     where mode = 'bus'
 ),
 
