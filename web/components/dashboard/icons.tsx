@@ -13,6 +13,8 @@ export const SEND_PATH = "M12 19V5 M5 12 l7-7 7 7";
 
 export const AUDIO_PATH = "M2 10v3 M6 6v11 M10 3v18 M14 8v7 M18 5v13 M22 10v3";
 
+export const CLOSE_PATH = "M6 6 l12 12 M18 6 l-12 12";
+
 export interface IconProps {
 	d: string;
 	size?: number;

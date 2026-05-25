@@ -27,6 +27,23 @@ function createMemoryStorage(): Storage {
 	};
 }
 
+if (typeof window !== "undefined" && typeof window.matchMedia === "undefined") {
+	Object.defineProperty(window, "matchMedia", {
+		configurable: true,
+		value: (query: string): MediaQueryList =>
+			({
+				matches: false,
+				media: query,
+				onchange: null,
+				addEventListener: () => {},
+				removeEventListener: () => {},
+				addListener: () => {},
+				removeListener: () => {},
+				dispatchEvent: () => false,
+			}) as MediaQueryList,
+	});
+}
+
 if (typeof globalThis.ResizeObserver === "undefined") {
 	class ResizeObserverStub {
 		observe(): void {}

@@ -19,6 +19,17 @@
    viewport, making the cards look "too wide" on initial load. Setting
    on `html` is enough; the `hidden` line is a fallback for iOS Safari
    < 16 where `clip` is dropped as an unrecognised value. */
+/* Border-box everywhere so `width: 100%` includes padding/border. Without
+   this, `.tfl-shell`'s horizontal padding (and every nested card/row's
+   padding) is added *outside* the declared width, pushing content past the
+   viewport where `overflow-x: clip` silently crops the right-aligned status
+   pills. */
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
 html {
 	overflow-x: hidden;
 	/* biome-ignore lint/suspicious/noDuplicateProperties: intentional progressive-enhancement fallback — iOS Safari <16 ignores `clip` and falls back to `hidden`, modern engines use `clip`. */
