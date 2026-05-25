@@ -16,11 +16,17 @@ export function useMediaQuery(query: string): boolean {
 	const [matches, setMatches] = useState(false);
 
 	useEffect(() => {
+		if (typeof window === "undefined" || !window.matchMedia) return;
 		const mql = window.matchMedia(query);
 		setMatches(mql.matches);
 		const onChange = (event: MediaQueryListEvent) => setMatches(event.matches);
-		mql.addEventListener("change", onChange);
-		return () => mql.removeEventListener("change", onChange);
+		// Safari/iOS <= 13 expose only the legacy addListener/removeListener API.
+		if (mql.addEventListener) {
+			mql.addEventListener("change", onChange);
+			return () => mql.removeEventListener("change", onChange);
+		}
+		mql.addListener(onChange);
+		return () => mql.removeListener(onChange);
 	}, [query]);
 
 	return matches;

@@ -11,9 +11,10 @@ export interface LineGridProps {
 	selected?: string;
 	onSelect: (code: string) => void;
 	/**
-	 * Detail panel for the selected line. Rendered inline beneath the active
-	 * row on narrow viewports (accordion); hidden by CSS on desktop, where the
-	 * same panel is shown in the right column instead.
+	 * Detail panel for the selected line, rendered inline beneath the active
+	 * row as an accordion. The caller supplies this only on the stacked mobile
+	 * layout and passes `null` on desktop, where the detail lives in the right
+	 * column instead.
 	 */
 	detail?: ReactNode;
 	/**
@@ -75,14 +76,16 @@ export function LineGrid({
 							</div>
 							{isActive && detail ? (
 								<div className="tfl-line-detail-inline">
-									<button
-										type="button"
-										className="tfl-line-detail-close"
-										onClick={onCloseDetail}
-										aria-label="Hide line details"
-									>
-										<Icon d={CLOSE_PATH} size={16} />
-									</button>
+									{onCloseDetail ? (
+										<button
+											type="button"
+											className="tfl-line-detail-close"
+											onClick={onCloseDetail}
+											aria-label="Hide line details"
+										>
+											<Icon d={CLOSE_PATH} size={16} />
+										</button>
+									) : null}
 									{detail}
 								</div>
 							) : null}
