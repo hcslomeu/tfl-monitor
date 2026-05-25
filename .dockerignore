@@ -17,3 +17,12 @@ build
 tests/fixtures
 web/.next
 web/node_modules
+
+# dbt build artifacts: never bake compiled SQL, manifests, or installed
+# packages into the image. A stale `target/` in the build context poisons
+# dbt's partial-parse cache so sources compile against an old schema (e.g.
+# `raw.stations` instead of `ref.stations`), failing every run.
+dbt/target
+dbt/dbt_packages
+dbt/logs
+dbt/.user.yml
