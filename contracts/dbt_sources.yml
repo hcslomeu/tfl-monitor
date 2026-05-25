@@ -73,7 +73,7 @@ sources:
   # honours `schema` at the source level (not per-table), so these need
   # their own source block rather than a per-table override under `tfl`.
   - name: tfl_ref
-    description: "Static reference tables (lines, stations) loaded into the ref schema by CSV seeds / batch jobs."
+    description: "External static reference tables (lines, stations) populated in the ref schema by the static-ingest batch job (TM-A2)."
     database: "{{ env_var('POSTGRES_DB', 'tflmonitor') }}"
     schema: ref
     tables:
