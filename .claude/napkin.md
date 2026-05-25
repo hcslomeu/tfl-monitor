@@ -7,7 +7,7 @@ recurring guidance only — not a session log.
 
 - Re-prioritize on every read.
 - Keep recurring, high-value notes only.
-- Max 10 items per category.
+- Soft cap ~10 items per category: when a category exceeds it, prune or merge the lowest-value item on the next read. Favour recording a fresh high-value lesson now over hard-blocking; trim on the next curation pass.
 - Each item includes date + "Do instead".
 
 ## Execution & Validation (Highest Priority)
