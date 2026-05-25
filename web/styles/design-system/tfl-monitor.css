@@ -184,13 +184,12 @@
 .tfl-chatbox .tfl-chat-iconbtn { width: 22px; height: 22px; }
 .tfl-chatbox .tfl-chatbox-send { width: 24px; height: 24px; }
 .tfl-chatbox-ta {
+  /* Held at --ui-sm on every viewport to match the app's dense composer
+     scale. This accepts iOS Safari's zoom-on-focus (it bumps inputs under
+     16px); the visual consistency is preferred over suppressing that zoom. */
   width: 100%; resize: none; border: none; outline: none; background: transparent;
   font-family: var(--font-body); font-size: var(--ui-sm); color: #EEE9DE;
   line-height: 1.5; padding: 4px 0 10px; min-height: 44px;
-}
-@media (max-width: 768px) {
-  /* iOS Safari zooms the viewport on focus when font-size < 16px on an input */
-  .tfl-chatbox-ta { font-size: var(--ui-lg); }
 }
 .tfl-chatbox-ta:focus-visible {
   outline: 2px solid var(--accent-display);
@@ -429,12 +428,6 @@
   white-space: nowrap;
 }
 
-.tfl-detail-foot {
-  padding: var(--space-3) var(--space-5);
-  border-top: 1px solid var(--border-default);
-  display: flex; justify-content: space-between;
-  font-family: var(--font-mono); font-size: var(--ui-xs); color: var(--ink-tertiary);
-}
 
 /* ---------- Bus banner (now inside left column, narrower) ---------- */
 .tfl-bus-row {
@@ -531,6 +524,52 @@
     grid-auto-rows: auto;
   }
   .tfl-bus-row { grid-template-columns: 1fr; }
+
+  /* The right column's `flex: 1 1 0` split is sized by the desktop grid row's
+     definite height. Once the rows go `auto` above, those zero-basis children
+     collapse — taking the chat stack to ~0px. Pin them to natural height so
+     the page scrolls instead. (The line detail renders inline here, not in the
+     right column — `page.tsx` swaps its placement at this same breakpoint.) */
+  /* Reads as a card floating beneath the tapped row: inset from the full-bleed
+     rows and kept on the standard card surface. The highlighted row above
+     already names the line and its status, so the whole detail header is
+     dropped here — the card opens straight into the disruption body. */
+  .tfl-line-detail-inline {
+    position: relative;
+    padding: 6px var(--space-4) var(--space-4);
+  }
+  .tfl-line-detail-inline > .tfl-card {
+    overflow: hidden;
+  }
+  .tfl-line-detail-inline .tfl-detail-h {
+    display: none;
+  }
+  /* Sits in the card's top-right padding margin (the disruption body keeps a
+     --space-5 right inset), so it never overlaps the summary text. */
+  .tfl-line-detail-close {
+    position: absolute;
+    top: 14px;
+    right: calc(var(--space-4) + 8px);
+    z-index: 1;
+    width: 26px;
+    height: 26px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: transparent;
+    border-radius: 9999px;
+    color: var(--ink-tertiary);
+    cursor: pointer;
+    transition: color var(--dur-fast), background var(--dur-fast);
+  }
+  .tfl-line-detail-close:hover {
+    color: var(--ink-primary);
+    background: var(--canvas-elevated);
+  }
+  .tfl-right-col > .tfl-chat-stack { flex: 0 0 auto; }
+  .tfl-right-col .tfl-chat-stack .tfl-chat-card { flex: 0 0 auto; }
+  .tfl-chat-transcript { flex: 0 0 auto; min-height: 96px; max-height: 50vh; }
 }
 
 /* Tighten outer shell padding on small viewports so cards have room to

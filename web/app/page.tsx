@@ -20,10 +20,14 @@ import {
 	summarizeCounts,
 } from "@/lib/dashboard/adapt";
 import { useAutoRefresh } from "@/lib/hooks/use-auto-refresh";
+import { useMediaQuery } from "@/lib/hooks/use-media-query";
 import { MOCK_BUSES } from "@/lib/mocks/buses";
 
 const REFRESH_INTERVAL_MS = 30_000;
 const REPO_URL = "https://github.com/humbertolomeu/tfl-monitor";
+// Mirrors the `@media (max-width: 880px)` stacking breakpoint: below it the
+// line detail renders inline (accordion); above it, in the right column.
+const STACK_QUERY = "(max-width: 880px)";
 
 function formatLondonClock(date: Date | null): string {
 	if (!date) return "—";
@@ -83,6 +87,27 @@ export default function HomePage() {
 
 	const clockLabel = formatLondonClock(status.lastUpdated);
 
+	const isStacked = useMediaQuery(STACK_QUERY);
+	// Mobile accordion can be collapsed; desktop's right column always shows the
+	// detail, so `expanded` only takes effect when stacked.
+	const [expanded, setExpanded] = useState(true);
+
+	const handleSelect = (code: string) => {
+		if (code === selectedCode) {
+			setExpanded((open) => !open);
+		} else {
+			setSelectedCode(code);
+			setExpanded(true);
+		}
+	};
+
+	const inlineOpen = isStacked && expanded;
+	const rowActive = !isStacked || expanded;
+
+	const lineDetail = selectedLine ? (
+		<LineDetail line={selectedLine} disruption={selectedDisruption} />
+	) : null;
+
 	return (
 		<div className="tfl-app">
 			<TopNav summary={counts} clockLabel={clockLabel} repoUrl={REPO_URL} />
@@ -90,13 +115,13 @@ export default function HomePage() {
 				<section className="tfl-grid">
 					<LineGrid
 						lines={lineSummaries}
-						selected={selectedCode ?? undefined}
-						onSelect={setSelectedCode}
+						selected={rowActive ? (selectedCode ?? undefined) : undefined}
+						onSelect={handleSelect}
+						detail={inlineOpen ? lineDetail : null}
+						onCloseDetail={() => setExpanded(false)}
 					/>
 					<div className="tfl-right-col">
-						{selectedLine ? (
-							<LineDetail line={selectedLine} disruption={selectedDisruption} />
-						) : null}
+						{isStacked ? null : lineDetail}
 						<ChatPanel />
 					</div>
 				</section>

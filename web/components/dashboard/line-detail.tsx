@@ -73,10 +73,6 @@ export function LineDetail({
 							</ul>
 						</div>
 					)}
-					<div className="tfl-detail-foot">
-						<span>{disruption.sourceLabel}</span>
-						<span>Updated {disruption.updatedAtLabel}</span>
-					</div>
 				</>
 			) : (
 				<div className="tfl-disruption">
