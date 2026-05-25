@@ -7,7 +7,7 @@ recurring guidance only — not a session log.
 
 - Re-prioritize on every read.
 - Keep recurring, high-value notes only.
-- Max 10 items per category.
+- Soft cap ~10 items per category: when a category exceeds it, prune or merge the lowest-value item on the next read. Favour recording a fresh high-value lesson now over hard-blocking; trim on the next curation pass.
 - Each item includes date + "Do instead".
 
 ## Execution & Validation (Highest Priority)
@@ -152,6 +152,10 @@ recurring guidance only — not a session log.
     2. **`vercel link` only writes `.vercel/project.json` — it does NOT connect the GitHub webhook.** The CLI deploy works from the linked dir, but auto-deploy on push is OFF until the author clicks "Connect Git Repository" in the project's Settings → Git page and authorizes the Vercel GitHub app on the specific repo. The CLI cannot do this.
     3. **After Git integration is connected, monorepo subdir projects break with `Error: No Next.js version detected`** because the project's `rootDirectory` defaults to `null` (repo root) when created via CLI from inside the subdir. The CLI build worked because `pwd` was the subdir; Git-triggered builds clone the repo at the root. Fix: `curl -X PATCH "https://api.vercel.com/v9/projects/<projectId>?teamId=<teamId>" -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"rootDirectory":"<subdir>"}'`, then `vercel redeploy <last-good-url>` (or push a new commit) to exercise the integration. Hook denies this PATCH without explicit user authorization — pre-ask before running.
     Do instead: when setting up Vercel for a monorepo, run `vercel link` from the subdir, then immediately PATCH `rootDirectory`, then ask the author to connect Git in the dashboard. Verify with `vercel ls <project>` after first auto-trigger — a Ready 30s build vs. Error 3s build is the signal.
+
+11. **[2026-05-25] dbt sources: `contracts/dbt_sources.yml` is the source of truth, and a per-table `schema:` override is silently ignored**
+    Two coupled gotchas surfaced fixing a daily prod `dbt build` failure (PR #113, `4b49dd2`). (a) `dbt/sources/tfl.yml` is a GENERATED MIRROR of `contracts/dbt_sources.yml`; CI's lint job runs `diff contracts/dbt_sources.yml dbt/sources/tfl.yml` and turns red on any divergence — editing the mirror directly breaks CI. (b) A `schema:` key under a source *table* entry is NOT honored by dbt — `schema` is a source-LEVEL property only. `lines`/`stations`, declared under the `tfl` source (schema `raw`) with a per-table `schema: ref`, silently resolved to `raw.lines`/`raw.stations` (nonexistent; data lives in `ref.*`), failing 7 source tests + skipping downstream marts on every `*/15` prod cron run for days. The full envelope/`schema` looked correct in the YAML, so `dbt parse` passed — only the compiled FROM clause exposed `raw.*`.
+    Do instead: (a) edit `contracts/dbt_sources.yml`, then `make sync-dbt-sources` (cp contract → mirror), then commit BOTH files — never edit `dbt/sources/tfl.yml` directly. Editing the contract touches the TM-000 track → stop and ask the user first per CLAUDE.md §"WP scope rules". (b) To place source tables in a different schema, give them their OWN source block with a source-level `schema:` (the `tfl_ref` source added in PR #113), not a per-table override. Verify with the compiled SQL FROM clause (`docker exec tfl-monitor-api-1 cat /app/dbt/target/compiled/.../<test>.sql`), not just `dbt parse`.
 
 ## User Directives
 
