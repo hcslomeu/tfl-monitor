@@ -35,6 +35,13 @@ COPY --chown=app:app dbt ./dbt
 
 ENV PYTHONPATH=/app/src
 
+# dbt is invoked at runtime via `docker exec` from the host cron, which runs in
+# WORKDIR /app (not the dbt project dir) and as the `app` user, which has no
+# home (--no-create-home above). dbt's default profiles lookup at ~/.dbt then
+# resolves to a non-existent /home/app/.dbt and fails. Point it at the project
+# dir where profiles.yml is copied so every dbt invocation finds its profile.
+ENV DBT_PROFILES_DIR=/app/dbt
+
 USER app
 
 EXPOSE 8000
