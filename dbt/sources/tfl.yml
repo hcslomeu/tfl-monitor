@@ -2,7 +2,7 @@ version: 2
 
 sources:
   - name: tfl
-    description: "Raw Kafka-backed event streams and static reference tables for the TfL warehouse."
+    description: "Raw Kafka-backed event streams for the TfL warehouse."
     database: "{{ env_var('POSTGRES_DB', 'tflmonitor') }}"
     schema: raw
     tables:
@@ -69,9 +69,16 @@ sources:
             tests:
               - not_null
 
+  # Static reference tables live in the `ref` schema, not `raw`. dbt only
+  # honours `schema` at the source level (not per-table), so these need
+  # their own source block rather than a per-table override under `tfl`.
+  - name: tfl_ref
+    description: "Static reference tables (lines, stations) loaded into the ref schema by CSV seeds / batch jobs."
+    database: "{{ env_var('POSTGRES_DB', 'tflmonitor') }}"
+    schema: ref
+    tables:
       - name: lines
         description: "Canonical list of TfL lines with display metadata."
-        schema: ref
         columns:
           - name: line_id
             tests:
@@ -86,7 +93,6 @@ sources:
 
       - name: stations
         description: "Canonical list of TfL stop points with coordinates."
-        schema: ref
         columns:
           - name: station_id
             tests:
