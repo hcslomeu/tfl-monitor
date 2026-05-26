@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from rag.parse import Chunk, parse_pdf
+from rag.parse import Chunk, _default_converter, parse_pdf
 
 
 @dataclass
@@ -125,3 +125,21 @@ def test_parse_pdf_skips_empty_text_chunks(tmp_path: Path) -> None:
     # chunk_index reflects the chunker's enumeration so retrieval citation
     # remains meaningful even when the parser skips whitespace.
     assert [c.chunk_index for c in chunks] == [0, 2]
+
+
+def test_default_converter_disables_ocr_and_restricts_to_pdf() -> None:
+    """The production Docling converter must keep OCR off and PDF-only.
+
+    ``parse_pdf`` lets tests inject a fake converter, so the real
+    ``_default_converter`` wiring is otherwise uncovered — a refactor could
+    silently re-enable OCR (heavy RapidOCR download + slow CPU parse) or drop
+    the format restriction. Construction is cheap: the layout model only loads
+    on ``convert()``, so this asserts the config without a model download.
+    """
+    from docling.datamodel.base_models import InputFormat
+
+    converter = _default_converter()
+
+    assert converter.allowed_formats == [InputFormat.PDF]
+    pdf_options = converter.format_to_options[InputFormat.PDF]
+    assert pdf_options.pipeline_options.do_ocr is False

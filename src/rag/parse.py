@@ -90,11 +90,15 @@ def _default_converter() -> _DoclingConverter:
     # The TfL corpus is born-digital ("-acc.pdf" accessible exports), so OCR
     # adds no text but pulls the heavy RapidOCR model download and makes the
     # CPU parse far slower. Disable it; layout-based text extraction suffices.
+    # allowed_formats restricts Docling to the PDF parser so the unused
+    # DOCX/PPTX/HTML/image backends are never initialised — lower memory and
+    # startup cost, which matters on the resource-constrained ingest host.
     pipeline_options = PdfPipelineOptions(do_ocr=False)
     return cast(
         _DoclingConverter,
         DocumentConverter(
-            format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)}
+            allowed_formats=[InputFormat.PDF],
+            format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)},
         ),
     )
 
