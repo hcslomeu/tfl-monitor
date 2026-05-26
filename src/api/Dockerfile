@@ -23,7 +23,7 @@ COPY pyproject.toml uv.lock ./
 # dbt is needed at runtime so the host cron entry can shell into this
 # container via `docker exec` and run `dbt run` without rebuilding.
 # rag is needed because the weekly `rag-ingest` cron also runs inside this
-# container via `docker exec` and pulls docling + llama-index + pinecone.
+# container via `docker exec` and pulls docling + llama-index + pgvector.
 # UV_PROJECT_ENVIRONMENT=/usr/local makes the resulting console scripts
 # (uvicorn, dbt, ...) resolve directly from $PATH at runtime; no `uv run`
 # wrapping needed in production.

@@ -33,7 +33,7 @@ from api.schemas import Mode
 
 if TYPE_CHECKING:
     from langchain_core.tools import BaseTool
-    from llama_index.core.retrievers import BaseRetriever
+    from llama_index.core import VectorStoreIndex
 
 
 class LineReliabilityQuery(BaseModel):
@@ -62,30 +62,43 @@ class BusPunctualityQuery(BaseModel):
     stop_id: str = Field(min_length=1, max_length=64)
 
 
+DocId = Literal[
+    "business_plan_2026",
+    "mts_delivery_2024_25",
+    "bus_action_plan",
+    "vision_zero",
+    "cycling_action_plan",
+    "travel_in_london_2025",
+]
+
+
 class TflDocSearchQuery(BaseModel):
     """Input schema for ``search_tfl_docs``."""
 
     model_config = ConfigDict(extra="forbid")
 
     query: str = Field(min_length=1, max_length=512)
-    doc_id: Literal["tfl_business_plan", "mts_2018", "tfl_annual_report"] | None = None
+    doc_id: DocId | None = None
     top_k: int = Field(default=5, ge=1, le=20)
 
 
 def make_tools(
     *,
     pool: AsyncConnectionPool,
-    retriever: dict[str, BaseRetriever],
+    retriever: VectorStoreIndex | None = None,
 ) -> list[BaseTool]:
-    """Build the five LangGraph tools bound to a pool + retriever map.
+    """Build the LangGraph tools bound to a pool (+ optional retriever).
 
     Args:
         pool: Shared ``AsyncConnectionPool`` (TM-D2/D3 fetchers reuse it).
-        retriever: Namespace → retriever map from ``build_retriever``.
+        retriever: pgvector index from ``build_retriever``. When ``None``
+            the RAG tool is omitted and only the four SQL tools are
+            exposed, so the agent still serves live operational data.
 
     Returns:
         List of LangChain ``BaseTool`` instances ready for
-        ``create_react_agent``.
+        ``create_react_agent`` — four SQL tools, plus ``search_tfl_docs``
+        when a retriever is supplied.
     """
     from langchain_core.tools import tool  # noqa: PLC0415
 
@@ -148,10 +161,19 @@ def make_tools(
                 return f"No punctuality data for stop {stop_id!r}."
             return result.model_dump(mode="json")
 
+    sql_tools: list[BaseTool] = [
+        query_tube_status,
+        query_line_reliability,
+        query_recent_disruptions,
+        query_bus_punctuality,
+    ]
+    if retriever is None:
+        return sql_tools
+
     @tool(args_schema=TflDocSearchQuery)
     async def search_tfl_docs(
         query: str,
-        doc_id: Literal["tfl_business_plan", "mts_2018", "tfl_annual_report"] | None = None,
+        doc_id: DocId | None = None,
         top_k: int = 5,
     ) -> list[dict[str, Any]]:
         """Return passages from TfL strategy docs ranked by relevance.
@@ -169,10 +191,4 @@ def make_tools(
             snippets = await retrieve(retriever, query=query, doc_id=doc_id, top_k=top_k)
             return [s.model_dump(mode="json") for s in snippets]
 
-    return [
-        query_tube_status,
-        query_line_reliability,
-        query_recent_disruptions,
-        query_bus_punctuality,
-        search_tfl_docs,
-    ]
+    return [*sql_tools, search_tfl_docs]

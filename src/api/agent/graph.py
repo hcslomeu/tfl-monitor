@@ -1,8 +1,9 @@
 """Compile the LangGraph chat agent.
 
-Build the in-process ``create_react_agent`` over Sonnet, the five SQL +
-RAG tools, and the rendered system prompt. The graph is compiled once
-in the FastAPI lifespan and cached on ``app.state.agent``.
+Build the in-process ``create_react_agent`` over the four SQL tools (and
+the pgvector RAG tool when reachable) and the rendered system prompt. The
+graph is compiled once in the FastAPI lifespan and cached on
+``app.state.agent``.
 
 Two LLM backends are supported, selected by environment:
 
@@ -13,9 +14,10 @@ Two LLM backends are supported, selected by environment:
 - **Anthropic direct** (local dev fallback): leave ``BEDROCK_REGION``
   unset and provide ``ANTHROPIC_API_KEY``.
 
-If any of ``OPENAI_API_KEY``, ``PINECONE_API_KEY`` is missing — or
-neither LLM backend is configured — this module returns ``None`` so
-the request handler can respond with an RFC 7807 ``503``.
+When neither LLM backend is configured this module returns ``None`` so
+the request handler can respond with an RFC 7807 ``503``. The RAG tool is
+optional: if the pgvector store cannot be reached the agent still serves
+the SQL tools.
 """
 
 from __future__ import annotations
@@ -23,12 +25,12 @@ from __future__ import annotations
 import os
 from typing import Any
 
+import logfire
 from psycopg_pool import AsyncConnectionPool
 from pydantic import SecretStr
 
 from api.agent.prompts import render
 
-DEFAULT_PINECONE_INDEX = "tfl-strategy-docs"
 DEFAULT_ANTHROPIC_MODEL = "claude-3-5-sonnet-latest"
 DEFAULT_BEDROCK_SONNET_MODEL = "eu.anthropic.claude-sonnet-4-5-20250929-v1:0"
 DEFAULT_MODEL_TIMEOUT_SECONDS = 60.0
@@ -69,12 +71,33 @@ def _build_chat_model() -> Any | None:
     return None
 
 
+def _build_retriever_or_none() -> Any | None:
+    """Build the pgvector RAG retriever, or ``None`` when unavailable.
+
+    Returns ``None`` (so the agent omits ``search_tfl_docs``) when no
+    Postgres DSN is configured. Construction is lazy, so a populated
+    table is not required at compile time — an empty/missing table just
+    yields no snippets at query time.
+    """
+    try:
+        from api.agent.rag import build_retriever  # noqa: PLC0415
+        from rag.config import RagSettings  # noqa: PLC0415
+
+        settings = RagSettings()
+        _ = settings.vector_database_url  # raises when no DSN is configured
+        return build_retriever(settings=settings)
+    except Exception as exc:  # noqa: BLE001 - RAG is optional
+        # Log the exception class only — the message can embed DSN fragments.
+        logfire.info("agent_rag_retriever_unavailable", error_type=type(exc).__name__)
+        return None
+
+
 def compile_agent(
     *,
     pool: AsyncConnectionPool,
     model: Any | None = None,
 ) -> Any | None:
-    """Build the agent or return ``None`` when required config is missing.
+    """Build the agent or return ``None`` when no LLM backend is set.
 
     Args:
         pool: Shared ``AsyncConnectionPool`` reused by every SQL tool.
@@ -82,17 +105,9 @@ def compile_agent(
             so they never hit a live LLM provider.
 
     Returns:
-        Compiled LangGraph agent, or ``None`` when ``OPENAI_API_KEY``
-        or ``PINECONE_API_KEY`` is unset, or when neither
+        Compiled LangGraph agent, or ``None`` when neither
         ``BEDROCK_REGION`` nor ``ANTHROPIC_API_KEY`` is set.
     """
-    openai_key = os.environ.get("OPENAI_API_KEY")
-    pinecone_key = os.environ.get("PINECONE_API_KEY")
-    pinecone_index = os.environ.get("PINECONE_INDEX", DEFAULT_PINECONE_INDEX)
-
-    if not (openai_key and pinecone_key):
-        return None
-
     chat_model: Any = model if model is not None else _build_chat_model()
     if chat_model is None:
         return None
@@ -100,14 +115,9 @@ def compile_agent(
     from langgraph.checkpoint.memory import InMemorySaver  # noqa: PLC0415
     from langgraph.prebuilt import create_react_agent  # noqa: PLC0415
 
-    from api.agent.rag import build_retriever  # noqa: PLC0415
     from api.agent.tools import make_tools  # noqa: PLC0415
 
-    retriever = build_retriever(
-        pinecone_api_key=pinecone_key,
-        openai_api_key=openai_key,
-        index_name=pinecone_index,
-    )
+    retriever = _build_retriever_or_none()
     tools = make_tools(pool=pool, retriever=retriever)
     return create_react_agent(
         model=chat_model,

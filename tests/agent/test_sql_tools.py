@@ -259,10 +259,8 @@ async def test_search_tfl_docs_delegates_to_retrieve(
 ) -> None:
     captured: dict[str, Any] = {}
 
-    async def fake_retrieve(
-        retrievers: dict[str, Any], *, query: str, doc_id: str | None, top_k: int
-    ) -> list[Any]:
-        captured["retrievers"] = retrievers
+    async def fake_retrieve(index: Any, *, query: str, doc_id: str | None, top_k: int) -> list[Any]:
+        captured["index"] = index
         captured["query"] = query
         captured["doc_id"] = doc_id
         captured["top_k"] = top_k
@@ -270,17 +268,17 @@ async def test_search_tfl_docs_delegates_to_retrieve(
 
     monkeypatch.setattr(tools_module, "retrieve", fake_retrieve)
 
-    retriever_map = {"tfl_business_plan": object()}
-    tools = make_tools(pool=object(), retriever=retriever_map)  # type: ignore[arg-type]
+    retriever = object()
+    tools = make_tools(pool=object(), retriever=retriever)  # type: ignore[arg-type]
     docs_tool = next(t for t in tools if t.name == "search_tfl_docs")
     result = await docs_tool.ainvoke(
-        {"query": "Bakerloo extension", "doc_id": "tfl_business_plan", "top_k": 3}
+        {"query": "Bakerloo extension", "doc_id": "business_plan_2026", "top_k": 3}
     )
 
     assert captured == {
-        "retrievers": retriever_map,
+        "index": retriever,
         "query": "Bakerloo extension",
-        "doc_id": "tfl_business_plan",
+        "doc_id": "business_plan_2026",
         "top_k": 3,
     }
     assert result == []

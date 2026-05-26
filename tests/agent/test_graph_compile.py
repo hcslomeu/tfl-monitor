@@ -5,17 +5,12 @@ from __future__ import annotations
 import pytest
 
 from api.agent import graph as graph_module
-from api.agent.graph import compile_agent
+from api.agent.graph import _build_retriever_or_none, compile_agent
 
 from .conftest import FakeChatModel
 
-RETRIEVER_KEYS = ("OPENAI_API_KEY", "PINECONE_API_KEY")
 LLM_KEYS = ("ANTHROPIC_API_KEY", "BEDROCK_REGION")
-
-
-def _set_retriever_keys(monkeypatch: pytest.MonkeyPatch) -> None:
-    for key in RETRIEVER_KEYS:
-        monkeypatch.setenv(key, f"test-{key.lower()}")
+DB_KEYS = ("RAG_DATABASE_URL", "DATABASE_URL")
 
 
 def _clear_llm_keys(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -23,63 +18,67 @@ def _clear_llm_keys(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv(key, raising=False)
 
 
-def test_compile_returns_none_when_openai_missing(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _set_retriever_keys(monkeypatch)
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    assert compile_agent(pool=object(), model=FakeChatModel()) is None  # type: ignore[arg-type]
-
-
-def test_compile_returns_none_when_pinecone_missing(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _set_retriever_keys(monkeypatch)
-    monkeypatch.delenv("PINECONE_API_KEY", raising=False)
-    assert compile_agent(pool=object(), model=FakeChatModel()) is None  # type: ignore[arg-type]
+def _clear_db_keys(monkeypatch: pytest.MonkeyPatch) -> None:
+    for key in DB_KEYS:
+        monkeypatch.delenv(key, raising=False)
 
 
 def test_compile_returns_none_when_no_llm_backend_configured(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """No Bedrock region, no Anthropic key, no injected model → return None."""
-    _set_retriever_keys(monkeypatch)
     _clear_llm_keys(monkeypatch)
     assert compile_agent(pool=object()) is None
 
 
 def test_compile_smoke_invoke_with_fake_model(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Retriever keys set + injected fake model → graph invokes deterministically.
+    """An injected fake model + no DB → SQL-only agent that invokes deterministically.
 
-    The fake model bypasses both backends, so no Bedrock or Anthropic
-    credential needs to be present.
+    With no Postgres DSN configured the retriever is ``None``, so only the
+    four SQL tools are bound. The fake model bypasses both LLM backends.
     """
-    _set_retriever_keys(monkeypatch)
     _clear_llm_keys(monkeypatch)
-
-    def fake_build_retriever(**_kwargs: object) -> dict[str, object]:
-        return {}
-
-    # ``compile_agent`` lazy-imports ``build_retriever`` from
-    # ``api.agent.rag`` so the heavy llama_index / pinecone chain stays
-    # off the API cold-start path. Patch the source attribute so the
-    # ``from … import build_retriever`` inside the function resolves to
-    # the fake.
-    from api.agent import rag as rag_module
-
-    monkeypatch.setattr(rag_module, "build_retriever", fake_build_retriever)
+    _clear_db_keys(monkeypatch)
 
     fake_model = FakeChatModel(response="ack")
     agent = compile_agent(pool=object(), model=fake_model)  # type: ignore[arg-type]
 
     assert agent is not None
-
     out = agent.invoke(
         {"messages": [{"role": "user", "content": "hi"}]},
         config={"configurable": {"thread_id": "t-1"}},
     )
-    last_message = out["messages"][-1]
-    assert last_message.content == "ack"
+    assert out["messages"][-1].content == "ack"
+
+
+def test_build_retriever_none_when_no_db_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No DSN (vector_database_url raises) → retriever is omitted.
+
+    Stubs RagSettings so a local .env DATABASE_URL cannot leak into the
+    assertion (the settings class reads .env on construction).
+    """
+
+    class _NoDsnSettings:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            pass
+
+        @property
+        def vector_database_url(self) -> str:
+            raise ValueError("no dsn configured")
+
+    monkeypatch.setattr("rag.config.RagSettings", _NoDsnSettings)
+    assert _build_retriever_or_none() is None
+
+
+def test_build_retriever_built_when_db_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A DSN + a working build_retriever yields a retriever object."""
+    monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:5432/db")
+    sentinel = object()
+
+    from api.agent import rag as rag_module
+
+    monkeypatch.setattr(rag_module, "build_retriever", lambda **_kwargs: sentinel)
+    assert _build_retriever_or_none() is sentinel
 
 
 def test_build_chat_model_picks_bedrock_when_region_set(
@@ -125,10 +124,6 @@ def test_build_chat_model_falls_back_to_anthropic_when_region_unset(
         captured.update(kwargs)
         return object()
 
-    # ``_build_chat_model`` lazy-imports ``ChatAnthropic`` from
-    # ``langchain_anthropic``. Stub the module in ``sys.modules`` so the
-    # in-function ``from langchain_anthropic import ChatAnthropic`` picks
-    # up the fake (same pattern as the Bedrock test above).
     import sys
     import types
 

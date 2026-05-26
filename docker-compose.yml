@@ -1,6 +1,9 @@
 services:
   postgres:
-    image: postgres:16
+    # pgvector image (postgres:16 + the `vector` extension binaries). The
+    # RAG pgvector store runs CREATE EXTENSION IF NOT EXISTS vector on
+    # first use, which the local superuser role can execute.
+    image: pgvector/pgvector:pg16
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-tflmonitor}
