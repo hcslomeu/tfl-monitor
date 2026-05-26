@@ -49,8 +49,17 @@ class FakeAgent:
 
 
 def _token_chunk(text: str) -> tuple[str, tuple[Any, dict[str, Any]]]:
-    """Build a ``messages``-mode payload yielding a token frame."""
-    return ("messages", (SimpleNamespace(content=text), {}))
+    """Build a ``messages``-mode payload yielding a token frame.
+
+    ``type="ai"`` marks it as an assistant chunk; only those become
+    token frames (tool-result chunks are skipped).
+    """
+    return ("messages", (SimpleNamespace(content=text, type="ai"), {}))
+
+
+def _tool_message_chunk(content: str) -> tuple[str, tuple[Any, dict[str, Any]]]:
+    """Build a ``messages``-mode ToolMessage chunk (raw tool result)."""
+    return ("messages", (SimpleNamespace(content=content, type="tool"), {}))
 
 
 def _tool_event(tool_name: str) -> tuple[str, dict[str, Any]]:
@@ -147,6 +156,39 @@ def test_chat_stream_emits_tool_frame(
     # Only token content lands in the persisted assistant turn.
     assistant_insert = pool.conn.executed[1]
     assert assistant_insert[1]["content"] == "Looking up the data..."
+
+
+def test_chat_stream_skips_tool_message_content(
+    fake_pool_factory: Callable[..., Any],
+    attach_pool: Callable[[Any], None],
+    attach_agent: Callable[[Any], None],
+) -> None:
+    """ToolMessage chunks (raw tool-result JSON) must not leak as tokens."""
+    pool = fake_pool_factory([], [])
+    attach_pool(pool)
+    agent = FakeAgent(
+        frames=[
+            _tool_message_chunk('[{"line_id": "piccadilly", "status": "Severe Delays"}]'),
+            _token_chunk("Piccadilly has severe delays."),
+        ]
+    )
+    attach_agent(agent)
+
+    client = TestClient(app)
+    response = client.post(
+        "/api/v1/chat/stream",
+        json={"thread_id": "t-toolmsg", "message": "delays?"},
+    )
+
+    assert response.status_code == 200
+    frames = _parse_sse(response.text)
+    # The tool-result JSON is absent; only the assistant token + end remain.
+    assert frames == [
+        {"type": "token", "content": "Piccadilly has severe delays."},
+        {"type": "end", "content": ""},
+    ]
+    assistant_insert = pool.conn.executed[1]
+    assert assistant_insert[1]["content"] == "Piccadilly has severe delays."
 
 
 def test_chat_stream_503_when_agent_missing(
