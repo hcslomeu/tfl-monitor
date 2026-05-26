@@ -40,7 +40,12 @@ def project(mode: str, payload: Any) -> list[dict[str, str]]:
         # result, e.g. the query_tube_status JSON) — those must never leak
         # into the chat bubble. The tool call itself is surfaced via the
         # "updates" tool frame instead.
-        if getattr(chunk, "type", None) != "ai":
+        #
+        # Streaming emits ``AIMessageChunk`` (``.type == "AIMessageChunk"``),
+        # NOT the full ``AIMessage`` (``.type == "ai"``); a bare ``== "ai"``
+        # check drops every streamed assistant token and the bubble renders
+        # empty. Accept both; ``ToolMessage`` (``"tool"``) stays excluded.
+        if getattr(chunk, "type", None) not in ("ai", "AIMessageChunk"):
             return []
         text = _extract_text(getattr(chunk, "content", None))
         f = frame_token(text)
