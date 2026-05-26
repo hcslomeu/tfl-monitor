@@ -32,7 +32,6 @@ dev = [
     "bandit>=1.7",
     "openapi-spec-validator>=0.7",
     "taskipy>=1.14",
-    "apache-airflow>=2.10,<3.0",
     {include-group = "dbt"},
     {include-group = "rag"},
 ]
@@ -45,6 +44,9 @@ rag = [
     "llama-index-vector-stores-postgres>=0.4",
     "pgvector>=0.3",
     "docling>=2.0",
+    # PGVectorStore's ORM delete path needs SQLAlchemy 2.0; the 0.8.x
+    # metadata only declares >=1.4, so pin the real runtime floor here.
+    "sqlalchemy>=2.0",
 ]
 docs = [
     "mkdocs>=1.6",
@@ -126,18 +128,12 @@ module = [
 ignore_missing_imports = true
 follow_untyped_imports = true
 
-[[tool.mypy.overrides]]
-module = ["airflow", "airflow.*"]
-ignore_missing_imports = true
-follow_untyped_imports = true
-
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 asyncio_mode = "auto"
-addopts = "-m 'not integration and not airflow'"
+addopts = "-m 'not integration'"
 markers = [
     "integration: requires live services (Postgres, Kafka, etc.); opt in with -m integration",
-    "airflow: requires apache-airflow installed; opt in with -m airflow",
     "slow: spends real LLM / RAG budget; opt in with -m 'integration and slow'",
 ]
 

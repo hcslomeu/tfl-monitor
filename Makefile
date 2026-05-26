@@ -1,4 +1,4 @@
-.PHONY: help bootstrap up down clean check seed openapi-ts sync-dbt-sources consume-line-status consume-arrivals consume-disruptions airflow-test
+.PHONY: help bootstrap up down clean check seed openapi-ts sync-dbt-sources consume-line-status consume-arrivals consume-disruptions
 
 help:
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -11,7 +11,7 @@ bootstrap: ## Install Python + Node deps; create .env
 	@test -f .env || cp .env.example .env
 	@echo "Bootstrap complete. Edit .env and run 'make up'."
 
-up: ## Start Docker Compose (Postgres, Redpanda, Airflow, MinIO)
+up: ## Start Docker Compose (Postgres, Redpanda, MinIO)
 	docker compose up -d
 	@echo "Waiting for healthchecks..."
 	@docker compose ps
@@ -48,6 +48,3 @@ consume-arrivals: ## Run arrivals consumer locally (host-side, against Compose R
 
 consume-disruptions: ## Run disruptions consumer locally (host-side, against Compose Redpanda + Postgres)
 	uv run task consume-disruptions
-
-airflow-test: ## Run airflow DAG-parse tests (requires apache-airflow installed)
-	uv run pytest -m airflow tests/airflow -v

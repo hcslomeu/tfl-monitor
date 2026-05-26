@@ -11,7 +11,6 @@ tests/
 ├─ test_contracts.py      # contracts/ drift + invariants
 ├─ test_health.py         # /health smoke
 ├─ agent/                 # Legacy agent observability (used by fixtures)
-├─ airflow/               # Hermetic DAG-parse tests (marker: airflow)
 ├─ api/                   # Route handlers + OpenAPI drift + chat
 ├─ ingestion/             # tfl_client / producers / consumers
 ├─ rag/                   # fetch / parse / embed / upsert / ingest
@@ -25,15 +24,14 @@ tests/
 ```toml
 markers = [
     "integration: requires live services (Postgres, Kafka, etc.); opt in with -m integration",
-    "airflow:     requires apache-airflow installed; opt in with -m airflow",
     "slow:        spends real LLM / RAG budget; opt in with -m 'integration and slow'",
 ]
 ```
 
-Default invocation **excludes** `integration` and `airflow`:
+Default invocation **excludes** `integration`:
 
 ```toml
-addopts = "-m 'not integration and not airflow'"
+addopts = "-m 'not integration'"
 ```
 
 ## Running
@@ -41,7 +39,6 @@ addopts = "-m 'not integration and not airflow'"
 ```bash
 uv run task test                              # default — fast unit suite
 uv run pytest -m integration                  # external-deps smokes
-uv run pytest -m airflow tests/airflow -v     # DAG parse
 uv run pytest -m 'integration and slow'       # spends LLM budget
 ```
 
@@ -53,9 +50,8 @@ CI runs the default suite + frontend Vitest in parallel jobs.
 |-------|------|-------------|-------|
 | `api/` | ~50 | 14 | OpenAPI drift, all 6 endpoints, SSE chat, history |
 | `ingestion/` | ~70 | 4 | Per-topic producer + consumer, retry, redaction |
-| `rag/` | 28 | 0 | Fakes for httpx / Docling / OpenAI / Pinecone |
+| `rag/` | 28 | 0 | Fakes for httpx / Docling / Bedrock / pgvector |
 | `agent/` | (covered via `api/agent/`) | 3 | History round-trip + chat-stream + history-after-stream |
-| `airflow/` | 4 | 0 | DAG-parse hermetic |
 | `test_contracts.py` | parametrised | 0 | Pydantic-vs-DDL invariants |
 
 ## Fixtures
