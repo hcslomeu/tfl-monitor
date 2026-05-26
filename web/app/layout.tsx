@@ -61,10 +61,10 @@ const geist = Geist({
 	display: "swap",
 });
 
-const SITE_URL = "https://tfl-monitor.humbertolomeu.com";
+const SITE_URL = "https://tfl-monitor.humbertolomeu.com/";
 const SITE_TITLE = "TfL Monitor — London transport at a glance";
 const SITE_DESCRIPTION =
-	"Real-time London transport status dashboard — Tube, Overground, DLR, Elizabeth line, buses, and disruptions.";
+	"Ask before you travel. The agent checks live disruptions, closures and your best line across Tube, Overground, DLR & Elizabeth line.";
 
 export const viewport: Viewport = {
 	width: "device-width",
@@ -76,6 +76,9 @@ export const metadata: Metadata = {
 	metadataBase: new URL(SITE_URL),
 	title: SITE_TITLE,
 	description: SITE_DESCRIPTION,
+	alternates: {
+		canonical: SITE_URL,
+	},
 	icons: {
 		icon: [
 			{ url: "/favicon.svg", type: "image/svg+xml" },
