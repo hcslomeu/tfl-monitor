@@ -9,8 +9,7 @@ only required runtime input is a Postgres connection string.
 
 from __future__ import annotations
 
-import sys
-
+import logfire
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -68,5 +67,5 @@ def load_settings() -> RagSettings:
     try:
         return RagSettings()
     except Exception as exc:  # noqa: BLE001 - boundary
-        sys.stderr.write(f"RAG settings missing or invalid: {exc!s}\n")
+        logfire.error("rag_settings_invalid", error=str(exc))
         raise SystemExit(2) from None

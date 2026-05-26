@@ -59,7 +59,7 @@ def _chunk_to_node(chunk: Chunk, *, doc_id: str) -> Any:
     return node
 
 
-def upsert_chunks(
+async def upsert_chunks(
     *,
     vector_store: BasePydanticVectorStore,
     embed_model: BaseEmbedding,
@@ -83,9 +83,13 @@ def upsert_chunks(
     chunk_list = list(chunks)
     # Embed BEFORE deleting: if embedding raises, the existing rows stay
     # intact instead of leaving the document empty until the next success.
+    # ``aget_text_embedding_batch`` fans the per-chunk Titan calls out
+    # concurrently, so hundreds of chunks don't serialise into a long stall.
     nodes = [_chunk_to_node(chunk, doc_id=doc_id) for chunk in chunk_list]
     if nodes:
-        embeddings = embed_model.get_text_embedding_batch([chunk.text for chunk in chunk_list])
+        embeddings = await embed_model.aget_text_embedding_batch(
+            [chunk.text for chunk in chunk_list]
+        )
         for node, embedding in zip(nodes, embeddings, strict=True):
             node.embedding = embedding
 

@@ -29,7 +29,9 @@ class _FakeVectorStore:
 
 
 class _FakeEmbedding:
-    def get_text_embedding_batch(self, texts: list[str], **_kwargs: Any) -> list[list[float]]:
+    async def aget_text_embedding_batch(
+        self, texts: list[str], **_kwargs: Any
+    ) -> list[list[float]]:
         return [[float(i)] * 4 for i, _ in enumerate(texts)]
 
 
@@ -58,9 +60,9 @@ def test_vector_id_is_stable() -> None:
     assert len(a) == 64
 
 
-def test_upsert_chunks_deletes_doc_when_delete_first() -> None:
+async def test_upsert_chunks_deletes_doc_when_delete_first() -> None:
     store = _FakeVectorStore()
-    upserted = upsert_chunks(
+    upserted = await upsert_chunks(
         vector_store=store,
         embed_model=_FakeEmbedding(),
         chunks=_build_chunks(3),
@@ -71,9 +73,9 @@ def test_upsert_chunks_deletes_doc_when_delete_first() -> None:
     assert store.deleted == ["doc"]
 
 
-def test_upsert_chunks_skips_delete_when_not_first() -> None:
+async def test_upsert_chunks_skips_delete_when_not_first() -> None:
     store = _FakeVectorStore()
-    upsert_chunks(
+    await upsert_chunks(
         vector_store=store,
         embed_model=_FakeEmbedding(),
         chunks=_build_chunks(3),
@@ -83,7 +85,7 @@ def test_upsert_chunks_skips_delete_when_not_first() -> None:
     assert store.deleted == []
 
 
-def test_upsert_chunks_node_shape() -> None:
+async def test_upsert_chunks_node_shape() -> None:
     store = _FakeVectorStore()
     chunk = Chunk(
         doc_id="doc",
@@ -95,7 +97,7 @@ def test_upsert_chunks_node_shape() -> None:
         page_end=None,
         text="hello",
     )
-    upsert_chunks(
+    await upsert_chunks(
         vector_store=store,
         embed_model=_FakeEmbedding(),
         chunks=[chunk],
@@ -116,10 +118,10 @@ def test_upsert_chunks_node_shape() -> None:
     assert md["page_end"] == PAGE_UNKNOWN_SENTINEL
 
 
-def test_upsert_chunks_batches_at_100() -> None:
+async def test_upsert_chunks_batches_at_100() -> None:
     store = _FakeVectorStore()
     n = UPSERT_BATCH_SIZE * 2 + 50
-    upserted = upsert_chunks(
+    upserted = await upsert_chunks(
         vector_store=store,
         embed_model=_FakeEmbedding(),
         chunks=_build_chunks(n),
@@ -130,9 +132,9 @@ def test_upsert_chunks_batches_at_100() -> None:
     assert [len(batch) for batch in store.added] == [100, 100, 50]
 
 
-def test_upsert_chunks_empty_after_delete() -> None:
+async def test_upsert_chunks_empty_after_delete() -> None:
     store = _FakeVectorStore()
-    upserted = upsert_chunks(
+    upserted = await upsert_chunks(
         vector_store=store,
         embed_model=_FakeEmbedding(),
         chunks=[],

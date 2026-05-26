@@ -171,7 +171,7 @@ async def _ingest_one(
                 chunks=len(chunks),
             )
             return 0
-        return upsert_chunks(
+        return await upsert_chunks(
             vector_store=vector_store,
             embed_model=embed_model,
             chunks=chunks,
