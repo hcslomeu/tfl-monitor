@@ -51,8 +51,15 @@ class TitanEmbedding(BaseEmbedding):
     def client(self) -> Any:
         if self._client is None:
             import boto3  # noqa: PLC0415
+            from botocore.config import Config  # noqa: PLC0415
 
-            self._client = boto3.client("bedrock-runtime", region_name=self.region)
+            # Adaptive retries absorb Bedrock throttling during bulk ingest,
+            # where Titan is called once per chunk in a tight loop.
+            self._client = boto3.client(
+                "bedrock-runtime",
+                region_name=self.region,
+                config=Config(retries={"max_attempts": 5, "mode": "adaptive"}),
+            )
         return self._client
 
     def _embed(self, text: str) -> list[float]:

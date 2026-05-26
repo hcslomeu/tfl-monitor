@@ -106,13 +106,14 @@ def make_node(
 ) -> FakeNode:
     """Build a ``FakeNode`` with the metadata layout written at upsert."""
     return FakeNode(
+        # Real pgvector nodes carry text on the node, not in metadata; the
+        # snippet adapter falls back to node.text, so don't duplicate it here.
         metadata={
             "doc_id": doc_id,
             "doc_title": doc_title,
             "section_title": section_title,
             "page_start": -1 if page_start is None else page_start,
             "page_end": -1 if page_end is None else page_end,
-            "text": text,
             "resolved_url": resolved_url,
         },
         text=text,

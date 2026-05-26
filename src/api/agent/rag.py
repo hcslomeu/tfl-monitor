@@ -104,7 +104,8 @@ async def retrieve(
         retriever = index.as_retriever(similarity_top_k=top_k, filters=filters)
         nodes = await retriever.aretrieve(query)
     except Exception as exc:  # noqa: BLE001 - retrieval must not crash the agent
-        logfire.warning("agent.rag.retrieve_failed", doc_id=doc_id, error=str(exc))
+        # Log the exception class only — the message can embed DSN/payload data.
+        logfire.warning("agent.rag.retrieve_failed", doc_id=doc_id, error_type=type(exc).__name__)
         return []
 
     snippets = [_to_snippet(node) for node in nodes]

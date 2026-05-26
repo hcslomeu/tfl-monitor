@@ -87,7 +87,8 @@ def _build_retriever_or_none() -> Any | None:
         _ = settings.vector_database_url  # raises when no DSN is configured
         return build_retriever(settings=settings)
     except Exception as exc:  # noqa: BLE001 - RAG is optional
-        logfire.info("agent_rag_retriever_unavailable", error=str(exc))
+        # Log the exception class only — the message can embed DSN fragments.
+        logfire.info("agent_rag_retriever_unavailable", error_type=type(exc).__name__)
         return None
 
 

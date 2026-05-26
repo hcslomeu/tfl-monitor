@@ -42,14 +42,20 @@ class RagSettings(BaseSettings):
     def vector_database_url(self) -> str:
         """Return the DSN used for the pgvector store.
 
+        An empty ``RAG_DATABASE_URL`` falls back to ``DATABASE_URL``:
+        ``SecretStr("")`` is truthy, so the empty value is unwrapped and
+        treated as unset rather than short-circuiting the fallback.
+
         Raises:
             ValueError: When neither ``RAG_DATABASE_URL`` nor
-                ``DATABASE_URL`` is configured.
+                ``DATABASE_URL`` resolves to a non-empty DSN.
         """
-        url = self.rag_database_url or self.database_url
-        if url is None:
+        rag = self.rag_database_url.get_secret_value() if self.rag_database_url is not None else ""
+        db = self.database_url.get_secret_value() if self.database_url is not None else ""
+        url = rag or db
+        if not url:
             raise ValueError("Neither RAG_DATABASE_URL nor DATABASE_URL is set")
-        return url.get_secret_value()
+        return url
 
 
 def load_settings() -> RagSettings:

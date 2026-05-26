@@ -9,7 +9,8 @@ CLI flags:
   and rewrites ``src/rag/sources.json``.
 - ``--force-refetch`` ignores cached ``ETag`` / ``Last-Modified`` and
   re-downloads unconditionally.
-- ``--dry-run`` runs everything except the pgvector upsert.
+- ``--dry-run`` fetches and parses but skips embedding and the
+  pgvector upsert.
 
 Embeddings use Bedrock Titan v2 and vectors land in pgvector; both read
 AWS credentials and the Postgres DSN from the environment, so the

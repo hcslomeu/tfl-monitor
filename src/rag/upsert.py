@@ -41,7 +41,9 @@ def _chunk_to_node(chunk: Chunk, *, doc_id: str) -> Any:
         id_=vector_id(chunk.resolved_url, chunk.chunk_index),
         text=chunk.text,
         metadata={
-            "doc_id": chunk.doc_id,
+            # Keyed on the doc_id argument (the deletion key), not
+            # chunk.doc_id, so metadata and delete() can never diverge.
+            "doc_id": doc_id,
             "doc_title": chunk.doc_title,
             "resolved_url": chunk.resolved_url,
             "chunk_index": chunk.chunk_index,
@@ -79,16 +81,17 @@ def upsert_chunks(
         Number of chunks upserted.
     """
     chunk_list = list(chunks)
+    # Embed BEFORE deleting: if embedding raises, the existing rows stay
+    # intact instead of leaving the document empty until the next success.
+    nodes = [_chunk_to_node(chunk, doc_id=doc_id) for chunk in chunk_list]
+    if nodes:
+        embeddings = embed_model.get_text_embedding_batch([chunk.text for chunk in chunk_list])
+        for node, embedding in zip(nodes, embeddings, strict=True):
+            node.embedding = embedding
+
     if delete_first:
         with logfire.span("rag.upsert.delete_doc", doc_id=doc_id):
             vector_store.delete(ref_doc_id=doc_id)
-    if not chunk_list:
-        return 0
-
-    nodes = [_chunk_to_node(chunk, doc_id=doc_id) for chunk in chunk_list]
-    embeddings = embed_model.get_text_embedding_batch([chunk.text for chunk in chunk_list])
-    for node, embedding in zip(nodes, embeddings, strict=True):
-        node.embedding = embedding
 
     for start in range(0, len(nodes), UPSERT_BATCH_SIZE):
         batch = nodes[start : start + UPSERT_BATCH_SIZE]
