@@ -67,5 +67,6 @@ def load_settings() -> RagSettings:
     try:
         return RagSettings()
     except Exception as exc:  # noqa: BLE001 - boundary
-        logfire.error("rag_settings_invalid", error=str(exc))
+        # Log the exception class only — validation messages can embed DSN content.
+        logfire.error("rag_settings_invalid", error_type=type(exc).__name__)
         raise SystemExit(2) from None
