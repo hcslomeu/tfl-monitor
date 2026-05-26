@@ -51,10 +51,12 @@ class FakeAgent:
 def _token_chunk(text: str) -> tuple[str, tuple[Any, dict[str, Any]]]:
     """Build a ``messages``-mode payload yielding a token frame.
 
-    ``type="ai"`` marks it as an assistant chunk; only those become
-    token frames (tool-result chunks are skipped).
+    ``type="AIMessageChunk"`` mirrors what LangGraph's ``messages`` stream
+    actually emits for assistant tokens (the streamed chunk type, NOT the
+    full ``AIMessage`` whose type is ``"ai"``). Only assistant chunks
+    become token frames; tool-result chunks are skipped.
     """
-    return ("messages", (SimpleNamespace(content=text, type="ai"), {}))
+    return ("messages", (SimpleNamespace(content=text, type="AIMessageChunk"), {}))
 
 
 def _tool_message_chunk(content: str) -> tuple[str, tuple[Any, dict[str, Any]]]:

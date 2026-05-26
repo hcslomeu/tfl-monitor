@@ -83,9 +83,20 @@ def parse_pdf(
 
 
 def _default_converter() -> _DoclingConverter:
-    from docling.document_converter import DocumentConverter
+    from docling.datamodel.base_models import InputFormat
+    from docling.datamodel.pipeline_options import PdfPipelineOptions
+    from docling.document_converter import DocumentConverter, PdfFormatOption
 
-    return cast(_DoclingConverter, DocumentConverter())
+    # The TfL corpus is born-digital ("-acc.pdf" accessible exports), so OCR
+    # adds no text but pulls the heavy RapidOCR model download and makes the
+    # CPU parse far slower. Disable it; layout-based text extraction suffices.
+    pipeline_options = PdfPipelineOptions(do_ocr=False)
+    return cast(
+        _DoclingConverter,
+        DocumentConverter(
+            format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)}
+        ),
+    )
 
 
 def _default_chunker() -> _DoclingChunker:
