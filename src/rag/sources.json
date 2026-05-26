@@ -1,23 +1,44 @@
 [
   {
-    "name": "TfL Business Plan",
-    "doc_id": "tfl_business_plan",
-    "landing_url": "https://tfl.gov.uk/corporate/publications-and-reports/business-plan",
+    "name": "TfL Bus Action Plan",
+    "doc_id": "bus_action_plan",
+    "landing_url": "https://content.tfl.gov.uk/bus-action-plan.pdf",
+    "discovery_regex": "bus-action-plan.*\\.pdf$",
+    "resolved_url": "https://content.tfl.gov.uk/bus-action-plan.pdf"
+  },
+  {
+    "name": "TfL Business Plan 2026",
+    "doc_id": "business_plan_2026",
+    "landing_url": "https://content.tfl.gov.uk/2026-business-plan-acc.pdf",
     "discovery_regex": "business-plan.*\\.pdf$",
     "resolved_url": "https://content.tfl.gov.uk/2026-business-plan-acc.pdf"
   },
   {
-    "name": "Mayor's Transport Strategy",
-    "doc_id": "mts_2018",
-    "landing_url": "https://www.london.gov.uk/programmes-strategies/transport/our-vision-transport/mayors-transport-strategy-2018",
-    "discovery_regex": "mayors-transport-strategy-2018.*\\.pdf$",
-    "resolved_url": "https://www.london.gov.uk/sites/default/files/mayors-transport-strategy-2018.pdf"
+    "name": "Cycling Action Plan",
+    "doc_id": "cycling_action_plan",
+    "landing_url": "https://content.tfl.gov.uk/cycling-action-plan.pdf",
+    "discovery_regex": "cycling-action-plan.*\\.pdf$",
+    "resolved_url": "https://content.tfl.gov.uk/cycling-action-plan.pdf"
   },
   {
-    "name": "TfL Annual Report",
-    "doc_id": "tfl_annual_report",
-    "landing_url": "https://tfl.gov.uk/corporate/publications-and-reports/annual-report",
-    "discovery_regex": "annual-report-and-statement-of-accounts.*\\.pdf$",
-    "resolved_url": "https://content.tfl.gov.uk/tfl-annual-report-and-statement-of-accounts-2024-25.pdf"
+    "name": "Delivering the Mayor's Transport Strategy 2024-25",
+    "doc_id": "mts_delivery_2024_25",
+    "landing_url": "https://content.tfl.gov.uk/delivering-the-mayors-transport-strategy-2024-25-acc.pdf",
+    "discovery_regex": "delivering-the-mayors-transport-strategy.*\\.pdf$",
+    "resolved_url": "https://content.tfl.gov.uk/delivering-the-mayors-transport-strategy-2024-25-acc.pdf"
+  },
+  {
+    "name": "Travel in London 2025",
+    "doc_id": "travel_in_london_2025",
+    "landing_url": "https://content.tfl.gov.uk/travel-in-london-2025-consolidated-estimates-of-total-travel-and-mode-shares-acc.pdf",
+    "discovery_regex": "travel-in-london-2025.*\\.pdf$",
+    "resolved_url": "https://content.tfl.gov.uk/travel-in-london-2025-consolidated-estimates-of-total-travel-and-mode-shares-acc.pdf"
+  },
+  {
+    "name": "Vision Zero Action Plan",
+    "doc_id": "vision_zero",
+    "landing_url": "https://content.tfl.gov.uk/vision-zero-action-plan.pdf",
+    "discovery_regex": "vision-zero-action-plan.*\\.pdf$",
+    "resolved_url": "https://content.tfl.gov.uk/vision-zero-action-plan.pdf"
   }
 ]

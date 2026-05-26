@@ -1,25 +1,35 @@
-"""LlamaIndex retrieval over the Pinecone tfl-strategy-docs index.
+"""LlamaIndex retrieval over the pgvector tfl-strategy-docs table.
 
-One retriever per ``doc_id`` namespace. ``retrieve`` fans out across
-all namespaces when no ``doc_id`` is supplied; otherwise it queries a
-single namespace. Page sentinel ``-1`` (TM-D4 upsert convention) maps
-to ``None`` so the LLM never sees a sentinel page number.
+A single ``VectorStoreIndex`` backs every query; ``doc_id`` becomes a
+metadata filter rather than a Pinecone namespace, so targeting one
+document is just an extra ``WHERE`` clause. Page sentinel ``-1`` maps to
+``None`` so the LLM never sees a sentinel page number.
 """
 
 from __future__ import annotations
 
-import asyncio
 from typing import TYPE_CHECKING, Any
 
 import logfire
 from pydantic import BaseModel, ConfigDict
 
+from rag.config import RagSettings
 from rag.upsert import PAGE_UNKNOWN_SENTINEL
+from rag.vectorstore import build_embedding, build_vector_store
 
 if TYPE_CHECKING:
-    from llama_index.core.retrievers import BaseRetriever
+    from llama_index.core import VectorStoreIndex
 
-NAMESPACES: tuple[str, ...] = ("tfl_business_plan", "mts_2018", "tfl_annual_report")
+# Canonical corpus doc_ids (one TfL strategy PDF each). Used to type the
+# agent tool's optional doc_id argument.
+DOC_IDS: tuple[str, ...] = (
+    "business_plan_2026",
+    "mts_delivery_2024_25",
+    "bus_action_plan",
+    "vision_zero",
+    "cycling_action_plan",
+    "travel_in_london_2025",
+)
 DEFAULT_TOP_K = 5
 
 
@@ -38,91 +48,74 @@ class TflDocSnippet(BaseModel):
     resolved_url: str
 
 
-def build_retriever(
-    *,
-    pinecone_api_key: str,
-    openai_api_key: str,
-    index_name: str,
-) -> dict[str, BaseRetriever]:
-    """Build one LlamaIndex retriever per Pinecone namespace.
+def build_retriever(*, settings: RagSettings) -> VectorStoreIndex:
+    """Build the pgvector-backed LlamaIndex over the strategy corpus.
+
+    The index is lazy: it does not connect to Postgres until the first
+    query, so construction succeeds even before the table is populated.
 
     Args:
-        pinecone_api_key: Pinecone API key.
-        openai_api_key: OpenAI API key (for the embedding model).
-        index_name: Pinecone index name (e.g. ``"tfl-strategy-docs"``).
+        settings: RAG settings (pgvector DSN + Bedrock embedding config).
 
     Returns:
-        Dict mapping namespace (``doc_id``) to its retriever.
+        A ``VectorStoreIndex`` ready for ``as_retriever``.
     """
     from llama_index.core import VectorStoreIndex  # noqa: PLC0415
-    from llama_index.embeddings.openai import OpenAIEmbedding  # noqa: PLC0415
-    from llama_index.vector_stores.pinecone import PineconeVectorStore  # noqa: PLC0415
-    from pinecone import Pinecone  # noqa: PLC0415
 
-    pc = Pinecone(api_key=pinecone_api_key)
-    pinecone_index = pc.Index(index_name)
-    embed_model = OpenAIEmbedding(
-        model="text-embedding-3-small",
-        api_key=openai_api_key,
-    )
-    return {
-        ns: VectorStoreIndex.from_vector_store(
-            PineconeVectorStore(pinecone_index=pinecone_index, namespace=ns),
-            embed_model=embed_model,
-        ).as_retriever(similarity_top_k=DEFAULT_TOP_K)
-        for ns in NAMESPACES
-    }
+    vector_store = build_vector_store(settings)
+    embed_model = build_embedding(settings)
+    return VectorStoreIndex.from_vector_store(vector_store, embed_model=embed_model)
 
 
 async def retrieve(
-    retrievers: dict[str, BaseRetriever],
+    index: VectorStoreIndex,
     *,
     query: str,
     doc_id: str | None,
     top_k: int,
 ) -> list[TflDocSnippet]:
-    """Retrieve top-``k`` snippets, fanning out across namespaces if needed.
+    """Retrieve top-``k`` snippets, optionally scoped to one ``doc_id``.
 
     Args:
-        retrievers: Namespace → retriever map from ``build_retriever``.
+        index: Index from :func:`build_retriever`.
         query: Natural-language search query.
-        doc_id: Restrict search to one namespace. ``None`` fans out
-            across every namespace in ``retrievers``.
+        doc_id: Restrict search to one document via a metadata filter.
+            ``None`` searches the whole corpus.
         top_k: Maximum number of snippets to return.
 
     Returns:
-        Snippets sorted by score descending and capped at ``top_k``.
+        Snippets sorted by score descending; an empty list when the
+        store is unreachable (graceful degradation — the agent can still
+        answer from the SQL tools).
     """
-    targets = [doc_id] if doc_id is not None else list(retrievers.keys())
-    selected = [ns for ns in targets if ns in retrievers]
-    coros = [_one(retrievers[ns], query) for ns in selected]
-    results = await asyncio.gather(*coros, return_exceptions=True)
-    flat: list[TflDocSnippet] = []
-    for ns, result in zip(selected, results, strict=False):
-        if isinstance(result, BaseException):
-            # Partial-failure: a single namespace error must not collapse
-            # the whole tool response. Other namespaces may still answer.
-            logfire.warning(
-                "agent.rag.namespace_failed",
-                namespace=ns,
-                error=str(result),
-            )
-            continue
-        flat.extend(result)
-    flat.sort(key=lambda h: h.score, reverse=True)
-    return flat[:top_k]
+    filters = None
+    if doc_id is not None:
+        from llama_index.core.vector_stores import (  # noqa: PLC0415
+            FilterOperator,
+            MetadataFilter,
+            MetadataFilters,
+        )
 
+        filters = MetadataFilters(
+            filters=[MetadataFilter(key="doc_id", value=doc_id, operator=FilterOperator.EQ)]
+        )
 
-async def _one(retriever: BaseRetriever, query: str) -> list[TflDocSnippet]:
-    nodes = await retriever.aretrieve(query)
-    return [_to_snippet(node) for node in nodes]
+    try:
+        retriever = index.as_retriever(similarity_top_k=top_k, filters=filters)
+        nodes = await retriever.aretrieve(query)
+    except Exception as exc:  # noqa: BLE001 - retrieval must not crash the agent
+        logfire.warning("agent.rag.retrieve_failed", doc_id=doc_id, error=str(exc))
+        return []
+
+    snippets = [_to_snippet(node) for node in nodes]
+    snippets.sort(key=lambda hit: hit.score, reverse=True)
+    return snippets[:top_k]
 
 
 def _normalise_page(value: Any) -> int | None:
-    """Map the TM-D4 ``-1`` page sentinel (and ``None``) to ``None``.
+    """Map the ``-1`` page sentinel (and ``None``) to ``None``.
 
-    Non-numeric metadata (e.g. a stray string from a future Pinecone
-    schema drift) coerces to ``None`` rather than raising.
+    Non-numeric metadata coerces to ``None`` rather than raising.
     """
     if value is None or value == PAGE_UNKNOWN_SENTINEL:
         return None
@@ -133,19 +126,12 @@ def _normalise_page(value: Any) -> int | None:
 
 
 def _to_snippet(node: Any) -> TflDocSnippet:
-    """Coerce a LlamaIndex ``NodeWithScore`` into ``TflDocSnippet``.
-
-    Reads metadata laid down by ``rag.upsert.upsert_chunks``; maps the
-    page sentinel back to ``None``.
-    """
+    """Coerce a LlamaIndex ``NodeWithScore`` into ``TflDocSnippet``."""
     meta_source = getattr(node, "metadata", None)
     if not meta_source:
         inner = getattr(node, "node", None)
         meta_source = getattr(inner, "metadata", None) if inner is not None else None
     meta: dict[str, Any] = dict(meta_source or {})
-
-    page_start = meta.get("page_start")
-    page_end = meta.get("page_end")
 
     text = meta.get("text") or getattr(node, "text", None)
     if not text:
@@ -159,8 +145,8 @@ def _to_snippet(node: Any) -> TflDocSnippet:
         doc_id=str(meta.get("doc_id") or ""),
         doc_title=str(meta.get("doc_title") or ""),
         section_title=str(meta.get("section_title") or ""),
-        page_start=_normalise_page(page_start),
-        page_end=_normalise_page(page_end),
+        page_start=_normalise_page(meta.get("page_start")),
+        page_end=_normalise_page(meta.get("page_end")),
         text=str(text or ""),
         score=score,
         resolved_url=str(meta.get("resolved_url") or ""),

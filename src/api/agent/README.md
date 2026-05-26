@@ -1,17 +1,18 @@
 # src/api/agent/
 
-The LangGraph agent — `create_react_agent` over five typed tools, a Pydantic
-AI Haiku normaliser for `LineId`, an SSE projection for streaming, and a
-history adapter that persists chat turns into `analytics.chat_messages`.
+The LangGraph agent — `create_react_agent` over four SQL tools (plus the
+pgvector RAG tool when reachable), a Pydantic AI Haiku normaliser for
+`LineId`, an SSE projection for streaming, and a history adapter that
+persists chat turns into `analytics.chat_messages`.
 
 ## Layout
 
 ```text
 src/api/agent/
 ├─ __init__.py
-├─ graph.py          # compile_agent() — returns None if any 3 keys missing
-├─ tools.py          # 4 SQL tools (wraps src/api/db.py fetchers)
-├─ rag.py            # 1 RAG tool — LlamaIndex retriever over Pinecone
+├─ graph.py          # compile_agent() — None when no LLM backend; RAG optional
+├─ tools.py          # 4 SQL tools (+ search_tfl_docs when a retriever is given)
+├─ rag.py            # RAG tool — LlamaIndex retriever over pgvector
 ├─ extraction.py     # Pydantic AI Haiku → LineId
 ├─ prompts.py        # System prompt + tool instructions
 ├─ streaming.py      # LangGraph stream → SSE Frame projector
@@ -21,24 +22,21 @@ src/api/agent/
 ## Compilation
 
 ```python
-def compile_agent() -> CompiledGraph | None:
-    if not (anthropic_key and openai_key and pinecone_key):
+def compile_agent(*, pool) -> CompiledGraph | None:
+    chat_model = _build_chat_model()      # Bedrock Sonnet, else Anthropic; None if neither
+    if chat_model is None:
         return None
-    model = _build_chat_model()           # Sonnet, temperature=0
-    tools = [
-        query_tube_status,                # → /status/live fetcher
-        query_line_reliability,           # → /reliability fetcher (with LineId normaliser)
-        query_recent_disruptions,         # → /disruptions/recent fetcher
-        query_bus_punctuality,            # → bus/.../punctuality fetcher
-        search_tfl_docs,                  # → Pinecone retriever (3 namespaces)
-    ]
-    return create_react_agent(model, tools, checkpointer=InMemorySaver())
+    retriever = _build_retriever_or_none()  # pgvector index, or None when no DSN
+    tools = make_tools(pool=pool, retriever=retriever)
+    return create_react_agent(chat_model, tools, prompt=render(), checkpointer=InMemorySaver())
 ```
 
-`compile_agent` returns `None` when any of `ANTHROPIC_API_KEY` /
-`OPENAI_API_KEY` / `PINECONE_API_KEY` is missing, so the FastAPI lifespan
-caches `None` on `app.state.agent` and `/chat/stream` 503s gracefully while
-the rest of the app keeps serving.
+`compile_agent` returns `None` only when no LLM backend is configured
+(neither `BEDROCK_REGION` nor `ANTHROPIC_API_KEY`), so the FastAPI lifespan
+caches `None` on `app.state.agent` and `/chat/stream` 503s gracefully. The
+RAG tool is **optional**: with no Postgres DSN the agent still serves the
+four SQL tools; an unreachable pgvector store degrades to zero snippets
+rather than failing the request.
 
 ## Streaming
 
@@ -76,17 +74,19 @@ The `/chat/{thread_id}/history` endpoint replays the table ordered by
 |--------|-------|----------------|
 | `extraction.py` | 4 | Canonical / informal / ambiguous / empty `LineId` |
 | `tools.py` | 8 | Happy path, empty, parameter validation, db absent |
-| `rag.py` | 6 | Retrieval, doc_id targeting, page sentinel, namespace fan-out, empty, sdk failure |
-| `graph.py` | 5 | Compile, no-keys, tool registration, model selection, prompt |
+| `rag.py` | 5 | No-filter, doc_id metadata filter, page sentinel, score sort, store-failure |
+| `graph.py` | 7 | No-backend, smoke invoke, retriever-on/off, model selection |
 | Route smokes | 9 | SSE happy / 503 / mid-stream `end:error`; history happy / empty / 503 |
 
-All run with fakes for Anthropic / OpenAI / Pinecone — no live LLM cost in
-unit tests. Integration smokes are gated on the four-key combo plus
+All run with fakes for Anthropic / Bedrock / pgvector — no live LLM cost in
+unit tests. Integration smokes are gated on a live LLM backend plus
 `DATABASE_URL`.
 
-## Bedrock swap (TM-A5)
+## LLM backend
 
-Once TM-A5 ships, this package will switch from `ChatAnthropic` /
-`anthropic:...` to `ChatBedrockConverse` / `bedrock:...` driven by the
-`BEDROCK_REGION` env var. Anthropic-direct stays as a local-dev fallback —
-see [Deployment](../../../docs/deployment.md) for the full design.
+Bedrock is the production backend: set `BEDROCK_REGION` +
+`BEDROCK_SONNET_MODEL_ID` and `ChatBedrockConverse` is selected, with boto3
+reading the standard credential chain. Leave `BEDROCK_REGION` unset and
+provide `ANTHROPIC_API_KEY` for the local-dev `ChatAnthropic` fallback. RAG
+embeddings use Bedrock Titan v2 over the same credentials — there is no
+OpenAI or Pinecone dependency.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -17,30 +18,12 @@ from tests.rag.test_parse import (  # type: ignore[import-not-found]
     _FakeChunker,
     _FakeConverter,
 )
-from tests.rag.test_upsert import _FakeClient  # type: ignore[import-not-found]
+from tests.rag.test_upsert import (  # type: ignore[import-not-found]
+    _FakeEmbedding,
+    _FakeVectorStore,
+)
 
 _PDF_BYTES = b"%PDF-1.4 fake content for unit tests\n"
-
-
-class _FakeEmbeddingItem:
-    def __init__(self, vector: list[float]) -> None:
-        self.embedding = vector
-
-
-class _FakeEmbeddingResponse:
-    def __init__(self, count: int) -> None:
-        self.data = [_FakeEmbeddingItem([float(i)] * 1536) for i in range(count)]
-
-
-class _FakeEmbeddings:
-    async def create(self, *, model: str, input: list[str]) -> _FakeEmbeddingResponse:
-        del model
-        return _FakeEmbeddingResponse(len(input))
-
-
-class _FakeOpenAI:
-    def __init__(self) -> None:
-        self.embeddings = _FakeEmbeddings()
 
 
 def _seed_sources(path: Path) -> None:
@@ -64,8 +47,7 @@ def _seed_sources(path: Path) -> None:
 
 
 def _build_httpx_factory() -> Any:
-    def handler(request: httpx.Request) -> httpx.Response:
-        del request
+    def handler(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(
             200,
             content=_PDF_BYTES,
@@ -87,9 +69,7 @@ def _build_httpx_factory_returning_304() -> Any:
     return lambda: httpx.AsyncClient(transport=transport)
 
 
-def _build_fakes() -> tuple[_FakeOpenAI, _FakeClient, _FakeConverter, _FakeChunker]:
-    openai_client = _FakeOpenAI()
-    pinecone_client = _FakeClient(existing=["tfl-strategy-docs"])
+def _build_fakes() -> tuple[_FakeEmbedding, _FakeVectorStore, _FakeConverter, _FakeChunker]:
     converter = _FakeConverter(document=object())
     chunker = _FakeChunker(
         [
@@ -97,7 +77,7 @@ def _build_fakes() -> tuple[_FakeOpenAI, _FakeClient, _FakeConverter, _FakeChunk
             _build_fake_chunk("second chunk", headings=["Body"], pages=[2, 3]),
         ]
     )
-    return openai_client, pinecone_client, converter, chunker
+    return _FakeEmbedding(), _FakeVectorStore(), converter, chunker
 
 
 def _run(
@@ -105,10 +85,11 @@ def _run(
     sources_path: Path,
     data_dir: Path,
     cache_path: Path,
-    pinecone_client: _FakeClient,
-    openai_client: _FakeOpenAI,
+    embed: _FakeEmbedding,
+    store: _FakeVectorStore,
     converter: _FakeConverter,
-    chunker: _FakeChunker,
+    chunker: Any,
+    httpx_factory: Any | None = None,
     dry_run: bool = False,
     force_refetch: bool = False,
     refresh_urls: bool = False,
@@ -121,9 +102,9 @@ def _run(
             sources_path=sources_path,
             data_dir=data_dir,
             cache_path=cache_path,
-            pinecone_factory=lambda _settings: pinecone_client,
-            openai_factory=lambda _settings: openai_client,
-            httpx_factory=_build_httpx_factory(),
+            embedding_factory=lambda _settings: embed,
+            vector_store_factory=lambda _settings: store,
+            httpx_factory=httpx_factory or _build_httpx_factory(),
             docling_converter=converter,
             docling_chunker=chunker,
         )
@@ -133,142 +114,57 @@ def _run(
 def test_run_ingestion_end_to_end_with_fakes(tmp_path: Path) -> None:
     sources_path = tmp_path / "sources.json"
     _seed_sources(sources_path)
-    openai_client, pinecone_client, converter, chunker = _build_fakes()
+    embed, store, converter, chunker = _build_fakes()
 
     upserted = _run(
         sources_path=sources_path,
         data_dir=tmp_path / "data",
         cache_path=tmp_path / "cache" / "sources_state.json",
-        pinecone_client=pinecone_client,
-        openai_client=openai_client,
+        embed=embed,
+        store=store,
         converter=converter,
         chunker=chunker,
     )
 
     assert upserted == 2
-    index = pinecone_client.Index("tfl-strategy-docs")
-    assert len(index.upsert_calls) == 1
-    assert index.upsert_calls[0]["namespace"] == "sample"
-    assert len(index.upsert_calls[0]["vectors"]) == 2
-    # No rollover on first run → no namespace delete.
-    assert index.delete_calls == []
+    assert len(store.added) == 1
+    assert len(store.added[0]) == 2
+    # Delete-then-insert idempotency: the doc is cleared before insert.
+    assert store.deleted == ["sample"]
 
 
 def test_run_ingestion_dry_run_skips_upsert(tmp_path: Path) -> None:
     sources_path = tmp_path / "sources.json"
     _seed_sources(sources_path)
-    openai_client, pinecone_client, converter, chunker = _build_fakes()
+    embed, store, converter, chunker = _build_fakes()
 
     upserted = _run(
         sources_path=sources_path,
         data_dir=tmp_path / "data",
         cache_path=tmp_path / "cache" / "sources_state.json",
-        pinecone_client=pinecone_client,
-        openai_client=openai_client,
+        embed=embed,
+        store=store,
         converter=converter,
         chunker=chunker,
         dry_run=True,
     )
 
     assert upserted == 0
-    index = pinecone_client.Index("tfl-strategy-docs")
-    assert index.upsert_calls == []
-    assert index.delete_calls == []
-
-
-def test_run_ingestion_rollover_triggers_namespace_delete(tmp_path: Path) -> None:
-    sources_path = tmp_path / "sources.json"
-    _seed_sources(sources_path)
-    cache_path = tmp_path / "cache" / "sources_state.json"
-    cache_path.parent.mkdir(parents=True)
-    # Pre-seed cache with a *different* resolved URL → rollover.
-    cache_path.write_text(
-        json.dumps(
-            {
-                "sample": {
-                    "resolved_url": "https://example.com/old-sample.pdf",
-                    "etag": '"old"',
-                    "last_modified": "Mon, 01 Jan 2025 00:00:00 GMT",
-                    "sha256": "old",
-                    "fetched_at": "2025-01-01T00:00:00+00:00",
-                }
-            }
-        )
-    )
-
-    openai_client, pinecone_client, converter, chunker = _build_fakes()
-    _run(
-        sources_path=sources_path,
-        data_dir=tmp_path / "data",
-        cache_path=cache_path,
-        pinecone_client=pinecone_client,
-        openai_client=openai_client,
-        converter=converter,
-        chunker=chunker,
-    )
-
-    index = pinecone_client.Index("tfl-strategy-docs")
-    assert index.delete_calls == [{"delete_all": True, "namespace": "sample"}]
-
-
-def test_run_ingestion_same_url_skips_rollover_delete(tmp_path: Path) -> None:
-    """Identical resolved_url between runs → no namespace wipe (idempotent)."""
-    sources_path = tmp_path / "sources.json"
-    _seed_sources(sources_path)
-    cache_path = tmp_path / "cache" / "sources_state.json"
-    cache_path.parent.mkdir(parents=True)
-    cache_path.write_text(
-        json.dumps(
-            {
-                "sample": {
-                    "resolved_url": "https://example.com/sample.pdf",  # SAME url
-                    "etag": '"abc"',
-                    "last_modified": "Wed, 21 Oct 2026 07:28:00 GMT",
-                    "sha256": "deadbeef",
-                    "fetched_at": "2026-04-01T00:00:00+00:00",
-                }
-            }
-        )
-    )
-
-    openai_client, pinecone_client, converter, chunker = _build_fakes()
-    _run(
-        sources_path=sources_path,
-        data_dir=tmp_path / "data",
-        cache_path=cache_path,
-        pinecone_client=pinecone_client,
-        openai_client=openai_client,
-        converter=converter,
-        chunker=chunker,
-    )
-
-    index = pinecone_client.Index("tfl-strategy-docs")
-    # No delete fired — re-upserting onto stable ids overwrites in place.
-    assert index.delete_calls == []
-    # Upsert still happened.
-    assert len(index.upsert_calls) == 1
+    # The vector store factory is never invoked on a dry run.
+    assert store.added == []
+    assert store.deleted == []
 
 
 def test_run_ingestion_skips_parse_and_embed_when_unchanged(tmp_path: Path) -> None:
-    """HTTP 304 cache hit -> skip parse/embed/upsert (cost-leak fix).
-
-    Re-running ingestion against PDFs that haven't changed should be a
-    near-zero-cost operation: no OpenAI tokens consumed, no Pinecone
-    upserts issued. Stable ids would make the upsert harmless but still
-    burn embedding spend on every cron tick.
-    """
+    """HTTP 304 cache hit -> skip parse/embed/upsert (cost-leak fix)."""
     sources_path = tmp_path / "sources.json"
     _seed_sources(sources_path)
     data_dir = tmp_path / "data"
     data_dir.mkdir(parents=True)
-    # Pre-seed both the cache state AND the local PDF so the 304 path
-    # is the cache-valid branch (not the recovery branch).
     target = data_dir / "sample.pdf"
     target.write_bytes(_PDF_BYTES)
     cache_path = tmp_path / "cache" / "sources_state.json"
     cache_path.parent.mkdir(parents=True)
-    import hashlib as _hashlib
-
     cache_path.write_text(
         json.dumps(
             {
@@ -276,40 +172,32 @@ def test_run_ingestion_skips_parse_and_embed_when_unchanged(tmp_path: Path) -> N
                     "resolved_url": "https://example.com/sample.pdf",
                     "etag": '"abc"',
                     "last_modified": "Wed, 21 Oct 2026 07:28:00 GMT",
-                    "sha256": _hashlib.sha256(_PDF_BYTES).hexdigest(),
+                    "sha256": hashlib.sha256(_PDF_BYTES).hexdigest(),
                     "fetched_at": "2026-04-01T00:00:00+00:00",
                 }
             }
         )
     )
 
-    openai_client, pinecone_client, converter, chunker = _build_fakes()
-
-    upserted = asyncio.run(
-        _amain(
-            force_refetch=False,
-            dry_run=False,
-            refresh_urls=False,
-            sources_path=sources_path,
-            data_dir=data_dir,
-            cache_path=cache_path,
-            pinecone_factory=lambda _settings: pinecone_client,
-            openai_factory=lambda _settings: openai_client,
-            httpx_factory=_build_httpx_factory_returning_304(),
-            docling_converter=converter,
-            docling_chunker=chunker,
-        )
+    embed, store, converter, chunker = _build_fakes()
+    upserted = _run(
+        sources_path=sources_path,
+        data_dir=data_dir,
+        cache_path=cache_path,
+        embed=embed,
+        store=store,
+        converter=converter,
+        chunker=chunker,
+        httpx_factory=_build_httpx_factory_returning_304(),
     )
 
     assert upserted == 0
-    index = pinecone_client.Index("tfl-strategy-docs")
-    # Skip-on-unchanged means upsert is never reached.
-    assert index.upsert_calls == []
-    assert index.delete_calls == []
+    assert store.added == []
+    assert store.deleted == []
 
 
 class _ExplodingChunker:
-    """Chunker that raises mid-pipeline so we can verify partial-failure exit code."""
+    """Chunker that raises mid-pipeline to verify partial-failure exit code."""
 
     def chunk(self, _document: object) -> list[object]:
         raise RuntimeError("simulated parse failure")
@@ -321,51 +209,24 @@ def test_run_ingestion_aggregates_per_doc_failures_and_exits_nonzero(
 ) -> None:
     sources_path = tmp_path / "sources.json"
     _seed_sources(sources_path)
-    openai_client, pinecone_client, converter, _ = _build_fakes()
+    embed, store, converter, _ = _build_fakes()
 
     with pytest.raises(SystemExit) as excinfo:
         _run(
             sources_path=sources_path,
             data_dir=tmp_path / "data",
             cache_path=tmp_path / "cache" / "sources_state.json",
-            pinecone_client=pinecone_client,
-            openai_client=openai_client,
+            embed=embed,
+            store=store,
             converter=converter,
-            chunker=_ExplodingChunker(),  # type: ignore[arg-type]
+            chunker=_ExplodingChunker(),
         )
     assert excinfo.value.code == 1
     err = capsys.readouterr().err
     assert "1 failure" in err
     assert "sample" in err
     assert "simulated parse failure" in err
-    # Upsert never reached for the failing doc.
-    index = pinecone_client.Index("tfl-strategy-docs")
-    assert index.upsert_calls == []
-
-
-def test_run_ingestion_missing_pinecone_key_exits_2(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    monkeypatch.delenv("PINECONE_API_KEY", raising=False)
-    sources_path = tmp_path / "sources.json"
-    _seed_sources(sources_path)
-    openai_client, pinecone_client, converter, chunker = _build_fakes()
-
-    with pytest.raises(SystemExit) as excinfo:
-        _run(
-            sources_path=sources_path,
-            data_dir=tmp_path / "data",
-            cache_path=tmp_path / "cache" / "sources_state.json",
-            pinecone_client=pinecone_client,
-            openai_client=openai_client,
-            converter=converter,
-            chunker=chunker,
-        )
-    assert excinfo.value.code == 2
-    err = capsys.readouterr().err
-    assert "RAG settings missing or invalid" in err
+    assert store.added == []
 
 
 def test_run_ingestion_refresh_urls_rewrites_sources(tmp_path: Path) -> None:
@@ -383,19 +244,13 @@ def test_run_ingestion_refresh_urls_rewrites_sources(tmp_path: Path) -> None:
         ],
     )
 
-    requests: list[httpx.Request] = []
-
     def handler(request: httpx.Request) -> httpx.Response:
-        requests.append(request)
         if request.url.path == "/landing":
-            return httpx.Response(
-                200,
-                text='<a href="https://example.com/sample.pdf">x</a>',
-            )
+            return httpx.Response(200, text='<a href="https://example.com/sample.pdf">x</a>')
         return httpx.Response(200, content=_PDF_BYTES)
 
     transport = httpx.MockTransport(handler)
-    openai_client, pinecone_client, converter, chunker = _build_fakes()
+    embed, store, converter, chunker = _build_fakes()
     asyncio.run(
         _amain(
             force_refetch=False,
@@ -404,8 +259,8 @@ def test_run_ingestion_refresh_urls_rewrites_sources(tmp_path: Path) -> None:
             sources_path=sources_path,
             data_dir=tmp_path / "data",
             cache_path=tmp_path / "cache" / "sources_state.json",
-            pinecone_factory=lambda _settings: pinecone_client,
-            openai_factory=lambda _settings: openai_client,
+            embedding_factory=lambda _settings: embed,
+            vector_store_factory=lambda _settings: store,
             httpx_factory=lambda: httpx.AsyncClient(transport=transport),
             docling_converter=converter,
             docling_chunker=chunker,

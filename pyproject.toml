@@ -42,10 +42,9 @@ dbt = [
 ]
 rag = [
     "llama-index>=0.12",
-    "llama-index-vector-stores-pinecone>=0.4",
-    "pinecone>=5.0",
+    "llama-index-vector-stores-postgres>=0.4",
+    "pgvector>=0.3",
     "docling>=2.0",
-    "openai>=1.54",
 ]
 docs = [
     "mkdocs>=1.6",
@@ -95,9 +94,22 @@ ignore_missing_imports = true
 follow_untyped_imports = true
 
 [[tool.mypy.overrides]]
-module = ["docling", "docling.*", "pinecone", "pinecone.*"]
+module = [
+    "docling",
+    "docling.*",
+    "llama_index.vector_stores.postgres",
+    "llama_index.vector_stores.postgres.*",
+    "pgvector",
+    "pgvector.*",
+]
 ignore_missing_imports = true
 follow_untyped_imports = true
+
+[[tool.mypy.overrides]]
+# boto3 ships no py.typed marker; treat as Any (no follow) so the bedrock
+# client calls in rag.embeddings don't trip disallow_untyped_calls.
+module = ["boto3", "boto3.*"]
+ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = [

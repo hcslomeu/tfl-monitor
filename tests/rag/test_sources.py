@@ -97,9 +97,12 @@ def test_committed_sources_json_is_valid() -> None:
     path = repo_root / "src" / "rag" / "sources.json"
     sources = load_sources(path)
     assert {s.doc_id for s in sources} == {
-        "tfl_business_plan",
-        "mts_2018",
-        "tfl_annual_report",
+        "business_plan_2026",
+        "mts_delivery_2024_25",
+        "bus_action_plan",
+        "vision_zero",
+        "cycling_action_plan",
+        "travel_in_london_2025",
     }
     for s in sources:
         assert s.resolved_url is not None

@@ -1,9 +1,10 @@
 """Shared fixtures for the LangGraph agent unit tests.
 
-Provides minimal fakes for the chat model and the LlamaIndex retriever
-so the agent suite never touches the live Anthropic, OpenAI, or
-Pinecone services. ``attach_agent`` lives in ``tests/conftest.py`` so
-both the agent suite and the API suite (chat stream tests) share it.
+Provides minimal fakes for the chat model and the pgvector-backed
+LlamaIndex retriever so the agent suite never touches live Anthropic,
+Bedrock, or Postgres services. ``attach_agent`` lives in
+``tests/conftest.py`` so both the agent suite and the API suite (chat
+stream tests) share it.
 """
 
 from __future__ import annotations
@@ -65,10 +66,37 @@ class FakeRetriever:
         return list(self.nodes)
 
 
+@dataclass
+class FakeIndex:
+    """``VectorStoreIndex`` stand-in for ``api.agent.rag.retrieve``.
+
+    ``as_retriever`` records the ``similarity_top_k`` and ``filters``
+    arguments and returns a :class:`FakeRetriever` scoped to the
+    ``doc_id`` metadata filter (mirroring pgvector's WHERE clause). Set
+    ``raise_on_retriever`` to exercise the graceful-degradation path.
+    """
+
+    nodes: list[FakeNode] = field(default_factory=list)
+    captured: dict[str, Any] = field(default_factory=dict)
+    last_retriever: FakeRetriever | None = None
+    raise_on_retriever: bool = False
+
+    def as_retriever(self, *, similarity_top_k: int, filters: Any = None) -> FakeRetriever:
+        if self.raise_on_retriever:
+            raise RuntimeError("pgvector unreachable")
+        self.captured = {"top_k": similarity_top_k, "filters": filters}
+        nodes = self.nodes
+        if filters is not None:
+            wanted = filters.filters[0].value
+            nodes = [n for n in self.nodes if n.metadata.get("doc_id") == wanted]
+        self.last_retriever = FakeRetriever(nodes=nodes)
+        return self.last_retriever
+
+
 def make_node(
     *,
-    doc_id: str = "tfl_business_plan",
-    doc_title: str = "TfL Business Plan",
+    doc_id: str = "business_plan_2026",
+    doc_title: str = "TfL Business Plan 2026",
     section_title: str = "Introduction",
     page_start: int | None = 1,
     page_end: int | None = 2,
@@ -76,7 +104,7 @@ def make_node(
     score: float = 0.9,
     resolved_url: str = "https://example.com/doc.pdf",
 ) -> FakeNode:
-    """Build a ``FakeNode`` with the metadata layout written by TM-D4."""
+    """Build a ``FakeNode`` with the metadata layout written at upsert."""
     return FakeNode(
         metadata={
             "doc_id": doc_id,

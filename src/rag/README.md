@@ -1,8 +1,8 @@
 # src/rag/
 
-The RAG ingestion CLI: TfL strategy PDFs → Docling parse → OpenAI embeddings
-→ Pinecone serverless. **Conditional** (only refetches what changed) and
-**idempotent** (re-running upserts the same vector ids).
+The RAG ingestion CLI: TfL strategy PDFs → Docling parse → Bedrock Titan v2
+embeddings → pgvector. **Conditional** (only refetches what changed) and
+**idempotent** (each changed doc is delete-then-inserted under its `doc_id`).
 
 ## Layout
 
@@ -14,8 +14,9 @@ src/rag/
 ├─ sources.py       # Landing-page URL resolver (per-source allowlist)
 ├─ fetch.py         # Conditional GET via If-None-Match + If-Modified-Since
 ├─ parse.py         # Docling DocumentConverter + HybridChunker
-├─ embed.py         # Async-batched OpenAI text-embedding-3-small
-├─ upsert.py        # Pinecone serverless — namespace per doc_id
+├─ embeddings.py    # TitanEmbedding — Bedrock Titan v2 LlamaIndex embedding
+├─ vectorstore.py   # PGVectorStore + embedding factories (shared with the agent)
+├─ upsert.py        # Chunk → TextNode → pgvector (delete-then-insert per doc)
 └─ ingest.py        # Orchestrator — `python -m rag.ingest`
 ```
 
@@ -25,76 +26,74 @@ src/rag/
 uv run python -m rag.ingest                 # only refetch what changed
 uv run python -m rag.ingest --refresh-urls  # rewrite sources.json
 uv run python -m rag.ingest --force-refetch # bypass ETag cache
-uv run python -m rag.ingest --dry-run       # skip Pinecone upsert
+uv run python -m rag.ingest --dry-run       # parse only, skip embed + upsert
 ```
 
-If 1 of 3 documents fails its fetch / parse / embed / upsert cycle, the
-others still complete and the CLI exits non-zero so a future cron / GitHub
-Action surfaces the failure instead of swallowing it.
+If one document fails its fetch / parse / embed / upsert cycle, the others
+still complete and the CLI exits non-zero so the cron / GitHub Action
+surfaces the failure instead of swallowing it.
 
 ## Documents indexed
 
-| `doc_id` | Title | Landing page |
-|----------|-------|--------------|
-| `tfl_business_plan` | TfL Business Plan | `tfl.gov.uk/.../business-plan` |
-| `mts_2018` | Mayor's Transport Strategy 2018 | `london.gov.uk/.../mayors-transport-strategy-2018` |
-| `tfl_annual_report` | TfL Annual Report and Statement of Accounts | `tfl.gov.uk/.../annual-report` |
+| `doc_id` | Title |
+|----------|-------|
+| `business_plan_2026` | TfL Business Plan 2026 |
+| `mts_delivery_2024_25` | Delivering the Mayor's Transport Strategy 2024-25 |
+| `bus_action_plan` | TfL Bus Action Plan |
+| `vision_zero` | Vision Zero Action Plan |
+| `cycling_action_plan` | Cycling Action Plan |
+| `travel_in_london_2025` | Travel in London 2025 |
 
-Landing pages are the citation surface; resolved CDN URLs are not, because
-TfL roll the URL stem yearly.
+All six are direct `content.tfl.gov.uk` PDFs; `--refresh-urls` re-resolves a
+landing page only when TfL rolls a URL stem.
 
 ## Idempotency strategy
 
 | Stage | Mechanism |
 |-------|-----------|
 | Fetch | `If-None-Match` + `If-Modified-Since` from `data/cache/sources_state.json` |
-| Embed | OpenAI batch endpoint, retry on 429 |
-| Upsert | Stable id `sha256("{resolved_url}::{chunk_index}")` |
-| Rollover | Delete-namespace before re-ingest when `--refresh-urls` flips the URL |
+| Embed | Bedrock Titan v2 `invoke_model` per chunk |
+| Upsert | Delete-then-insert: `delete(ref_doc_id=doc_id)` then re-add all chunks |
 
-## Pinecone index shape
+A 304 cache hit skips parse + embed + upsert entirely, so steady-state runs
+incur near-zero Bedrock spend.
+
+## pgvector store shape
+
+LlamaIndex `PGVectorStore` manages its own table (`data_<table>`), created on
+first use:
 
 ```text
-Index:        tfl-strategy-docs
-Dimension:    1536
-Metric:       cosine
-Cloud:        AWS, us-east-1 (serverless)
-Namespaces:   tfl_business_plan / mts_2018 / tfl_annual_report
-Metadata:     doc_id, chunk_index, page, text
+Table:       data_tfl_strategy_docs (schema public)
+Dimension:   1024
+Metric:      cosine (HNSW)
+Doc scoping: metadata doc_id (replaces Pinecone namespaces)
+Metadata:    doc_id, doc_title, section_title, page_start, page_end, resolved_url, chunk_index
 ```
 
 ## Config
 
-All settings ride on `BaseSettings` — env-driven, no CLI flags for static
-config:
-
 | Env var | Default |
 |---------|---------|
-| `OPENAI_API_KEY` | (required) |
-| `PINECONE_API_KEY` | (required) |
-| `PINECONE_INDEX` | `tfl-strategy-docs` |
-| `EMBEDDING_MODEL` | `text-embedding-3-small` |
-| `RAG_SOURCES_PATH` | `src/rag/sources.json` |
-| `RAG_CACHE_DIR` | `data/cache` |
-| `RAG_LOCAL_PDF_DIR` | `data/strategy_docs` |
+| `BEDROCK_REGION` | `eu-west-2` |
+| `EMBEDDING_MODEL` | `amazon.titan-embed-text-v2:0` |
+| `EMBEDDING_DIMENSIONS` | `1024` |
+| `PGVECTOR_TABLE` | `tfl_strategy_docs` |
+| `RAG_DATABASE_URL` | (falls back to `DATABASE_URL`) |
 
-## Cost
-
-A full re-embedding of all three PDFs runs at well under £0.20 one-time at
-the current `text-embedding-3-small` price ($0.02 per 1M tokens).
-**Conditional GETs and stable Pinecone IDs mean steady-state runs incur
-near-zero embedding spend** — most weeks every doc returns 304 and the CLI
-exits in under a second.
+`RAG_DATABASE_URL` must be a direct/session Postgres DSN (port 5432): the
+async `asyncpg` driver's prepared statements are rejected by the Supabase
+transaction pooler (port 6543).
 
 ## Tests
 
-28 unit tests with fakes for httpx / Docling / OpenAI / Pinecone:
+Unit tests with fakes for httpx / Docling / Bedrock / pgvector:
 
 | Module | Coverage |
 |--------|----------|
 | `sources.py` | landing-page resolver picks the right PDF URL via per-source allowlist |
 | `fetch.py` | 304 short-circuit, 200 with body, ETag round-trip |
 | `parse.py` | Docling output → chunks with stable text + page metadata |
-| `embed.py` | Batch sizing, retry on 429, async ordering preserved |
-| `upsert.py` | Id stability, namespace rollover, partial-failure handling |
-| `ingest.py` | Orchestrator argument parsing, exit-non-zero on partial failure |
+| `embeddings.py` | Titan invoke params (dimensions/normalize), batch, query path |
+| `upsert.py` | Node shape, delete-then-insert, batch sizing |
+| `ingest.py` | Orchestrator wiring, dry-run, 304 skip, exit-non-zero on partial failure |

@@ -1,9 +1,10 @@
-"""Pydantic settings for RAG ingestion.
+"""Pydantic settings for RAG ingestion + retrieval.
 
-Loads OpenAI + Pinecone credentials and the index/embedding-model
-defaults used by :mod:`rag.ingest`. Five fields total — well under the
-≥15 trigger that would justify nested ``BaseSettings`` (CLAUDE.md
-§"Principle #1" rule 5).
+Configures the Bedrock Titan embedding model and the pgvector
+connection used by :mod:`rag.ingest` and the agent retriever. Bedrock
+credentials come from the boto3 standard chain (``AWS_*`` env vars), so
+there are no API keys here — the migration off OpenAI/Pinecone means the
+only required runtime input is a Postgres connection string.
 """
 
 from __future__ import annotations
@@ -13,35 +14,53 @@ import sys
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-DEFAULT_PINECONE_INDEX = "tfl-strategy-docs"
-DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
-EMBEDDING_DIMENSIONS = 1536
-DEFAULT_PINECONE_CLOUD = "aws"
-DEFAULT_PINECONE_REGION = "us-east-1"
+DEFAULT_BEDROCK_REGION = "eu-west-2"
+DEFAULT_EMBEDDING_MODEL = "amazon.titan-embed-text-v2:0"
+DEFAULT_EMBEDDING_DIMENSIONS = 1024
+DEFAULT_PGVECTOR_TABLE = "tfl_strategy_docs"
+DEFAULT_PGVECTOR_SCHEMA = "public"
 
 
 class RagSettings(BaseSettings):
-    """RAG ingestion configuration loaded from the process environment."""
+    """RAG configuration loaded from the process environment."""
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    openai_api_key: SecretStr
-    pinecone_api_key: SecretStr
-    pinecone_index: str = DEFAULT_PINECONE_INDEX
+    bedrock_region: str = DEFAULT_BEDROCK_REGION
     embedding_model: str = DEFAULT_EMBEDDING_MODEL
-    pinecone_cloud: str = DEFAULT_PINECONE_CLOUD
-    pinecone_region: str = DEFAULT_PINECONE_REGION
+    embedding_dimensions: int = DEFAULT_EMBEDDING_DIMENSIONS
+    pgvector_table: str = DEFAULT_PGVECTOR_TABLE
+    pgvector_schema: str = DEFAULT_PGVECTOR_SCHEMA
+    # Direct (non-pooled) connection for pgvector. asyncpg prepared
+    # statements break against the Supabase transaction pooler (port
+    # 6543); point RAG at the direct/session endpoint (port 5432).
+    # Falls back to DATABASE_URL when unset (local dev uses one DSN).
+    rag_database_url: SecretStr | None = None
+    database_url: SecretStr | None = None
+
+    @property
+    def vector_database_url(self) -> str:
+        """Return the DSN used for the pgvector store.
+
+        Raises:
+            ValueError: When neither ``RAG_DATABASE_URL`` nor
+                ``DATABASE_URL`` is configured.
+        """
+        url = self.rag_database_url or self.database_url
+        if url is None:
+            raise ValueError("Neither RAG_DATABASE_URL nor DATABASE_URL is set")
+        return url.get_secret_value()
 
 
 def load_settings() -> RagSettings:
     """Load and validate :class:`RagSettings` from the environment.
 
     Raises:
-        SystemExit: ``code=2`` when required secrets are missing or
-            malformed. Fail-loud per the TM-D4 briefing.
+        SystemExit: ``code=2`` when the settings are malformed. Fail-loud
+            keeps a misconfigured ingestion run from silently no-op'ing.
     """
     try:
-        return RagSettings()  # type: ignore[call-arg]
+        return RagSettings()
     except Exception as exc:  # noqa: BLE001 - boundary
         sys.stderr.write(f"RAG settings missing or invalid: {exc!s}\n")
         raise SystemExit(2) from None

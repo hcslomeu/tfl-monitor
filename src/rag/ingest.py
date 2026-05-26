@@ -9,10 +9,11 @@ CLI flags:
   and rewrites ``src/rag/sources.json``.
 - ``--force-refetch`` ignores cached ``ETag`` / ``Last-Modified`` and
   re-downloads unconditionally.
-- ``--dry-run`` runs everything except the Pinecone upsert.
+- ``--dry-run`` runs everything except the pgvector upsert.
 
-Fail-loud on missing ``OPENAI_API_KEY`` / ``PINECONE_API_KEY``: the
-process exits with code 2.
+Embeddings use Bedrock Titan v2 and vectors land in pgvector; both read
+AWS credentials and the Postgres DSN from the environment, so the
+process exits ``code=2`` only when the settings themselves are malformed.
 """
 
 from __future__ import annotations
@@ -26,21 +27,19 @@ from typing import Any
 
 import httpx
 import logfire
-from openai import AsyncOpenAI
 
 from common.sampling import build_sampling_options
-from rag.config import RagSettings, load_settings
-from rag.embed import embed_texts
+from rag.config import load_settings
 from rag.fetch import (
     DEFAULT_CACHE_PATH,
     DEFAULT_DATA_DIR,
     FetchResult,
     fetch_pdfs,
-    load_cache,
 )
 from rag.parse import Chunk, parse_pdf
 from rag.sources import load_sources, resolve_pdf_urls, write_sources
-from rag.upsert import ensure_index, upsert_chunks
+from rag.upsert import upsert_chunks
+from rag.vectorstore import build_embedding, build_vector_store
 
 __all__ = ["main", "run_ingestion"]
 
@@ -69,8 +68,8 @@ async def _amain(
     sources_path: Path = DEFAULT_SOURCES_PATH,
     data_dir: Path = DEFAULT_DATA_DIR,
     cache_path: Path = DEFAULT_CACHE_PATH,
-    pinecone_factory: Any = None,
-    openai_factory: Any = None,
+    embedding_factory: Any = None,
+    vector_store_factory: Any = None,
     httpx_factory: Any = None,
     docling_converter: Any = None,
     docling_chunker: Any = None,
@@ -78,12 +77,6 @@ async def _amain(
     configure_logfire()
     settings = load_settings()
     sources = load_sources(sources_path)
-
-    # Snapshot previous resolved URLs *before* the fetch step rewrites the
-    # cache so we can detect URL rollover for namespace cleanup later.
-    previous_urls = {
-        doc_id: entry.get("resolved_url", "") for doc_id, entry in load_cache(cache_path).items()
-    }
 
     httpx_factory = httpx_factory or _default_httpx_factory
     async with httpx_factory() as client:
@@ -98,15 +91,8 @@ async def _amain(
             force_refetch=force_refetch,
         )
 
-    openai_client = (openai_factory or _default_openai_factory)(settings)
-    pinecone_client = (pinecone_factory or _default_pinecone_factory)(settings)
-    ensure_index(
-        pinecone_client,
-        name=settings.pinecone_index,
-        cloud=settings.pinecone_cloud,
-        region=settings.pinecone_region,
-    )
-    index = pinecone_client.Index(settings.pinecone_index)
+    embed_model = (embedding_factory or build_embedding)(settings)
+    vector_store = None if dry_run else (vector_store_factory or build_vector_store)(settings)
 
     total_upserted = 0
     failures: list[tuple[str, str]] = []
@@ -114,10 +100,8 @@ async def _amain(
         try:
             upserted = await _ingest_one(
                 result=result,
-                previous_urls=previous_urls,
-                settings=settings,
-                openai_client=openai_client,
-                index=index,
+                embed_model=embed_model,
+                vector_store=vector_store,
                 dry_run=dry_run,
                 docling_converter=docling_converter,
                 docling_chunker=docling_chunker,
@@ -148,10 +132,8 @@ async def _amain(
 async def _ingest_one(
     *,
     result: FetchResult,
-    previous_urls: dict[str, str],
-    settings: RagSettings,
-    openai_client: Any,
-    index: Any,
+    embed_model: Any,
+    vector_store: Any,
     dry_run: bool,
     docling_converter: Any,
     docling_chunker: Any,
@@ -163,14 +145,11 @@ async def _ingest_one(
         dry_run=dry_run,
     ):
         if not result.changed:
-            # HTTP 304 cache hit -> nothing new to embed/upsert. Stable
-            # ids + a populated namespace mean a re-run would only burn
-            # OpenAI tokens and issue redundant Pinecone upserts. Honour
-            # the idempotent-by-cost contract documented in the README.
-            logfire.info(
-                "rag.ingest.skipped_unchanged",
-                doc_id=result.source.doc_id,
-            )
+            # HTTP 304 cache hit -> nothing new to embed/upsert. The
+            # delete-then-insert path would only burn Bedrock calls and
+            # rewrite identical rows. Honour the idempotent-by-cost
+            # contract documented in the README.
+            logfire.info("rag.ingest.skipped_unchanged", doc_id=result.source.doc_id)
             return 0
         chunks: list[Chunk] = parse_pdf(
             doc_id=result.source.doc_id,
@@ -181,43 +160,22 @@ async def _ingest_one(
             chunker=docling_chunker,
         )
         if not chunks:
-            logfire.warn(
-                "rag.ingest.empty_chunks",
-                doc_id=result.source.doc_id,
-            )
+            logfire.warn("rag.ingest.empty_chunks", doc_id=result.source.doc_id)
             return 0
-        vectors = await embed_texts(
-            [c.text for c in chunks],
-            client=openai_client,
-            model=settings.embedding_model,
-        )
         if dry_run:
             logfire.info(
                 "rag.ingest.dry_run",
                 doc_id=result.source.doc_id,
                 chunks=len(chunks),
-                vectors=len(vectors),
             )
             return 0
-        previous_url = previous_urls.get(result.source.doc_id)
-        rollover = bool(previous_url and previous_url != str(result.source.resolved_url))
         return upsert_chunks(
-            index=index,
+            vector_store=vector_store,
+            embed_model=embed_model,
             chunks=chunks,
-            vectors=vectors,
-            namespace=result.source.doc_id,
-            delete_namespace_first=rollover,
+            doc_id=result.source.doc_id,
+            delete_first=True,
         )
-
-
-def _default_pinecone_factory(settings: RagSettings) -> Any:
-    from pinecone import Pinecone
-
-    return Pinecone(api_key=settings.pinecone_api_key.get_secret_value())
-
-
-def _default_openai_factory(settings: RagSettings) -> AsyncOpenAI:
-    return AsyncOpenAI(api_key=settings.openai_api_key.get_secret_value())
 
 
 def _default_httpx_factory() -> httpx.AsyncClient:
@@ -244,7 +202,7 @@ def main(argv: list[str] | None = None) -> None:
     """CLI entrypoint for ``python -m rag.ingest``."""
     parser = argparse.ArgumentParser(
         prog="rag.ingest",
-        description="Ingest TfL strategy PDFs into Pinecone via Docling.",
+        description="Ingest TfL strategy PDFs into pgvector via Docling + Bedrock.",
     )
     parser.add_argument(
         "--force-refetch",
@@ -254,17 +212,16 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Run fetch + parse + embed but skip the Pinecone upsert step.",
+        help="Run fetch + parse but skip embedding and the pgvector upsert step.",
     )
     parser.add_argument(
         "--refresh-urls",
         action="store_true",
         help=(
             "Re-scrape every landing page and rewrite the resolved direct-PDF "
-            "URL in src/rag/sources.json. Use this when TfL rolls the annual "
-            "URL stem (e.g. business-plan-2026 → business-plan-2027). The "
-            "subsequent download is still conditional via ETag, so unchanged "
-            "PDFs are 304'd."
+            "URL in src/rag/sources.json. Use this when TfL rolls a stem "
+            "(e.g. 2026-business-plan -> 2027-business-plan). The subsequent "
+            "download is still conditional via ETag, so unchanged PDFs are 304'd."
         ),
     )
     args = parser.parse_args(argv)
