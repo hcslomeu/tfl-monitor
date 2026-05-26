@@ -35,6 +35,13 @@ def project(mode: str, payload: Any) -> list[dict[str, str]]:
         if not isinstance(payload, tuple) or len(payload) < 1:
             return []
         chunk = payload[0]
+        # Only the assistant's own tokens become text frames. The
+        # "messages" stream also replays ToolMessage chunks (the raw tool
+        # result, e.g. the query_tube_status JSON) — those must never leak
+        # into the chat bubble. The tool call itself is surfaced via the
+        # "updates" tool frame instead.
+        if getattr(chunk, "type", None) != "ai":
+            return []
         text = _extract_text(getattr(chunk, "content", None))
         f = frame_token(text)
         return [f] if f is not None else []
