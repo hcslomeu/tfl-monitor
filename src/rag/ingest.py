@@ -92,7 +92,8 @@ async def _amain(
             force_refetch=force_refetch,
         )
 
-    embed_model = (embedding_factory or build_embedding)(settings)
+    # Dry run skips both — it only fetches and parses (see module docstring).
+    embed_model = None if dry_run else (embedding_factory or build_embedding)(settings)
     vector_store = None if dry_run else (vector_store_factory or build_vector_store)(settings)
 
     total_upserted = 0
