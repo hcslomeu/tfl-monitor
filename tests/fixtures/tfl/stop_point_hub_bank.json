@@ -1,0 +1,30 @@
+{
+  "$type": "Tfl.Api.Presentation.Entities.StopPoint, Tfl.Api.Presentation.Entities",
+  "naptanId": "HUBBAN",
+  "commonName": "Bank",
+  "stopType": "TransportInterchange",
+  "modes": ["bus", "dlr", "tube"],
+  "children": [
+    {
+      "$type": "Tfl.Api.Presentation.Entities.StopPoint, Tfl.Api.Presentation.Entities",
+      "naptanId": "490G00007599",
+      "commonName": "Bank Station / Poultry",
+      "stopType": "NaptanOnstreetBusCoachStopPair",
+      "modes": ["bus"]
+    },
+    {
+      "$type": "Tfl.Api.Presentation.Entities.StopPoint, Tfl.Api.Presentation.Entities",
+      "naptanId": "940GZZDLBNK",
+      "commonName": "Bank DLR Station",
+      "stopType": "NaptanMetroStation",
+      "modes": ["dlr"]
+    },
+    {
+      "$type": "Tfl.Api.Presentation.Entities.StopPoint, Tfl.Api.Presentation.Entities",
+      "naptanId": "940GZZLUBNK",
+      "commonName": "Bank Underground Station",
+      "stopType": "NaptanMetroStation",
+      "modes": ["tube"]
+    }
+  ]
+}

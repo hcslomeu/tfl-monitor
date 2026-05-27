@@ -17,6 +17,7 @@ from contracts.schemas.tfl_api import (
     TflJourneyMode,
     TflJourneyResult,
 )
+from ingestion.tfl_client.client import TflClientError
 
 
 @dataclass
@@ -27,6 +28,8 @@ class FakeTflClient:
     arrivals: list[TflArrivalPrediction] = field(default_factory=list)
     plan_calls: list[tuple[str, str]] = field(default_factory=list)
     arrival_calls: list[str] = field(default_factory=list)
+    raise_on_plan: bool = False
+    raise_on_arrivals: bool = False
 
     async def plan_journey(
         self,
@@ -37,10 +40,14 @@ class FakeTflClient:
         modes: Any = None,
     ) -> list[TflJourneyResult]:
         self.plan_calls.append((from_id, to_id))
+        if self.raise_on_plan:
+            raise TflClientError("upstream journey failure")
         return self.journeys
 
     async def fetch_arrivals(self, stop_id: str) -> list[TflArrivalPrediction]:
         self.arrival_calls.append(stop_id)
+        if self.raise_on_arrivals:
+            raise TflClientError("upstream arrivals failure")
         return self.arrivals
 
 
@@ -197,3 +204,31 @@ async def test_get_arrivals_unresolved_stop(monkeypatch: pytest.MonkeyPatch) -> 
     assert isinstance(result, str)
     assert "Mordor" in result
     assert client.arrival_calls == []
+
+
+@pytest.mark.asyncio
+async def test_plan_journey_upstream_error_returns_message_not_raise(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _stub_resolver(monkeypatch, {"oxford circus": "940GZZLUOXC", "bank": "940GZZLUBNK"})
+    client = FakeTflClient(raise_on_plan=True)
+    tool = _tool(client, "plan_journey_tool")
+
+    result = await tool.ainvoke({"origin": "Oxford Circus", "destination": "Bank"})
+
+    assert isinstance(result, str)  # swallowed → friendly string, never propagates
+    assert "couldn't plan" in result.lower()
+
+
+@pytest.mark.asyncio
+async def test_get_arrivals_upstream_error_returns_message_not_raise(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _stub_resolver(monkeypatch, {"bank": "940GZZLUBNK"})
+    client = FakeTflClient(raise_on_arrivals=True)
+    tool = _tool(client, "get_arrivals_tool")
+
+    result = await tool.ainvoke({"stop": "Bank"})
+
+    assert isinstance(result, str)
+    assert "couldn't fetch arrivals" in result.lower()

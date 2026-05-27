@@ -19,6 +19,7 @@ import logfire
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
+from contracts.schemas.tfl_api import TflStopPoint
 from ingestion.tfl_client.client import TflClient, TflClientError
 
 # Process-lifetime cache mapping NaPTAN → resolved name. ``None`` value
@@ -35,6 +36,12 @@ _NAPTAN_CACHE: dict[str, str | None] = {}
 # eviction to keep memory flat under high-cardinality chat traffic.
 _NAME_CACHE: dict[str, str | None] = {}
 _NAME_CACHE_MAX: Final = 512
+
+# TfL Search ranks a hub id (prefixed ``HUB``) top for major interchanges,
+# but a hub id is not a usable journey/arrival endpoint — it must be
+# dereferenced to a concrete rail child, preferred by this mode order.
+_HUB_PREFIX: Final = "HUB"
+_RAIL_MODE_PRIORITY: Final = ("tube", "elizabeth-line", "dlr", "overground", "national-rail")
 
 # Cap concurrent in-flight TfL lookups across all requests when several
 # NaPTANs miss the seed at the same time. The free-tier TfL rate limit
@@ -214,7 +221,35 @@ async def resolve_name(*, tfl_client: TflClient | None, query: str) -> str | Non
             return None
 
     resolved = response.matches[0].id if response.matches else None
+    if resolved is not None and resolved.startswith(_HUB_PREFIX):
+        resolved = await _deref_hub(tfl_client, resolved)
     if len(_NAME_CACHE) >= _NAME_CACHE_MAX:
         _NAME_CACHE.pop(next(iter(_NAME_CACHE)))
     _NAME_CACHE[cache_key] = resolved
     return resolved
+
+
+async def _deref_hub(tfl_client: TflClient, hub_id: str) -> str:
+    """Resolve a hub id to a concrete rail child NaPTAN.
+
+    Hub ids (``HUB*``) are rejected by journey planning and return no
+    arrivals, so fetch the hub stop point and pick the highest-priority
+    rail child. Falls back to the hub id when the lookup fails or the hub
+    exposes no rail child.
+    """
+    try:
+        async with _get_tfl_semaphore():
+            stop_point = await tfl_client.fetch_stop_point(hub_id)
+    except Exception:
+        logfire.exception("stations.hub_deref_failed", hub_id=hub_id)
+        return hub_id
+    return _pick_rail_child(stop_point) or hub_id
+
+
+def _pick_rail_child(stop_point: TflStopPoint) -> str | None:
+    """Return the NaPTAN of the highest-priority rail child, or ``None``."""
+    for mode in _RAIL_MODE_PRIORITY:
+        for child in stop_point.children:
+            if mode in child.modes:
+                return child.naptan_id
+    return None
