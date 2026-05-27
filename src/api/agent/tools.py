@@ -231,10 +231,16 @@ def make_tools(
                 destination_id = await resolve_name(tfl_client=tfl_client, query=destination)
                 if destination_id is None:
                     return f"Couldn't find station '{destination}'."
+                parsed_departure = _parse_departure_time(departure_time)
+                if departure_time and parsed_departure is None:
+                    return (
+                        f"Couldn't understand the departure time '{departure_time}'. "
+                        "Use an ISO time like 2026-05-27T09:00, or omit it to leave now."
+                    )
                 journeys = await tfl_client.plan_journey(
                     origin_id,
                     destination_id,
-                    departure_time=_parse_departure_time(departure_time),
+                    departure_time=parsed_departure,
                 )
                 if not journeys:
                     return f"No journeys found from '{origin}' to '{destination}'."

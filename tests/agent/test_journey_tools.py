@@ -132,6 +132,26 @@ async def test_plan_journey_unresolved_origin(monkeypatch: pytest.MonkeyPatch) -
 
 
 @pytest.mark.asyncio
+async def test_plan_journey_rejects_unparseable_departure_time(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _stub_resolver(
+        monkeypatch,
+        {"oxford circus": "940GZZLUOXC", "bank": "940GZZLUBNK"},
+    )
+    client = FakeTflClient(journeys=[_journey()])
+    tool = _tool(client, "plan_journey_tool")
+
+    result = await tool.ainvoke(
+        {"origin": "Oxford Circus", "destination": "Bank", "departure_time": "tomorrow 9am"}
+    )
+
+    assert isinstance(result, str)
+    assert "tomorrow 9am" in result
+    assert client.plan_calls == []  # never plans "now" on a bad time
+
+
+@pytest.mark.asyncio
 async def test_plan_journey_unresolved_destination(monkeypatch: pytest.MonkeyPatch) -> None:
     _stub_resolver(monkeypatch, {"oxford circus": "940GZZLUOXC"})
     client = FakeTflClient(journeys=[_journey()])
