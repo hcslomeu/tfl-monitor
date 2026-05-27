@@ -1,0 +1,78 @@
+{
+  "$type": "Tfl.Api.Presentation.Entities.JourneyPlanner.ItineraryResult, Tfl.Api.Presentation.Entities",
+  "journeys": [
+    {
+      "$type": "Tfl.Api.Presentation.Entities.JourneyPlanner.Journey, Tfl.Api.Presentation.Entities",
+      "startDateTime": "2026-05-27T09:00:00",
+      "duration": 12,
+      "arrivalDateTime": "2026-05-27T09:12:00",
+      "legs": [
+        {
+          "$type": "Tfl.Api.Presentation.Entities.JourneyPlanner.Leg, Tfl.Api.Presentation.Entities",
+          "duration": 3,
+          "departureTime": "2026-05-27T09:00:00",
+          "arrivalTime": "2026-05-27T09:03:00",
+          "instruction": {
+            "$type": "Tfl.Api.Presentation.Entities.Instruction, Tfl.Api.Presentation.Entities",
+            "summary": "Walk to Oxford Circus Underground Station",
+            "detailed": "Walk to Oxford Circus Underground Station",
+            "steps": []
+          },
+          "mode": {
+            "$type": "Tfl.Api.Presentation.Entities.Mode, Tfl.Api.Presentation.Entities",
+            "id": "walking",
+            "name": "walking",
+            "type": "Mode",
+            "motType": "Walking"
+          }
+        },
+        {
+          "$type": "Tfl.Api.Presentation.Entities.JourneyPlanner.Leg, Tfl.Api.Presentation.Entities",
+          "duration": 9,
+          "departureTime": "2026-05-27T09:03:00",
+          "arrivalTime": "2026-05-27T09:12:00",
+          "instruction": {
+            "$type": "Tfl.Api.Presentation.Entities.Instruction, Tfl.Api.Presentation.Entities",
+            "summary": "Central line to Bank",
+            "detailed": "Central line towards Epping",
+            "steps": []
+          },
+          "mode": {
+            "$type": "Tfl.Api.Presentation.Entities.Mode, Tfl.Api.Presentation.Entities",
+            "id": "tube",
+            "name": "tube",
+            "type": "Mode",
+            "motType": "Tube"
+          }
+        }
+      ]
+    },
+    {
+      "$type": "Tfl.Api.Presentation.Entities.JourneyPlanner.Journey, Tfl.Api.Presentation.Entities",
+      "startDateTime": "2026-05-27T09:05:00",
+      "duration": 16,
+      "arrivalDateTime": "2026-05-27T09:21:00",
+      "legs": [
+        {
+          "$type": "Tfl.Api.Presentation.Entities.JourneyPlanner.Leg, Tfl.Api.Presentation.Entities",
+          "duration": 16,
+          "departureTime": "2026-05-27T09:05:00",
+          "arrivalTime": "2026-05-27T09:21:00",
+          "instruction": {
+            "$type": "Tfl.Api.Presentation.Entities.Instruction, Tfl.Api.Presentation.Entities",
+            "summary": "Victoria line then Northern line to Bank",
+            "detailed": "Victoria line towards Brixton, change at Euston",
+            "steps": []
+          },
+          "mode": {
+            "$type": "Tfl.Api.Presentation.Entities.Mode, Tfl.Api.Presentation.Entities",
+            "id": "tube",
+            "name": "tube",
+            "type": "Mode",
+            "motType": "Tube"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -111,3 +111,64 @@ class TflArrivalPrediction(BaseModel):
     time_to_station: int = Field(ge=0)
     vehicle_id: str | None = None
     mode_name: str
+
+
+class TflJourneyMode(BaseModel):
+    """Transport mode nested inside a journey leg (``leg.mode``)."""
+
+    model_config = _tfl_model_config()
+
+    name: str
+
+
+class TflJourneyInstruction(BaseModel):
+    """Human-readable instruction nested inside a journey leg."""
+
+    model_config = _tfl_model_config()
+
+    summary: str
+
+
+class TflJourneyLeg(BaseModel):
+    """Single leg of a planned journey returned by ``/Journey/JourneyResults``."""
+
+    model_config = _tfl_model_config()
+
+    duration: int
+    mode: TflJourneyMode
+    instruction: TflJourneyInstruction
+    departure_time: datetime | None = None
+    arrival_time: datetime | None = None
+
+
+class TflJourneyResult(BaseModel):
+    """One journey option from ``/Journey/JourneyResults`` ``journeys[]``."""
+
+    model_config = _tfl_model_config()
+
+    start_date_time: datetime
+    arrival_date_time: datetime
+    duration: int
+    legs: list[TflJourneyLeg] = Field(default_factory=list)
+
+
+class TflStopSearchMatch(BaseModel):
+    """Single match from ``/StopPoint/Search/{query}`` ``matches[]``.
+
+    ``id`` is the StopPoint/NaPTAN code used as an endpoint for journey
+    planning and arrival queries.
+    """
+
+    model_config = _tfl_model_config()
+
+    id: str
+    name: str
+    modes: list[str] = Field(default_factory=list)
+
+
+class TflStopSearchResponse(BaseModel):
+    """Top-level response from ``/StopPoint/Search/{query}``."""
+
+    model_config = _tfl_model_config()
+
+    matches: list[TflStopSearchMatch] = Field(default_factory=list)

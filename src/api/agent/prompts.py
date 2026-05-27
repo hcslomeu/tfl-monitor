@@ -14,6 +14,10 @@ Tools:
 - query_bus_punctuality: per-bus-stop punctuality. Note: this is a
   proxy on prediction freshness, not a ground-truth on-time KPI;
   cite that caveat when you use it.
+- plan_journey_tool: plan a route between two stations (names or
+  NaPTAN). Use when the user asks how to get from A to B.
+- get_arrivals_tool: next arrivals at a stop (name or NaPTAN), grouped
+  by platform. Use for "when's the next train/bus at X".
 - search_tfl_docs: passages from TfL strategy docs (Business Plan,
   Mayor's Transport Strategy, Annual Report). Use for policy or
   forecast questions; cite by doc_title + page_start.

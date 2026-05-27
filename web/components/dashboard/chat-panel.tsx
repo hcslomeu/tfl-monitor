@@ -29,12 +29,12 @@ const DEFAULT_PLACEHOLDER =
 	"what is the next train leaving Baker Street to Uxbridge?";
 
 const DEFAULT_QUICK_PROMPTS: QuickPrompt[] = [
-	{ label: "Next train", value: "Next train Baker Street → Uxbridge" },
-	{ label: "Why delayed?", value: "Why is the Elizabeth line delayed?" },
 	{
-		label: "Ticket acceptance",
-		value: "Tickets accepted on which lines?",
+		label: "Plan a journey",
+		value: "Plan a journey from Oxford Circus to Bank",
 	},
+	{ label: "Next arrivals", value: "Next arrivals at Bank" },
+	{ label: "Line status", value: "What's the status of the Central line?" },
 ];
 
 export function ChatPanel({

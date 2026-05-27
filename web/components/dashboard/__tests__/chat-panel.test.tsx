@@ -56,6 +56,18 @@ describe("ChatPanel (TM-F2 SSE rewrite)", () => {
 		expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 	});
 
+	it("pre-fills the textbox when a quick-prompt chip is clicked", () => {
+		render(<ChatPanel />);
+
+		for (const label of ["Plan a journey", "Next arrivals", "Line status"]) {
+			expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
+		}
+
+		fireEvent.click(screen.getByRole("button", { name: "Next arrivals" }));
+
+		expect(screen.getByRole("textbox")).toHaveValue("Next arrivals at Bank");
+	});
+
 	it("streams tokens into the assistant bubble after Send", async () => {
 		const fetchMock = vi
 			.fn()
