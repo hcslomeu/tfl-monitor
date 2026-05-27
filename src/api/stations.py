@@ -222,7 +222,15 @@ async def resolve_name(*, tfl_client: TflClient | None, query: str) -> str | Non
 
     resolved = response.matches[0].id if response.matches else None
     if resolved is not None and resolved.startswith(_HUB_PREFIX):
-        resolved = await _deref_hub(tfl_client, resolved)
+        try:
+            resolved = await _deref_hub(tfl_client, resolved)
+        except Exception:
+            # A transient hub lookup failure must NOT be cached: return the
+            # unusable hub id for this call but leave the cache untouched so
+            # the next request retries the dereference (mirrors the reverse
+            # resolver's "don't poison the cache on a hiccup" stance).
+            logfire.exception("stations.hub_deref_failed", hub_id=resolved)
+            return resolved
     if len(_NAME_CACHE) >= _NAME_CACHE_MAX:
         _NAME_CACHE.pop(next(iter(_NAME_CACHE)))
     _NAME_CACHE[cache_key] = resolved
@@ -234,15 +242,12 @@ async def _deref_hub(tfl_client: TflClient, hub_id: str) -> str:
 
     Hub ids (``HUB*``) are rejected by journey planning and return no
     arrivals, so fetch the hub stop point and pick the highest-priority
-    rail child. Falls back to the hub id when the lookup fails or the hub
-    exposes no rail child.
+    rail child. Returns the hub id unchanged when the hub exposes no rail
+    child (a definitive result, safe to cache). Propagates the underlying
+    error on a transient lookup failure so the caller can avoid caching.
     """
-    try:
-        async with _get_tfl_semaphore():
-            stop_point = await tfl_client.fetch_stop_point(hub_id)
-    except Exception:
-        logfire.exception("stations.hub_deref_failed", hub_id=hub_id)
-        return hub_id
+    async with _get_tfl_semaphore():
+        stop_point = await tfl_client.fetch_stop_point(hub_id)
     return _pick_rail_child(stop_point) or hub_id
 
 

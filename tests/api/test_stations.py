@@ -36,7 +36,7 @@ class FakeSearchClient:
     fail_times: int = 0
     calls: list[str] = field(default_factory=list)
     hub_children: dict[str, list[tuple[str, list[str]]]] = field(default_factory=dict)
-    hub_fail: set[str] = field(default_factory=set)
+    hub_fail_times: int = 0
     stop_point_calls: list[str] = field(default_factory=list)
 
     async def search_stop(self, query: str) -> TflStopSearchResponse:
@@ -48,8 +48,8 @@ class FakeSearchClient:
 
     async def fetch_stop_point(self, naptan_id: str) -> TflStopPoint:
         self.stop_point_calls.append(naptan_id)
-        if naptan_id in self.hub_fail:
-            raise TflClientError(f"hub lookup failed for {naptan_id}")
+        if len(self.stop_point_calls) <= self.hub_fail_times:
+            raise TflClientError(f"transient hub lookup failure for {naptan_id}")
         children = [
             TflStopPointChild(naptan_id=nid, modes=modes)
             for nid, modes in self.hub_children.get(naptan_id, [])
@@ -389,27 +389,38 @@ async def test_resolve_name_hub_prefers_mode_priority_order() -> None:
 
 
 @pytest.mark.asyncio
-async def test_resolve_name_hub_without_rail_child_falls_back_to_hub_id() -> None:
+async def test_resolve_name_hub_without_rail_child_caches_hub_id() -> None:
     client = FakeSearchClient(
         {"some hub": ["HUBXXX"]},
         hub_children={"HUBXXX": [("490G00001", ["bus"])]},
     )
 
-    resolved = await stations.resolve_name(tfl_client=client, query="some hub")  # type: ignore[arg-type]
+    first = await stations.resolve_name(tfl_client=client, query="some hub")  # type: ignore[arg-type]
+    second = await stations.resolve_name(tfl_client=client, query="some hub")  # type: ignore[arg-type]
 
-    assert resolved == "HUBXXX"  # no rail child → hub id retained
+    assert first == "HUBXXX"  # no rail child → hub id retained
+    assert second == "HUBXXX"
+    # A fetch that succeeds with no rail child is a DEFINITIVE result → cached.
+    assert client.stop_point_calls == ["HUBXXX"]
 
 
 @pytest.mark.asyncio
-async def test_resolve_name_hub_deref_failure_falls_back_to_hub_id() -> None:
+async def test_resolve_name_hub_deref_transient_failure_not_cached() -> None:
+    """A transient hub-dereference failure must not poison the cache: the
+    next request retries and resolves the concrete rail child."""
     client = FakeSearchClient(
         {"bank": ["HUBBAN"]},
-        hub_fail={"HUBBAN"},
+        hub_children={"HUBBAN": [("940GZZLUBNK", ["tube"])]},
+        hub_fail_times=1,
     )
 
-    resolved = await stations.resolve_name(tfl_client=client, query="Bank")  # type: ignore[arg-type]
+    first = await stations.resolve_name(tfl_client=client, query="Bank")  # type: ignore[arg-type]
+    second = await stations.resolve_name(tfl_client=client, query="Bank")  # type: ignore[arg-type]
 
-    assert resolved == "HUBBAN"  # transient hub lookup failure → hub id retained
+    assert first == "HUBBAN"  # deref failed transiently → unusable hub id, uncached
+    assert second == "940GZZLUBNK"  # retry succeeds → concrete rail child
+    assert client.stop_point_calls == ["HUBBAN", "HUBBAN"]  # retried, not cached
+    assert "bank" in stations._NAME_CACHE  # noqa: SLF001 - good result now cached
 
 
 @pytest.mark.asyncio
