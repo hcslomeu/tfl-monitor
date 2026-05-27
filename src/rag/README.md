@@ -66,7 +66,7 @@ first use:
 ```text
 Table:       data_tfl_strategy_docs (schema public)
 Dimension:   1024
-Metric:      cosine (HNSW)
+Metric:      cosine (exact scan)
 Doc scoping: metadata doc_id (replaces Pinecone namespaces)
 Metadata:    doc_id, doc_title, section_title, page_start, page_end, resolved_url, chunk_index
 ```

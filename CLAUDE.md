@@ -91,7 +91,7 @@ If a detailed spec exists at `.claude/specs/TM-XXX-spec.md` for the active WP, i
 | Python version | 3.12 |
 | Warehouse | PostgreSQL 16 |
 | Streaming broker | Redpanda (Kafka-compatible) |
-| Batch orchestration | Apache Airflow 2.10+ (LocalExecutor) |
+| Batch orchestration | Host cron (see ADR 008; Airflow removed) |
 | Transformations | dbt-core + dbt-postgres |
 | API | FastAPI + sse-starlette |
 | Agent framework | LangGraph v1.x |

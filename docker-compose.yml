@@ -185,110 +185,6 @@ services:
       APP_VERSION: ${APP_VERSION:-0.0.1}
     command: ["uv", "run", "python", "-m", "ingestion.consumers.disruptions"]
 
-  airflow-init:
-    build: ./airflow
-    restart: "no"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER:-tflmonitor}:${POSTGRES_PASSWORD:-change_me}@postgres/${POSTGRES_DB:-tflmonitor}
-      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
-      _AIRFLOW_DB_MIGRATE: "true"
-      _AIRFLOW_WWW_USER_CREATE: "true"
-      _AIRFLOW_WWW_USER_USERNAME: ${AIRFLOW_ADMIN_USERNAME:-admin}
-      _AIRFLOW_WWW_USER_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD:-admin}
-      AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "False"
-    user: "50000:0"
-    working_dir: /opt/tfl-monitor
-    volumes:
-      - ./airflow/dags:/opt/airflow/dags
-      - airflow-logs:/opt/airflow/logs
-      - ./:/opt/tfl-monitor
-    command: version
-
-  airflow-webserver:
-    build: ./airflow
-    restart: unless-stopped
-    depends_on:
-      airflow-init:
-        condition: service_completed_successfully
-    environment:
-      AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER:-tflmonitor}:${POSTGRES_PASSWORD:-change_me}@postgres/${POSTGRES_DB:-tflmonitor}
-      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
-      AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "False"
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: "5432"
-      POSTGRES_USER: ${POSTGRES_USER:-tflmonitor}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me}
-      POSTGRES_DB: ${POSTGRES_DB:-tflmonitor}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      PINECONE_API_KEY: ${PINECONE_API_KEY:-}
-      PINECONE_INDEX: ${PINECONE_INDEX:-tfl-strategy-docs}
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-small}
-      LANGSMITH_TRACING: ${LANGSMITH_TRACING:-false}
-      LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
-      LANGSMITH_PROJECT: ${LANGSMITH_PROJECT:-tfl-monitor}
-      LOGFIRE_TOKEN: ${LOGFIRE_TOKEN:-}
-      ENVIRONMENT: ${ENVIRONMENT:-local}
-      APP_VERSION: ${APP_VERSION:-0.0.1}
-    user: "50000:0"
-    working_dir: /opt/tfl-monitor
-    ports:
-      - "8082:8080"
-    volumes:
-      - ./airflow/dags:/opt/airflow/dags
-      - airflow-logs:/opt/airflow/logs
-      - ./:/opt/tfl-monitor
-    command: webserver
-    healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
-      interval: 15s
-      timeout: 10s
-      retries: 10
-      start_period: 90s
-
-  airflow-scheduler:
-    build: ./airflow
-    restart: unless-stopped
-    depends_on:
-      airflow-init:
-        condition: service_completed_successfully
-    environment:
-      AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER:-tflmonitor}:${POSTGRES_PASSWORD:-change_me}@postgres/${POSTGRES_DB:-tflmonitor}
-      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: "5432"
-      POSTGRES_USER: ${POSTGRES_USER:-tflmonitor}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me}
-      POSTGRES_DB: ${POSTGRES_DB:-tflmonitor}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      PINECONE_API_KEY: ${PINECONE_API_KEY:-}
-      PINECONE_INDEX: ${PINECONE_INDEX:-tfl-strategy-docs}
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-small}
-      LANGSMITH_TRACING: ${LANGSMITH_TRACING:-false}
-      LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
-      LANGSMITH_PROJECT: ${LANGSMITH_PROJECT:-tfl-monitor}
-      LOGFIRE_TOKEN: ${LOGFIRE_TOKEN:-}
-      ENVIRONMENT: ${ENVIRONMENT:-local}
-      APP_VERSION: ${APP_VERSION:-0.0.1}
-    user: "50000:0"
-    working_dir: /opt/tfl-monitor
-    volumes:
-      - ./airflow/dags:/opt/airflow/dags
-      - airflow-logs:/opt/airflow/logs
-      - ./:/opt/tfl-monitor
-    command: scheduler
-    healthcheck:
-      test: ["CMD-SHELL", "airflow jobs check --job-type SchedulerJob --hostname \"$$(hostname)\""]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 90s
-
   minio:
     image: minio/minio:RELEASE.2024-10-29T16-01-48Z
     restart: unless-stopped
@@ -311,5 +207,4 @@ services:
 volumes:
   postgres-data:
   redpanda-data:
-  airflow-logs:
   minio-data:
