@@ -30,7 +30,11 @@ from contracts.schemas import (
     TflLineResponse,
     TransportMode,
 )
-from contracts.schemas.tfl_api import TflJourneyResult, TflStopSearchResponse
+from contracts.schemas.tfl_api import (
+    TflJourneyResult,
+    TflStopPoint,
+    TflStopSearchResponse,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -86,6 +90,19 @@ def test_stop_search_fixture_parses_matches() -> None:
 
     assert [match.id for match in response.matches] == ["940GZZLUOXC", "490G00251P"]
     assert response.matches[0].modes == ["tube"]
+
+
+def test_hub_stop_point_fixture_parses_children_with_modes() -> None:
+    hub = TflStopPoint.model_validate(_load_tfl_object("stop_point_hub_bank.json"))
+
+    assert hub.naptan_id == "HUBBAN"
+    assert {child.naptan_id for child in hub.children} == {
+        "490G00007599",
+        "940GZZDLBNK",
+        "940GZZLUBNK",
+    }
+    tube_child = next(c for c in hub.children if "tube" in c.modes)
+    assert tube_child.naptan_id == "940GZZLUBNK"
 
 
 # ---------- Tier-2: internal Kafka event contracts ----------

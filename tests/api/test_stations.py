@@ -12,6 +12,7 @@ import pytest
 from api import stations
 from contracts.schemas.tfl_api import (
     TflStopPoint,
+    TflStopPointChild,
     TflStopSearchMatch,
     TflStopSearchResponse,
 )
@@ -20,18 +21,23 @@ from ingestion.tfl_client.client import TflClientError
 
 @dataclass
 class FakeSearchClient:
-    """Stand-in for ``TflClient`` covering ``search_stop``.
+    """Stand-in for ``TflClient`` covering ``search_stop`` + ``fetch_stop_point``.
 
     ``matches_by_query`` maps a lowercased query to the ordered ids the
     search returns (lookup mirrors TfL Search being case-insensitive);
-    ``fail_times`` raises on the first N calls to model a transient
+    ``fail_times`` raises on the first N search calls to model a transient
     upstream failure. ``calls`` records the raw query as received, so
     tests can assert the resolver preserves the caller's casing.
+    ``hub_children`` maps a hub id to ``(naptan_id, modes)`` tuples for the
+    hub-dereference path; ``hub_fail`` ids raise from ``fetch_stop_point``.
     """
 
     matches_by_query: dict[str, list[str]]
     fail_times: int = 0
     calls: list[str] = field(default_factory=list)
+    hub_children: dict[str, list[tuple[str, list[str]]]] = field(default_factory=dict)
+    hub_fail_times: int = 0
+    stop_point_calls: list[str] = field(default_factory=list)
 
     async def search_stop(self, query: str) -> TflStopSearchResponse:
         self.calls.append(query)
@@ -39,6 +45,16 @@ class FakeSearchClient:
             raise TflClientError(f"transient search failure for {query}")
         ids = self.matches_by_query.get(query.strip().lower(), [])
         return TflStopSearchResponse(matches=[TflStopSearchMatch(id=sid, name=sid) for sid in ids])
+
+    async def fetch_stop_point(self, naptan_id: str) -> TflStopPoint:
+        self.stop_point_calls.append(naptan_id)
+        if len(self.stop_point_calls) <= self.hub_fail_times:
+            raise TflClientError(f"transient hub lookup failure for {naptan_id}")
+        children = [
+            TflStopPointChild(naptan_id=nid, modes=modes)
+            for nid, modes in self.hub_children.get(naptan_id, [])
+        ]
+        return TflStopPoint(naptan_id=naptan_id, common_name=naptan_id, children=children)
 
 
 @dataclass
@@ -340,3 +356,78 @@ async def test_resolve_name_cache_is_bounded(monkeypatch: pytest.MonkeyPatch) ->
     assert len(stations._NAME_CACHE) == 2  # noqa: SLF001
     assert "a" not in stations._NAME_CACHE  # noqa: SLF001 - oldest evicted (FIFO)
     assert set(stations._NAME_CACHE) == {"b", "c"}  # noqa: SLF001
+
+
+@pytest.mark.asyncio
+async def test_resolve_name_dereferences_hub_to_rail_child() -> None:
+    client = FakeSearchClient(
+        {"bank": ["HUBBAN", "940GZZLUEMB"]},
+        hub_children={"HUBBAN": [("940GZZDLBNK", ["dlr"]), ("940GZZLUBNK", ["tube"])]},
+    )
+
+    resolved = await stations.resolve_name(tfl_client=client, query="Bank")  # type: ignore[arg-type]
+
+    assert resolved == "940GZZLUBNK"  # tube preferred over dlr
+    assert client.stop_point_calls == ["HUBBAN"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_name_hub_prefers_mode_priority_order() -> None:
+    client = FakeSearchClient(
+        {"paddington": ["HUBPAD"]},
+        hub_children={
+            "HUBPAD": [
+                ("910GPADTON", ["elizabeth-line", "national-rail"]),
+                ("940GZZLUPAC", ["tube"]),
+            ]
+        },
+    )
+
+    resolved = await stations.resolve_name(tfl_client=client, query="Paddington")  # type: ignore[arg-type]
+
+    assert resolved == "940GZZLUPAC"  # tube outranks elizabeth-line despite listing order
+
+
+@pytest.mark.asyncio
+async def test_resolve_name_hub_without_rail_child_caches_hub_id() -> None:
+    client = FakeSearchClient(
+        {"some hub": ["HUBXXX"]},
+        hub_children={"HUBXXX": [("490G00001", ["bus"])]},
+    )
+
+    first = await stations.resolve_name(tfl_client=client, query="some hub")  # type: ignore[arg-type]
+    second = await stations.resolve_name(tfl_client=client, query="some hub")  # type: ignore[arg-type]
+
+    assert first == "HUBXXX"  # no rail child → hub id retained
+    assert second == "HUBXXX"
+    # A fetch that succeeds with no rail child is a DEFINITIVE result → cached.
+    assert client.stop_point_calls == ["HUBXXX"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_name_hub_deref_transient_failure_not_cached() -> None:
+    """A transient hub-dereference failure must not poison the cache: the
+    next request retries and resolves the concrete rail child."""
+    client = FakeSearchClient(
+        {"bank": ["HUBBAN"]},
+        hub_children={"HUBBAN": [("940GZZLUBNK", ["tube"])]},
+        hub_fail_times=1,
+    )
+
+    first = await stations.resolve_name(tfl_client=client, query="Bank")  # type: ignore[arg-type]
+    second = await stations.resolve_name(tfl_client=client, query="Bank")  # type: ignore[arg-type]
+
+    assert first == "HUBBAN"  # deref failed transiently → unusable hub id, uncached
+    assert second == "940GZZLUBNK"  # retry succeeds → concrete rail child
+    assert client.stop_point_calls == ["HUBBAN", "HUBBAN"]  # retried, not cached
+    assert "bank" in stations._NAME_CACHE  # noqa: SLF001 - good result now cached
+
+
+@pytest.mark.asyncio
+async def test_resolve_name_non_hub_match_skips_deref() -> None:
+    client = FakeSearchClient({"oxford circus": ["940GZZLUOXC"]})
+
+    resolved = await stations.resolve_name(tfl_client=client, query="Oxford Circus")  # type: ignore[arg-type]
+
+    assert resolved == "940GZZLUOXC"
+    assert client.stop_point_calls == []  # concrete NaPTAN needs no dereference

@@ -50,6 +50,11 @@ def stop_search_oxford_circus_fixture() -> dict[str, Any]:
 
 
 @pytest.fixture
+def stop_point_hub_bank_fixture() -> dict[str, Any]:
+    return _load_obj("stop_point_hub_bank.json")
+
+
+@pytest.fixture
 def line_status_tube_detailed_fixture() -> list[dict[str, Any]]:
     """``/Line/Mode/tube/Status?detail=true`` response with nested disruptions.
 

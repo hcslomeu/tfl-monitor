@@ -237,11 +237,22 @@ def make_tools(
                         f"Couldn't understand the departure time '{departure_time}'. "
                         "Use an ISO time like 2026-05-27T09:00, or omit it to leave now."
                     )
-                journeys = await tfl_client.plan_journey(
-                    origin_id,
-                    destination_id,
-                    departure_time=parsed_departure,
-                )
+                try:
+                    journeys = await tfl_client.plan_journey(
+                        origin_id,
+                        destination_id,
+                        departure_time=parsed_departure,
+                    )
+                except Exception:  # noqa: BLE001 - never let an upstream error crash the stream
+                    logfire.exception(
+                        "agent.tool.plan_journey_failed",
+                        origin=origin,
+                        destination=destination,
+                    )
+                    return (
+                        f"Sorry, I couldn't plan a journey from '{origin}' "
+                        f"to '{destination}' right now."
+                    )
                 if not journeys:
                     return f"No journeys found from '{origin}' to '{destination}'."
                 best = journeys[0]
@@ -271,7 +282,11 @@ def make_tools(
                 stop_id = await resolve_name(tfl_client=tfl_client, query=stop)
                 if stop_id is None:
                     return f"Couldn't find stop '{stop}'."
-                predictions = await tfl_client.fetch_arrivals(stop_id)
+                try:
+                    predictions = await tfl_client.fetch_arrivals(stop_id)
+                except Exception:  # noqa: BLE001 - never let an upstream error crash the stream
+                    logfire.exception("agent.tool.get_arrivals_failed", stop=stop)
+                    return f"Sorry, I couldn't fetch arrivals for '{stop}' right now."
                 if not predictions:
                     return f"No arrivals found for '{stop}'."
                 grouped: dict[str, list[Any]] = {}
