@@ -222,6 +222,43 @@ export interface components {
             /** Format: date-time */
             created_at: string;
         };
+        /** @description One leg of a planned journey. */
+        JourneyLeg: {
+            mode: string;
+            summary: string;
+            minutes: number;
+        };
+        /**
+         * @description Structured payload of a `journey` SSE frame (the `content` field is
+         *     this object JSON-encoded). Built from `plan_journey_tool`.
+         */
+        JourneyView: {
+            total_minutes: number;
+            /** Format: date-time */
+            start: string;
+            /** Format: date-time */
+            arrival: string;
+            legs: components["schemas"]["JourneyLeg"][];
+        };
+        /** @description One predicted arrival at a platform. */
+        ArrivalPrediction: {
+            line: string;
+            destination?: string | null;
+            seconds: number;
+        };
+        /** @description Upcoming arrivals grouped under a single platform. */
+        ArrivalsPlatform: {
+            platform: string;
+            arrivals: components["schemas"]["ArrivalPrediction"][];
+        };
+        /**
+         * @description Structured payload of an `arrivals` SSE frame (the `content` field
+         *     is this object JSON-encoded). Built from `get_arrivals_tool`.
+         */
+        ArrivalsView: {
+            station: string;
+            platforms: components["schemas"]["ArrivalsPlatform"][];
+        };
         /** @description RFC 7807 problem details. */
         Problem: {
             /** Format: uri */

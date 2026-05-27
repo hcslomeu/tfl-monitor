@@ -311,8 +311,13 @@ paths:
               schema:
                 type: string
                 description: |
-                  SSE frames. Each `data:` frame contains a JSON payload with at
-                  least `{"type": "token" | "tool" | "end", "content": <str>}`.
+                  SSE frames. Each `data:` frame contains a JSON payload of the
+                  shape `{"type": <str>, "content": <str>}`. Frame types:
+                  `token` (streamed assistant text), `tool` (a tool invocation,
+                  content is the tool name), `journey` / `arrivals` (structured
+                  cards whose `content` is a JSON-encoded `JourneyView` /
+                  `ArrivalsView`), and `end` (terminator; content is `"error"`
+                  on failure, else empty).
         "400":
           $ref: "#/components/responses/Problem"
         "500":
@@ -493,6 +498,60 @@ components:
           enum: [user, assistant, system]
         content: { type: string }
         created_at: { type: string, format: date-time }
+
+    JourneyLeg:
+      type: object
+      description: One leg of a planned journey.
+      required: [mode, summary, minutes]
+      properties:
+        mode: { type: string }
+        summary: { type: string }
+        minutes: { type: integer, minimum: 0 }
+
+    JourneyView:
+      type: object
+      description: |
+        Structured payload of a `journey` SSE frame (the `content` field is
+        this object JSON-encoded). Built from `plan_journey_tool`.
+      required: [total_minutes, start, arrival, legs]
+      properties:
+        total_minutes: { type: integer, minimum: 0 }
+        start: { type: string, format: date-time }
+        arrival: { type: string, format: date-time }
+        legs:
+          type: array
+          items: { $ref: "#/components/schemas/JourneyLeg" }
+
+    ArrivalPrediction:
+      type: object
+      description: One predicted arrival at a platform.
+      required: [line, seconds]
+      properties:
+        line: { type: string }
+        destination: { type: string, nullable: true }
+        seconds: { type: integer, minimum: 0 }
+
+    ArrivalsPlatform:
+      type: object
+      description: Upcoming arrivals grouped under a single platform.
+      required: [platform, arrivals]
+      properties:
+        platform: { type: string }
+        arrivals:
+          type: array
+          items: { $ref: "#/components/schemas/ArrivalPrediction" }
+
+    ArrivalsView:
+      type: object
+      description: |
+        Structured payload of an `arrivals` SSE frame (the `content` field
+        is this object JSON-encoded). Built from `get_arrivals_tool`.
+      required: [station, platforms]
+      properties:
+        station: { type: string }
+        platforms:
+          type: array
+          items: { $ref: "#/components/schemas/ArrivalsPlatform" }
 
     Problem:
       type: object

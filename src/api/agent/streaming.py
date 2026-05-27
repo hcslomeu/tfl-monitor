@@ -29,6 +29,24 @@ def frame_end(content: str = "") -> dict[str, str]:
     return {"type": "end", "content": content}
 
 
+def frame_data(kind: str, payload: dict[str, Any]) -> dict[str, str]:
+    """Wrap a structured tool result in a ``kind`` frame.
+
+    ``content`` is the JSON-encoded ``payload`` so the SSE envelope stays
+    uniform (``{"type": str, "content": str}``); the frontend decodes it
+    into a typed view (``JourneyView`` / ``ArrivalsView``).
+    """
+    return {"type": kind, "content": json.dumps(payload, ensure_ascii=False)}
+
+
+# Tool name -> structured frame kind. Only these tools return a dict the
+# frontend renders as a card; every other tool result stays prose-only.
+_CARD_TOOLS: dict[str, str] = {
+    "plan_journey_tool": "journey",
+    "get_arrivals_tool": "arrivals",
+}
+
+
 def project(mode: str, payload: Any) -> list[dict[str, str]]:
     """Map a single ``(mode, payload)`` chunk to zero or more SSE frames."""
     if mode == "messages":
@@ -54,8 +72,34 @@ def project(mode: str, payload: Any) -> list[dict[str, str]]:
         tools_payload = payload["tools"]
         if isinstance(tools_payload, dict):
             tool_messages = tools_payload.get("messages", [])
-            return [frame_tool(getattr(m, "name", "tool")) for m in tool_messages]
+            frames: list[dict[str, str]] = []
+            for m in tool_messages:
+                name = getattr(m, "name", "tool")
+                frames.append(frame_tool(name))
+                card = _card_frame(name, getattr(m, "content", None))
+                if card is not None:
+                    frames.append(card)
+            return frames
     return []
+
+
+def _card_frame(tool_name: str, content: Any) -> dict[str, str] | None:
+    """Build a structured card frame for a known tool, else ``None``.
+
+    A card tool returns a dict on success (LangChain JSON-encodes it into
+    ``ToolMessage.content``) or a plain error string when it cannot answer.
+    Only the JSON-object case yields a frame; anything else stays prose.
+    """
+    kind = _CARD_TOOLS.get(tool_name)
+    if kind is None or not isinstance(content, str):
+        return None
+    try:
+        payload = json.loads(content)
+    except (json.JSONDecodeError, ValueError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    return frame_data(kind, payload)
 
 
 def _extract_text(content: Any) -> str:

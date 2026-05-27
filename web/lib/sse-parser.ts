@@ -14,7 +14,17 @@
 export type Frame =
 	| { type: "token"; content: string }
 	| { type: "tool"; content: string }
+	| { type: "journey"; content: string }
+	| { type: "arrivals"; content: string }
 	| { type: "end"; content: string };
+
+const FRAME_TYPES = new Set<Frame["type"]>([
+	"token",
+	"tool",
+	"journey",
+	"arrivals",
+	"end",
+]);
 
 const EVENT_BOUNDARY = /\r\n\r\n|\r\r|\n\n/;
 const LINE_TERMINATOR = /\r\n|\r|\n/;
@@ -62,8 +72,8 @@ function parseEvent(event: string): Frame | null {
 			typeof (payload as { content: unknown }).content === "string"
 		) {
 			const { type, content } = payload as { type: string; content: string };
-			if (type === "token" || type === "tool" || type === "end") {
-				return { type, content };
+			if (FRAME_TYPES.has(type as Frame["type"])) {
+				return { type, content } as Frame;
 			}
 		}
 	} catch {

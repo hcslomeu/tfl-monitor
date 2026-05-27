@@ -111,6 +111,21 @@ export function getLineMeta(lineId: string): LineMeta {
 	return metaFor(lineId);
 }
 
+/**
+ * Resolve a TfL line *display name* (e.g. "Hammersmith & City",
+ * "Elizabeth line") to its brand colour, normalising the name to the
+ * canonical line id the registry is keyed by. Unknown names degrade to
+ * the neutral fallback colour. Used by the chat arrivals board, where
+ * predictions carry a line name rather than an id.
+ */
+export function lineColorByName(name: string): string {
+	const id = stripTrailingLine(name)
+		.toLowerCase()
+		.replace(/\s*&\s*/g, "-")
+		.replace(/\s+/g, "-");
+	return metaFor(id).color;
+}
+
 function lineIdForCode(code: string): string | undefined {
 	const known = LINE_ID_BY_CODE[code];
 	if (known) return known;
