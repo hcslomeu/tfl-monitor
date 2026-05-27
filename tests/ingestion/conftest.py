@@ -19,6 +19,11 @@ def _load(name: str) -> list[dict[str, Any]]:
     return data
 
 
+def _load_obj(name: str) -> dict[str, Any]:
+    data: dict[str, Any] = json.loads((FIXTURES_DIR / name).read_text(encoding="utf-8"))
+    return data
+
+
 @pytest.fixture
 def line_status_tube_fixture() -> list[dict[str, Any]]:
     return _load("line_status_tube.json")
@@ -32,6 +37,16 @@ def line_status_multi_mode_fixture() -> list[dict[str, Any]]:
 @pytest.fixture
 def arrivals_oxford_circus_fixture() -> list[dict[str, Any]]:
     return _load("arrivals_oxford_circus.json")
+
+
+@pytest.fixture
+def journey_oxford_circus_to_bank_fixture() -> dict[str, Any]:
+    return _load_obj("journey_oxford_circus_to_bank.json")
+
+
+@pytest.fixture
+def stop_search_oxford_circus_fixture() -> dict[str, Any]:
+    return _load_obj("stop_search_oxford_circus.json")
 
 
 @pytest.fixture

@@ -30,6 +30,7 @@ from contracts.schemas import (
     TflLineResponse,
     TransportMode,
 )
+from contracts.schemas.tfl_api import TflJourneyResult, TflStopSearchResponse
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -45,6 +46,12 @@ def _load_or_skip(name: str) -> list[dict[str, object]]:
     return data
 
 
+def _load_tfl_object(name: str) -> dict[str, object]:
+    data = json.loads((FIXTURES / "tfl" / name).read_text(encoding="utf-8"))
+    assert isinstance(data, dict), f"expected a JSON object in {name}"
+    return data
+
+
 # ---------- Tier-1: raw TfL API fixtures ----------
 
 
@@ -56,6 +63,29 @@ def test_line_status_fixture_parses_as_tfl_line() -> None:
 def test_arrivals_fixture_parses_as_tfl_prediction() -> None:
     for item in _load_or_skip("arrivals_sample.json"):
         TflArrivalPrediction.model_validate(item)
+
+
+def test_journey_fixture_parses_with_nested_legs() -> None:
+    payload = _load_tfl_object("journey_oxford_circus_to_bank.json")
+    raw_journeys = payload["journeys"]
+    assert isinstance(raw_journeys, list)
+    journeys = [TflJourneyResult.model_validate(j) for j in raw_journeys]
+
+    assert len(journeys) == 2
+    first = journeys[0]
+    assert first.duration == 12
+    assert [leg.mode.name for leg in first.legs] == ["walking", "tube"]
+    assert first.legs[1].instruction.summary == "Central line to Bank"
+    assert first.legs[0].departure_time is not None
+
+
+def test_stop_search_fixture_parses_matches() -> None:
+    response = TflStopSearchResponse.model_validate(
+        _load_tfl_object("stop_search_oxford_circus.json")
+    )
+
+    assert [match.id for match in response.matches] == ["940GZZLUOXC", "490G00251P"]
+    assert response.matches[0].modes == ["tube"]
 
 
 # ---------- Tier-2: internal Kafka event contracts ----------

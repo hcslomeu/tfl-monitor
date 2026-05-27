@@ -10,8 +10,11 @@ from __future__ import annotations
 
 import os
 from collections.abc import Iterable
+from datetime import datetime
 from types import TracebackType
 from typing import Any, Self
+from urllib.parse import quote
+from zoneinfo import ZoneInfo
 
 import httpx
 import logfire
@@ -19,8 +22,10 @@ from pydantic import TypeAdapter
 
 from contracts.schemas.tfl_api import (
     TflArrivalPrediction,
+    TflJourneyResult,
     TflLineResponse,
     TflStopPoint,
+    TflStopSearchResponse,
 )
 from ingestion.tfl_client.retry import TflClientError, with_retry
 
@@ -30,9 +35,15 @@ _TFL_BASE_URL = "https://api.tfl.gov.uk"
 _DEFAULT_TIMEOUT_SECONDS = 30.0
 _DEFAULT_MAX_ATTEMPTS = 3
 
+# TfL journey planning expects wall-clock London local time (GMT/BST),
+# not UTC, in its ``date``/``time`` params.
+_TFL_TIMEZONE = ZoneInfo("Europe/London")
+
 _LINE_RESPONSE_ADAPTER: TypeAdapter[list[TflLineResponse]] = TypeAdapter(list[TflLineResponse])
 _ARRIVAL_ADAPTER: TypeAdapter[list[TflArrivalPrediction]] = TypeAdapter(list[TflArrivalPrediction])
 _STOP_POINT_ADAPTER: TypeAdapter[TflStopPoint] = TypeAdapter(TflStopPoint)
+_STOP_SEARCH_ADAPTER: TypeAdapter[TflStopSearchResponse] = TypeAdapter(TflStopSearchResponse)
+_JOURNEY_ADAPTER: TypeAdapter[list[TflJourneyResult]] = TypeAdapter(list[TflJourneyResult])
 
 
 class TflClient:
@@ -123,6 +134,64 @@ class TflClient:
             params={"detail": "true"},
         )
         return _LINE_RESPONSE_ADAPTER.validate_python(data)
+
+    async def search_stop(self, query: str) -> TflStopSearchResponse:
+        """Search stop points by free-text name via ``/StopPoint/Search/{query}``.
+
+        Returns the tier-1 search response whose ``matches`` are ranked by
+        TfL relevance; the first match is the best name resolution.
+        """
+        if not query:
+            raise TflClientError("query must be a non-empty string")
+        data = await self._request(f"/StopPoint/Search/{quote(query, safe='')}")
+        return _STOP_SEARCH_ADAPTER.validate_python(data)
+
+    async def plan_journey(
+        self,
+        from_id: str,
+        to_id: str,
+        *,
+        departure_time: datetime | None = None,
+        modes: Iterable[str] | None = None,
+    ) -> list[TflJourneyResult]:
+        """Plan journeys between two StopPoint/NaPTAN ids.
+
+        Hits ``/Journey/JourneyResults/{from_id}/to/{to_id}``. Passing
+        StopPoint ids (not names) avoids the TfL HTTP 300 disambiguation
+        flow. When ``departure_time`` is given it is sent as a departing
+        time in TfL's ``yyyyMMdd``/``HHmm`` format; ``modes`` restricts the
+        transport modes considered.
+
+        Args:
+            from_id: Origin StopPoint/NaPTAN id.
+            to_id: Destination StopPoint/NaPTAN id.
+            departure_time: Optional desired departure time.
+            modes: Optional iterable of TfL transport modes to allow.
+
+        Returns:
+            The tier-1 journey options from the response ``journeys`` array.
+        """
+        if not from_id or not to_id:
+            raise TflClientError("from_id and to_id must be non-empty strings")
+        params: dict[str, Any] = {}
+        if departure_time is not None:
+            # TfL wants London wall-clock time; convert tz-aware inputs
+            # (e.g. UTC) so a request never silently shifts by the BST offset.
+            local = (
+                departure_time.astimezone(_TFL_TIMEZONE)
+                if departure_time.tzinfo is not None
+                else departure_time
+            )
+            params["date"] = local.strftime("%Y%m%d")
+            params["time"] = local.strftime("%H%M")
+            params["timeIs"] = "Departing"
+        if modes is not None:
+            params["mode"] = self._join_modes(modes)
+        data = await self._request(
+            f"/Journey/JourneyResults/{from_id}/to/{to_id}",
+            params=params or None,
+        )
+        return _JOURNEY_ADAPTER.validate_python(data.get("journeys", []))
 
     async def _request(self, path: str, *, params: dict[str, Any] | None = None) -> Any:
         """Issue a GET request with retry, returning the decoded JSON body."""

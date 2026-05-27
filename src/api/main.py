@@ -87,7 +87,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # is unset (smoke tests, /health-only deploys).
     from api.agent.graph import compile_agent  # noqa: PLC0415
 
-    app.state.agent = compile_agent(pool=pool)
+    app.state.agent = compile_agent(pool=pool, tfl_client=app.state.tfl_client)
     logfire.info(
         "api_db_pool_opened",
         service="tfl-monitor-api",

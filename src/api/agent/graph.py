@@ -23,13 +23,16 @@ the SQL tools.
 from __future__ import annotations
 
 import os
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import logfire
 from psycopg_pool import AsyncConnectionPool
 from pydantic import SecretStr
 
 from api.agent.prompts import render
+
+if TYPE_CHECKING:
+    from ingestion.tfl_client.client import TflClient
 
 DEFAULT_ANTHROPIC_MODEL = "claude-3-5-sonnet-latest"
 DEFAULT_BEDROCK_SONNET_MODEL = "eu.anthropic.claude-sonnet-4-5-20250929-v1:0"
@@ -95,12 +98,15 @@ def _build_retriever_or_none() -> Any | None:
 def compile_agent(
     *,
     pool: AsyncConnectionPool,
+    tfl_client: TflClient | None = None,
     model: Any | None = None,
 ) -> Any | None:
     """Build the agent or return ``None`` when no LLM backend is set.
 
     Args:
         pool: Shared ``AsyncConnectionPool`` reused by every SQL tool.
+        tfl_client: Optional ``TflClient`` powering the journey/arrivals
+            tools. When ``None`` those tools are omitted.
         model: Optional pre-built chat model. Tests inject a fake here
             so they never hit a live LLM provider.
 
@@ -118,7 +124,7 @@ def compile_agent(
     from api.agent.tools import make_tools  # noqa: PLC0415
 
     retriever = _build_retriever_or_none()
-    tools = make_tools(pool=pool, retriever=retriever)
+    tools = make_tools(pool=pool, tfl_client=tfl_client, retriever=retriever)
     return create_react_agent(
         model=chat_model,
         tools=tools,

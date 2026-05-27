@@ -1,0 +1,23 @@
+{
+  "$type": "Tfl.Api.Presentation.Entities.SearchResponse, Tfl.Api.Presentation.Entities",
+  "query": "oxford circus",
+  "total": 2,
+  "matches": [
+    {
+      "$type": "Tfl.Api.Presentation.Entities.SearchMatch, Tfl.Api.Presentation.Entities",
+      "id": "940GZZLUOXC",
+      "name": "Oxford Circus Underground Station",
+      "lat": 51.515224,
+      "lon": -0.141903,
+      "modes": ["tube"]
+    },
+    {
+      "$type": "Tfl.Api.Presentation.Entities.SearchMatch, Tfl.Api.Presentation.Entities",
+      "id": "490G00251P",
+      "name": "Oxford Circus Station",
+      "lat": 51.515743,
+      "lon": -0.142244,
+      "modes": ["bus"]
+    }
+  ]
+}

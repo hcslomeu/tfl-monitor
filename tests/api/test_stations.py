@@ -10,8 +10,35 @@ import httpx
 import pytest
 
 from api import stations
-from contracts.schemas.tfl_api import TflStopPoint
+from contracts.schemas.tfl_api import (
+    TflStopPoint,
+    TflStopSearchMatch,
+    TflStopSearchResponse,
+)
 from ingestion.tfl_client.client import TflClientError
+
+
+@dataclass
+class FakeSearchClient:
+    """Stand-in for ``TflClient`` covering ``search_stop``.
+
+    ``matches_by_query`` maps a lowercased query to the ordered ids the
+    search returns (lookup mirrors TfL Search being case-insensitive);
+    ``fail_times`` raises on the first N calls to model a transient
+    upstream failure. ``calls`` records the raw query as received, so
+    tests can assert the resolver preserves the caller's casing.
+    """
+
+    matches_by_query: dict[str, list[str]]
+    fail_times: int = 0
+    calls: list[str] = field(default_factory=list)
+
+    async def search_stop(self, query: str) -> TflStopSearchResponse:
+        self.calls.append(query)
+        if len(self.calls) <= self.fail_times:
+            raise TflClientError(f"transient search failure for {query}")
+        ids = self.matches_by_query.get(query.strip().lower(), [])
+        return TflStopSearchResponse(matches=[TflStopSearchMatch(id=sid, name=sid) for sid in ids])
 
 
 @dataclass
@@ -242,3 +269,74 @@ async def test_definitive_404_is_cached(
     assert first == {"490DEPRECATED": None}
     assert second == {"490DEPRECATED": None}
     assert fake_client.calls == ["490DEPRECATED"]
+
+
+# ---------------------------------------------------------------------------
+# Forward resolver: resolve_name (name → StopPoint/NaPTAN id)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_resolve_name_returns_top_match_id() -> None:
+    client = FakeSearchClient({"oxford circus": ["940GZZLUOXC", "490G00251P"]})
+
+    resolved = await stations.resolve_name(tfl_client=client, query="Oxford Circus")  # type: ignore[arg-type]
+
+    assert resolved == "940GZZLUOXC"
+    assert client.calls == ["Oxford Circus"]  # case preserved on the upstream call
+
+
+@pytest.mark.asyncio
+async def test_resolve_name_no_match_returns_none_and_caches() -> None:
+    client = FakeSearchClient({})
+
+    first = await stations.resolve_name(tfl_client=client, query="Nowhere")  # type: ignore[arg-type]
+    second = await stations.resolve_name(tfl_client=client, query="Nowhere")  # type: ignore[arg-type]
+
+    assert first is None
+    assert second is None
+    assert client.calls == ["Nowhere"]  # cached miss short-circuits the second call
+
+
+@pytest.mark.asyncio
+async def test_resolve_name_without_client_returns_none() -> None:
+    assert await stations.resolve_name(tfl_client=None, query="Oxford Circus") is None
+
+
+@pytest.mark.asyncio
+async def test_resolve_name_cache_hit_avoids_second_call() -> None:
+    client = FakeSearchClient({"bank": ["940GZZLUBNK"]})
+
+    first = await stations.resolve_name(tfl_client=client, query="Bank")  # type: ignore[arg-type]
+    second = await stations.resolve_name(tfl_client=client, query="  bank  ")  # type: ignore[arg-type]
+
+    assert first == "940GZZLUBNK"
+    assert second == "940GZZLUBNK"
+    assert client.calls == ["Bank"]  # case-insensitive cache key collapses both to one lookup
+
+
+@pytest.mark.asyncio
+async def test_resolve_name_transient_failure_not_cached() -> None:
+    client = FakeSearchClient({"bank": ["940GZZLUBNK"]}, fail_times=1)
+
+    first = await stations.resolve_name(tfl_client=client, query="Bank")  # type: ignore[arg-type]
+    second = await stations.resolve_name(tfl_client=client, query="Bank")  # type: ignore[arg-type]
+
+    assert first is None
+    assert second == "940GZZLUBNK"
+    assert client.calls == ["Bank", "Bank"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_name_cache_is_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The free-text cache evicts oldest entries past its cap rather than
+    growing without bound under high-cardinality chat traffic."""
+    monkeypatch.setattr(stations, "_NAME_CACHE_MAX", 2)
+    client = FakeSearchClient({"a": ["1"], "b": ["2"], "c": ["3"]})
+
+    for query in ("a", "b", "c"):
+        await stations.resolve_name(tfl_client=client, query=query)  # type: ignore[arg-type]
+
+    assert len(stations._NAME_CACHE) == 2  # noqa: SLF001
+    assert "a" not in stations._NAME_CACHE  # noqa: SLF001 - oldest evicted (FIFO)
+    assert set(stations._NAME_CACHE) == {"b", "c"}  # noqa: SLF001

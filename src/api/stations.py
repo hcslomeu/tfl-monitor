@@ -27,6 +27,15 @@ from ingestion.tfl_client.client import TflClient, TflClientError
 # *not* cached so the next request retries the lookup.
 _NAPTAN_CACHE: dict[str, str | None] = {}
 
+# Process-lifetime cache mapping a normalised free-text station query →
+# resolved StopPoint/NaPTAN id. ``None`` means the search returned no
+# matches (a definitive HTTP 200 miss). Transient failures (timeouts,
+# 5xx, network errors) are *not* cached so the next request retries.
+# Keys are arbitrary user text, so the cache is bounded with simple FIFO
+# eviction to keep memory flat under high-cardinality chat traffic.
+_NAME_CACHE: dict[str, str | None] = {}
+_NAME_CACHE_MAX: Final = 512
+
 # Cap concurrent in-flight TfL lookups across all requests when several
 # NaPTANs miss the seed at the same time. The free-tier TfL rate limit
 # is 500 req/min per app-key; sharing one semaphore per process keeps
@@ -42,9 +51,10 @@ WHERE naptan_id = ANY(%(naptan_ids)s::text[])
 
 
 def _cache_clear() -> None:
-    """Reset the module-level cache and semaphore. Used by tests only."""
+    """Reset the module-level caches and semaphore. Used by tests only."""
     global _TFL_SEMAPHORE
     _NAPTAN_CACHE.clear()
+    _NAME_CACHE.clear()
     _TFL_SEMAPHORE = None
 
 
@@ -163,3 +173,48 @@ def _is_not_found(exc: TflClientError) -> bool:
     """True when the underlying httpx error was a 404 (vs transient failure)."""
     cause = exc.__cause__
     return isinstance(cause, httpx.HTTPStatusError) and cause.response.status_code == 404
+
+
+async def resolve_name(*, tfl_client: TflClient | None, query: str) -> str | None:
+    """Resolve a free-text station name to a StopPoint/NaPTAN id.
+
+    Searches TfL ``/StopPoint/Search`` and returns the top-ranked match's
+    id. A process-lifetime cache absorbs repeated queries: definitive
+    no-match results (empty matches) are cached as ``None`` so they cost
+    nothing to repeat, while transient failures are left uncached so the
+    next call retries.
+
+    Args:
+        tfl_client: Optional ``TflClient``. When ``None`` the function
+            returns ``None`` without caching.
+        query: Free-text station name (e.g. ``"Oxford Circus"``).
+
+    Returns:
+        The resolved StopPoint/NaPTAN id, or ``None`` when the query is
+        empty, unresolved, or no client is available.
+    """
+    if tfl_client is None:
+        return None
+    query = query.strip()
+    if not query:
+        return None
+    # Lowercase only the cache key, never the value sent upstream: TfL
+    # Search is case-insensitive for names, but folding case on a NaPTAN
+    # id could break an exact-id lookup.
+    cache_key = query.lower()
+    if cache_key in _NAME_CACHE:
+        return _NAME_CACHE[cache_key]
+
+    semaphore = _get_tfl_semaphore()
+    async with semaphore:
+        try:
+            response = await tfl_client.search_stop(query)
+        except Exception:
+            logfire.exception("stations.name_search_failed", query=cache_key)
+            return None
+
+    resolved = response.matches[0].id if response.matches else None
+    if len(_NAME_CACHE) >= _NAME_CACHE_MAX:
+        _NAME_CACHE.pop(next(iter(_NAME_CACHE)))
+    _NAME_CACHE[cache_key] = resolved
+    return resolved
