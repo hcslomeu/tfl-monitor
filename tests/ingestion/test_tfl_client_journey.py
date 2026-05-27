@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import httpx
 
@@ -41,6 +42,59 @@ async def test_search_stop_returns_tier1_response(
     assert captured[0].url.path.startswith("/StopPoint/Search/")
     assert isinstance(result, TflStopSearchResponse)
     assert result.matches[0].id == "940GZZLUOXC"
+
+
+async def test_search_stop_url_encodes_reserved_characters(
+    stop_search_oxford_circus_fixture: dict[str, Any],
+    make_transport: Callable[[Callable[[httpx.Request], httpx.Response]], httpx.MockTransport],
+) -> None:
+    captured: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        return _json_response(stop_search_oxford_circus_fixture)
+
+    async with _client(make_transport(handler)) as client:
+        await client.search_stop("a/b c")
+
+    # The reserved '/' must stay percent-encoded on the wire (raw_path)
+    # so it cannot split the path into extra segments.
+    assert captured[0].url.raw_path.split(b"?")[0] == b"/StopPoint/Search/a%2Fb%20c"
+
+
+async def test_plan_journey_converts_tz_aware_time_to_london(
+    journey_oxford_circus_to_bank_fixture: dict[str, Any],
+    make_transport: Callable[[Callable[[httpx.Request], httpx.Response]], httpx.MockTransport],
+) -> None:
+    captured: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        return _json_response(journey_oxford_circus_to_bank_fixture)
+
+    # 12:00 UTC on 1 Jul is 13:00 BST in London.
+    async with _client(make_transport(handler)) as client:
+        await client.plan_journey(
+            "940GZZLUOXC",
+            "940GZZLUBNK",
+            departure_time=datetime(2026, 7, 1, 12, 0, tzinfo=UTC),
+        )
+
+    params = captured[0].url.params
+    assert params.get("date") == "20260701"
+    assert params.get("time") == "1300"
+
+    # A naive datetime is taken as already-London wall-clock, unchanged.
+    captured.clear()
+    async with _client(make_transport(handler)) as client:
+        await client.plan_journey(
+            "940GZZLUOXC",
+            "940GZZLUBNK",
+            departure_time=datetime(2026, 7, 1, 9, 5, tzinfo=ZoneInfo("Europe/London")).replace(
+                tzinfo=None
+            ),
+        )
+    assert captured[0].url.params.get("time") == "0905"
 
 
 async def test_plan_journey_without_options_omits_time_and_mode(

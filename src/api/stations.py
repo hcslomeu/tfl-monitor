@@ -31,7 +31,10 @@ _NAPTAN_CACHE: dict[str, str | None] = {}
 # resolved StopPoint/NaPTAN id. ``None`` means the search returned no
 # matches (a definitive HTTP 200 miss). Transient failures (timeouts,
 # 5xx, network errors) are *not* cached so the next request retries.
+# Keys are arbitrary user text, so the cache is bounded with simple FIFO
+# eviction to keep memory flat under high-cardinality chat traffic.
 _NAME_CACHE: dict[str, str | None] = {}
+_NAME_CACHE_MAX: Final = 512
 
 # Cap concurrent in-flight TfL lookups across all requests when several
 # NaPTANs miss the seed at the same time. The free-tier TfL rate limit
@@ -192,20 +195,26 @@ async def resolve_name(*, tfl_client: TflClient | None, query: str) -> str | Non
     """
     if tfl_client is None:
         return None
-    normalised = query.strip().lower()
-    if not normalised:
+    query = query.strip()
+    if not query:
         return None
-    if normalised in _NAME_CACHE:
-        return _NAME_CACHE[normalised]
+    # Lowercase only the cache key, never the value sent upstream: TfL
+    # Search is case-insensitive for names, but folding case on a NaPTAN
+    # id could break an exact-id lookup.
+    cache_key = query.lower()
+    if cache_key in _NAME_CACHE:
+        return _NAME_CACHE[cache_key]
 
     semaphore = _get_tfl_semaphore()
     async with semaphore:
         try:
-            response = await tfl_client.search_stop(normalised)
+            response = await tfl_client.search_stop(query)
         except Exception:
-            logfire.exception("stations.name_search_failed", query=normalised)
+            logfire.exception("stations.name_search_failed", query=cache_key)
             return None
 
     resolved = response.matches[0].id if response.matches else None
-    _NAME_CACHE[normalised] = resolved
+    if len(_NAME_CACHE) >= _NAME_CACHE_MAX:
+        _NAME_CACHE.pop(next(iter(_NAME_CACHE)))
+    _NAME_CACHE[cache_key] = resolved
     return resolved

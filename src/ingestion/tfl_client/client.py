@@ -13,6 +13,8 @@ from collections.abc import Iterable
 from datetime import datetime
 from types import TracebackType
 from typing import Any, Self
+from urllib.parse import quote
+from zoneinfo import ZoneInfo
 
 import httpx
 import logfire
@@ -32,6 +34,10 @@ __all__ = ["TflClient", "TflClientError"]
 _TFL_BASE_URL = "https://api.tfl.gov.uk"
 _DEFAULT_TIMEOUT_SECONDS = 30.0
 _DEFAULT_MAX_ATTEMPTS = 3
+
+# TfL journey planning expects wall-clock London local time (GMT/BST),
+# not UTC, in its ``date``/``time`` params.
+_TFL_TIMEZONE = ZoneInfo("Europe/London")
 
 _LINE_RESPONSE_ADAPTER: TypeAdapter[list[TflLineResponse]] = TypeAdapter(list[TflLineResponse])
 _ARRIVAL_ADAPTER: TypeAdapter[list[TflArrivalPrediction]] = TypeAdapter(list[TflArrivalPrediction])
@@ -137,7 +143,7 @@ class TflClient:
         """
         if not query:
             raise TflClientError("query must be a non-empty string")
-        data = await self._request(f"/StopPoint/Search/{query}")
+        data = await self._request(f"/StopPoint/Search/{quote(query, safe='')}")
         return _STOP_SEARCH_ADAPTER.validate_python(data)
 
     async def plan_journey(
@@ -169,8 +175,15 @@ class TflClient:
             raise TflClientError("from_id and to_id must be non-empty strings")
         params: dict[str, Any] = {}
         if departure_time is not None:
-            params["date"] = departure_time.strftime("%Y%m%d")
-            params["time"] = departure_time.strftime("%H%M")
+            # TfL wants London wall-clock time; convert tz-aware inputs
+            # (e.g. UTC) so a request never silently shifts by the BST offset.
+            local = (
+                departure_time.astimezone(_TFL_TIMEZONE)
+                if departure_time.tzinfo is not None
+                else departure_time
+            )
+            params["date"] = local.strftime("%Y%m%d")
+            params["time"] = local.strftime("%H%M")
             params["timeIs"] = "Departing"
         if modes is not None:
             params["mode"] = self._join_modes(modes)
