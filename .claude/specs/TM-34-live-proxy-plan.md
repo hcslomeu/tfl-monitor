@@ -1,8 +1,9 @@
-# TM-32 (expanded) — Decommission ingestion + warehouse; serve TfL live + RAG only
+# TM-34 — Decommission ingestion + warehouse; serve TfL live + RAG only
 
-Supersedes the earlier TM-32 "remove Kafka broker, keep direct-ingest
-daemon" direction (`TM-32-remove-kafka-plan.md`, ADR 012). That plan still
-wrote `raw.*` history. This plan removes the history hoard entirely.
+Supersedes TM-32 ("remove Kafka broker, keep direct-ingest daemon" —
+`TM-32-remove-kafka-plan.md`, ADR 012). That plan still wrote `raw.*`
+history. This plan removes the history hoard entirely. TM-32 is canceled;
+branch `feature/TM-32-remove-kafka` is abandoned.
 
 ## Why
 
