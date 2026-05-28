@@ -1,4 +1,4 @@
-"""RAG ingestion package: TfL strategy PDFs → Docling → Pinecone."""
+"""RAG ingestion package: TfL strategy PDFs → PyMuPDF → Bedrock → pgvector."""
 
 from rag.config import RagSettings, load_settings
 from rag.ingest import run_ingestion

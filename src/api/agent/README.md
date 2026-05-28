@@ -88,5 +88,5 @@ Bedrock is the production backend: set `BEDROCK_REGION` +
 `BEDROCK_SONNET_MODEL_ID` and `ChatBedrockConverse` is selected, with boto3
 reading the standard credential chain. Leave `BEDROCK_REGION` unset and
 provide `ANTHROPIC_API_KEY` for the local-dev `ChatAnthropic` fallback. RAG
-embeddings use Bedrock Titan v2 over the same credentials — there is no
-OpenAI or Pinecone dependency.
+embeddings use Bedrock Titan v2 over the same credentials, and the vectors
+live in pgvector.

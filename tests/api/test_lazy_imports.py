@@ -1,10 +1,12 @@
 """Regression: importing ``api.main`` must not eagerly load heavy deps.
 
 Cold-start on the Lightsail box is dominated by the transitive import
-graph of ``langchain_anthropic`` (pulls ``transformers`` + ``torch`` +
-``cv2``), ``llama_index``, ``pydantic_ai``, and ``docling``. Those
-imports must be deferred until the first chat request actually needs
-them so ``/health`` and the SQL endpoints stay responsive.
+graph of ``langchain_anthropic``, ``llama_index``, and ``pydantic_ai``.
+Those imports must be deferred until the first chat request actually
+needs them so ``/health`` and the SQL endpoints stay responsive. The
+heavyweight transitive deps that earlier RAG stacks pulled (``torch``,
+``transformers``, ``cv2``, ``pinecone``) must never re-enter the eager
+import graph either.
 
 This test re-imports ``api.main`` in a clean subprocess and asserts the
 forbidden modules are absent from ``sys.modules`` after the import.
@@ -20,7 +22,6 @@ import sys
 import pytest
 
 FORBIDDEN = (
-    "docling",
     "torch",
     "transformers",
     "llama_index",
