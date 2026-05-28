@@ -5,9 +5,9 @@ info:
   description: |
     Public HTTP surface for the tfl-monitor platform.
 
-    - Live operational data, reliability metrics, and disruptions are backed by the
-      dbt-modelled warehouse.
-    - Conversational endpoints route to a LangGraph agent with SQL and RAG tools.
+    - Live line status and disruptions are read through to the TfL Unified
+      API on demand (ADR 014 — no warehouse history).
+    - Conversational endpoints route to a LangGraph agent with live TfL and RAG tools.
 
     CORS allowlist (production) covers the dashboard origins only
     (`https://tfl-monitor.vercel.app`, `http://localhost:3000`). Never `*`.
@@ -22,9 +22,7 @@ servers:
 tags:
   - name: health
   - name: status
-  - name: reliability
   - name: disruptions
-  - name: bus
   - name: chat
 
 paths:
@@ -83,96 +81,6 @@ paths:
                   reason: "Earlier incident at Paddington"
                   valid_from: "2026-04-22T05:30:00Z"
                   valid_to: "2026-04-22T23:59:59Z"
-        "500":
-          $ref: "#/components/responses/Problem"
-
-  /api/v1/status/history:
-    get:
-      tags: [status]
-      operationId: get_status_history
-      summary: Historic line statuses over an arbitrary window
-      parameters:
-        - in: query
-          name: line_id
-          schema: { type: string }
-          required: false
-          description: Restrict to a single line (e.g. `victoria`).
-        - in: query
-          name: from
-          schema: { type: string, format: date-time }
-          required: true
-          description: Window start (UTC, inclusive).
-        - in: query
-          name: to
-          schema: { type: string, format: date-time }
-          required: true
-          description: Window end (UTC, exclusive).
-      responses:
-        "200":
-          description: Historic line statuses
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/LineStatus"
-              example:
-                - line_id: victoria
-                  line_name: Victoria
-                  mode: tube
-                  status_severity: 10
-                  status_severity_description: Good Service
-                  reason: null
-                  valid_from: "2026-04-20T05:30:00Z"
-                  valid_to: "2026-04-20T23:59:59Z"
-                - line_id: victoria
-                  line_name: Victoria
-                  mode: tube
-                  status_severity: 9
-                  status_severity_description: Minor Delays
-                  reason: "Signalling issues earlier"
-                  valid_from: "2026-04-21T05:30:00Z"
-                  valid_to: "2026-04-21T23:59:59Z"
-        "400":
-          $ref: "#/components/responses/Problem"
-        "500":
-          $ref: "#/components/responses/Problem"
-
-  /api/v1/reliability/{line_id}:
-    get:
-      tags: [reliability]
-      operationId: get_line_reliability
-      summary: Reliability score for a single line over a rolling window
-      parameters:
-        - in: path
-          name: line_id
-          required: true
-          schema: { type: string }
-        - in: query
-          name: window
-          required: false
-          schema: { type: integer, minimum: 1, maximum: 90, default: 7 }
-          description: Window size in days.
-      responses:
-        "200":
-          description: Reliability summary
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/LineReliability"
-              example:
-                line_id: victoria
-                line_name: Victoria
-                mode: tube
-                window_days: 7
-                reliability_percent: 94.2
-                sample_size: 2016
-                severity_histogram:
-                  "6": 12
-                  "9": 48
-                  "10": 1956
-        "404":
-          $ref: "#/components/responses/Problem"
         "500":
           $ref: "#/components/responses/Problem"
 
@@ -262,36 +170,6 @@ paths:
         "500":
           $ref: "#/components/responses/Problem"
 
-  /api/v1/bus/{stop_id}/punctuality:
-    get:
-      tags: [bus]
-      operationId: get_bus_punctuality
-      summary: Punctuality statistics for a given bus stop
-      parameters:
-        - in: path
-          name: stop_id
-          required: true
-          schema: { type: string }
-      responses:
-        "200":
-          description: Punctuality summary
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/BusPunctuality"
-              example:
-                stop_id: "490008660N"
-                stop_name: "Trafalgar Square"
-                window_days: 7
-                on_time_percent: 88.5
-                early_percent: 4.1
-                late_percent: 7.4
-                sample_size: 1240
-        "404":
-          $ref: "#/components/responses/Problem"
-        "500":
-          $ref: "#/components/responses/Problem"
-
   /api/v1/chat/stream:
     post:
       tags: [chat]
@@ -344,10 +222,10 @@ paths:
                   $ref: "#/components/schemas/ChatMessage"
               example:
                 - role: user
-                  content: "Which Tube line had the worst reliability last week?"
+                  content: "Is the Piccadilly line running normally right now?"
                   created_at: "2026-04-20T14:12:00Z"
                 - role: assistant
-                  content: "The Piccadilly line averaged 87.5% reliability, the lowest of the network."
+                  content: "Yes — the Piccadilly line is reporting Good Service at the moment."
                   created_at: "2026-04-20T14:12:04Z"
         "404":
           $ref: "#/components/responses/Problem"
@@ -394,30 +272,6 @@ components:
           type: [string, "null"]
         valid_from: { type: string, format: date-time }
         valid_to: { type: string, format: date-time }
-
-    LineReliability:
-      type: object
-      required: [line_id, line_name, mode, window_days, reliability_percent, sample_size, severity_histogram]
-      properties:
-        line_id: { type: string }
-        line_name: { type: string }
-        mode: { type: string }
-        window_days:
-          type: integer
-          minimum: 1
-          maximum: 90
-        reliability_percent:
-          type: number
-          minimum: 0
-          maximum: 100
-        sample_size:
-          type: integer
-          minimum: 0
-        severity_histogram:
-          type: object
-          additionalProperties:
-            type: integer
-            minimum: 0
 
     Disruption:
       type: object
@@ -469,18 +323,6 @@ components:
         name:
           type: string
           nullable: true
-
-    BusPunctuality:
-      type: object
-      required: [stop_id, stop_name, window_days, on_time_percent, early_percent, late_percent, sample_size]
-      properties:
-        stop_id: { type: string }
-        stop_name: { type: string }
-        window_days: { type: integer, minimum: 1, maximum: 90 }
-        on_time_percent: { type: number, minimum: 0, maximum: 100 }
-        early_percent: { type: number, minimum: 0, maximum: 100 }
-        late_percent: { type: number, minimum: 0, maximum: 100 }
-        sample_size: { type: integer, minimum: 0 }
 
     ChatRequest:
       type: object

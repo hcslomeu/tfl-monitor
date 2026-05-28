@@ -13,7 +13,6 @@ import asyncio
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
 from typing import Annotated, Any
 
 import logfire
@@ -24,29 +23,18 @@ from sse_starlette.sse import EventSourceResponse
 
 from api.agent.history import append_message, fetch_history
 from api.agent.streaming import frame_end, project, serialise
-from api.db import (
-    BUS_PUNCTUALITY_WINDOW_DAYS,
-    build_pool,
-    fetch_bus_punctuality,
-    fetch_live_status,
-    fetch_recent_disruptions,
-    fetch_reliability,
-    fetch_status_history,
-)
+from api.db import build_pool
+from api.live import fetch_live_status, fetch_recent_disruptions
 from api.observability import configure_observability
 from api.schemas import (
-    BusPunctualityResponse,
     ChatMessageResponse,
     ChatRequest,
     DisruptionResponse,
-    LineReliabilityResponse,
     LineStatusResponse,
     Mode,
     Problem,
 )
 from ingestion.tfl_client.client import TflClient
-
-MAX_HISTORY_WINDOW = timedelta(days=30)
 
 
 @asynccontextmanager
@@ -175,56 +163,10 @@ async def get_health() -> dict[str, Any]:
     response_model=list[LineStatusResponse],
 )
 async def get_status_live(request: Request) -> list[LineStatusResponse] | Response:
-    pool = request.app.state.db_pool
-    if pool is None:
-        return _problem(503, "Service Unavailable", "Database pool is not available")
-    return await fetch_live_status(pool)
-
-
-@app.get(
-    "/api/v1/status/history",
-    operation_id="get_status_history",
-    response_model=list[LineStatusResponse],
-)
-async def get_status_history(
-    request: Request,
-    from_: Annotated[datetime, Query(alias="from")],
-    to: Annotated[datetime, Query()],
-    line_id: Annotated[str | None, Query()] = None,
-) -> list[LineStatusResponse] | Response:
-    if from_ >= to:
-        return _problem(400, "Bad Request", "`from` must be strictly before `to`")
-    if to - from_ > MAX_HISTORY_WINDOW:
-        return _problem(400, "Bad Request", "Window exceeds the 30-day maximum")
-
-    pool = request.app.state.db_pool
-    if pool is None:
-        return _problem(503, "Service Unavailable", "Database pool is not available")
-    return await fetch_status_history(pool, from_dt=from_, to_dt=to, line_id=line_id)
-
-
-@app.get(
-    "/api/v1/reliability/{line_id}",
-    operation_id="get_line_reliability",
-    response_model=LineReliabilityResponse,
-)
-async def get_line_reliability(
-    request: Request,
-    line_id: str,
-    window: Annotated[int, Query(ge=1, le=90)] = 7,
-) -> LineReliabilityResponse | Response:
-    pool = request.app.state.db_pool
-    if pool is None:
-        return _problem(503, "Service Unavailable", "Database pool is not available")
-
-    result = await fetch_reliability(pool, line_id=line_id, window=window)
-    if result is None:
-        return _problem(
-            404,
-            "Not Found",
-            f"No reliability data for line {line_id} in the last {window} days",
-        )
-    return result
+    tfl_client = getattr(request.app.state, "tfl_client", None)
+    if tfl_client is None:
+        return _problem(503, "Service Unavailable", "TfL client is not configured")
+    return await fetch_live_status(tfl_client)
 
 
 @app.get(
@@ -238,37 +180,17 @@ async def get_recent_disruptions(
     mode: Annotated[Mode | None, Query()] = None,
 ) -> list[DisruptionResponse] | Response:
     pool = request.app.state.db_pool
+    tfl_client = getattr(request.app.state, "tfl_client", None)
+    if tfl_client is None:
+        return _problem(503, "Service Unavailable", "TfL client is not configured")
     if pool is None:
         return _problem(503, "Service Unavailable", "Database pool is not available")
-    tfl_client = getattr(request.app.state, "tfl_client", None)
     return await fetch_recent_disruptions(
-        pool,
+        tfl_client,
+        pool=pool,
         limit=limit,
         mode=mode,
-        tfl_client=tfl_client,
     )
-
-
-@app.get(
-    "/api/v1/bus/{stop_id}/punctuality",
-    operation_id="get_bus_punctuality",
-    response_model=BusPunctualityResponse,
-)
-async def get_bus_punctuality(
-    request: Request,
-    stop_id: str,
-) -> BusPunctualityResponse | Response:
-    pool = request.app.state.db_pool
-    if pool is None:
-        return _problem(503, "Service Unavailable", "Database pool is not available")
-    result = await fetch_bus_punctuality(pool, stop_id=stop_id, window=BUS_PUNCTUALITY_WINDOW_DAYS)
-    if result is None:
-        return _problem(
-            404,
-            "Not Found",
-            f"No punctuality data for stop {stop_id}",
-        )
-    return result
 
 
 @app.post("/api/v1/chat/stream", operation_id="post_chat_stream", response_model=None)

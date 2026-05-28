@@ -1,15 +1,18 @@
-"""LangChain tools wrapping the TM-D2/D3 fetchers and the RAG retriever.
+"""LangChain tools wrapping the live TfL read-through and the RAG retriever.
 
-Five tools are exposed to the agent:
+Tools exposed to the agent (each gated on its dependency being wired):
 
-- ``query_tube_status`` — current operational status per line.
-- ``query_line_reliability`` — reliability for one line over a window.
-- ``query_recent_disruptions`` — most recent disruptions.
-- ``query_bus_punctuality`` — bus-stop punctuality proxy.
+- ``query_tube_status`` — current operational status per line (live TfL).
+- ``query_recent_disruptions`` — most recent disruptions (live TfL).
+- ``plan_journey_tool`` — plan a route between two stations.
+- ``get_arrivals_tool`` — next arrivals at a stop.
 - ``search_tfl_docs`` — RAG over the TfL strategy corpus.
 
 Inputs are Pydantic models with ``extra="forbid"`` so the LLM cannot
-smuggle unknown fields past the type system.
+smuggle unknown fields past the type system. Every tool that calls the
+TfL API wraps the call in ``try/except`` returning a friendly string:
+LangGraph re-raises non-``ToolException`` errors and would otherwise
+crash the chat stream (ADR 010).
 """
 
 from __future__ import annotations
@@ -21,15 +24,8 @@ import logfire
 from psycopg_pool import AsyncConnectionPool
 from pydantic import BaseModel, ConfigDict, Field
 
-from api.agent.extraction import normalise_line_id
 from api.agent.rag import retrieve
-from api.db import (
-    BUS_PUNCTUALITY_WINDOW_DAYS,
-    fetch_bus_punctuality,
-    fetch_live_status,
-    fetch_recent_disruptions,
-    fetch_reliability,
-)
+from api.live import fetch_live_status, fetch_recent_disruptions
 from api.schemas import Mode
 from api.stations import resolve_name
 
@@ -42,15 +38,6 @@ if TYPE_CHECKING:
 _MAX_ARRIVALS_PER_PLATFORM = 5
 
 
-class LineReliabilityQuery(BaseModel):
-    """Input schema for ``query_line_reliability``."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    line_id: str = Field(min_length=1, max_length=64)
-    window_days: int = Field(default=7, ge=1, le=90)
-
-
 class RecentDisruptionsQuery(BaseModel):
     """Input schema for ``query_recent_disruptions``."""
 
@@ -58,14 +45,6 @@ class RecentDisruptionsQuery(BaseModel):
 
     limit: int = Field(default=10, ge=1, le=200)
     mode: Mode | None = None
-
-
-class BusPunctualityQuery(BaseModel):
-    """Input schema for ``query_bus_punctuality``."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    stop_id: str = Field(min_length=1, max_length=64)
 
 
 DocId = Literal[
@@ -125,88 +104,54 @@ def make_tools(
     """Build the LangGraph tools bound to a pool (+ optional dependencies).
 
     Args:
-        pool: Shared ``AsyncConnectionPool`` (TM-D2/D3 fetchers reuse it).
-        tfl_client: Optional ``TflClient``. When ``None`` the journey and
-            arrivals tools are omitted, since both call the live TfL API.
+        pool: Shared ``AsyncConnectionPool``. The disruptions tool reuses
+            it for station-name resolution.
+        tfl_client: Optional ``TflClient``. When ``None`` the live status,
+            disruptions, journey, and arrivals tools are all omitted,
+            since each reads from the TfL API.
         retriever: pgvector index from ``build_retriever``. When ``None``
-            the RAG tool is omitted and only the SQL tools are exposed, so
-            the agent still serves live operational data.
+            the RAG tool is omitted.
 
     Returns:
         List of LangChain ``BaseTool`` instances ready for
-        ``create_react_agent``: four SQL tools, plus the journey/arrivals
-        tools when a ``TflClient`` is supplied and ``search_tfl_docs`` when
-        a retriever is supplied.
+        ``create_react_agent``: the live TfL tools when a ``TflClient`` is
+        supplied and ``search_tfl_docs`` when a retriever is supplied.
     """
     from langchain_core.tools import tool  # noqa: PLC0415
 
-    @tool
-    async def query_tube_status() -> list[dict[str, Any]]:
-        """Return the current operational status of every line right now."""
-        with logfire.span("agent.tool.query_tube_status"):
-            rows = await fetch_live_status(pool)
-            return [r.model_dump(mode="json") for r in rows]
-
-    @tool(args_schema=LineReliabilityQuery)
-    async def query_line_reliability(
-        line_id: str,
-        window_days: int = 7,
-    ) -> dict[str, Any] | str:
-        """Return reliability for a single line over a window (default 7 days).
-
-        ``line_id`` is normalised through a Pydantic AI Haiku call before
-        the SQL fires, so free-text references like ``"Lizzy"`` map to
-        the canonical ``elizabeth``.
-        """
-        with logfire.span(
-            "agent.tool.query_line_reliability",
-            line_id_raw=line_id,
-            window_days=window_days,
-        ):
-            canonical = await normalise_line_id(line_id)
-            if canonical is None:
-                return f"Unknown line: {line_id!r}"
-            result = await fetch_reliability(pool, line_id=canonical, window=window_days)
-            if result is None:
-                return f"No reliability data for {canonical}."
-            return result.model_dump(mode="json")
-
-    @tool(args_schema=RecentDisruptionsQuery)
-    async def query_recent_disruptions(
-        limit: int = 10,
-        mode: Mode | None = None,
-    ) -> list[dict[str, Any]]:
-        """Return the most recent disruptions, optionally scoped by mode."""
-        with logfire.span("agent.tool.query_recent_disruptions", limit=limit, mode=mode):
-            rows = await fetch_recent_disruptions(pool, limit=limit, mode=mode)
-            return [r.model_dump(mode="json") for r in rows]
-
-    @tool(args_schema=BusPunctualityQuery)
-    async def query_bus_punctuality(stop_id: str) -> dict[str, Any] | str:
-        """Return punctuality for a bus stop over the last 7 days.
-
-        Caveat: this is a PROXY computed on top of TfL arrival
-        predictions, not realised departure events. Cite the proxy
-        nature when surfacing the percentages to the user.
-        """
-        with logfire.span("agent.tool.query_bus_punctuality", stop_id=stop_id):
-            result = await fetch_bus_punctuality(
-                pool,
-                stop_id=stop_id,
-                window=BUS_PUNCTUALITY_WINDOW_DAYS,
-            )
-            if result is None:
-                return f"No punctuality data for stop {stop_id!r}."
-            return result.model_dump(mode="json")
-
-    tools: list[BaseTool] = [
-        query_tube_status,
-        query_line_reliability,
-        query_recent_disruptions,
-        query_bus_punctuality,
-    ]
+    tools: list[BaseTool] = []
 
     if tfl_client is not None:
+
+        @tool
+        async def query_tube_status() -> list[dict[str, Any]] | str:
+            """Return the current operational status of every line right now."""
+            with logfire.span("agent.tool.query_tube_status"):
+                try:
+                    rows = await fetch_live_status(tfl_client)
+                except Exception:  # noqa: BLE001 - never let an upstream error crash the stream
+                    logfire.exception("agent.tool.query_tube_status_failed")
+                    return "Sorry, I couldn't fetch live line status right now."
+                return [r.model_dump(mode="json") for r in rows]
+
+        @tool(args_schema=RecentDisruptionsQuery)
+        async def query_recent_disruptions(
+            limit: int = 10,
+            mode: Mode | None = None,
+        ) -> list[dict[str, Any]] | str:
+            """Return the most recent disruptions, optionally scoped by mode."""
+            with logfire.span("agent.tool.query_recent_disruptions", limit=limit, mode=mode):
+                try:
+                    rows = await fetch_recent_disruptions(
+                        tfl_client,
+                        pool=pool,
+                        limit=limit,
+                        mode=mode,
+                    )
+                except Exception:  # noqa: BLE001 - never let an upstream error crash the stream
+                    logfire.exception("agent.tool.query_recent_disruptions_failed")
+                    return "Sorry, I couldn't fetch recent disruptions right now."
+                return [r.model_dump(mode="json") for r in rows]
 
         @tool(args_schema=PlanJourneyQuery)
         async def plan_journey_tool(
@@ -310,7 +255,9 @@ def make_tools(
                 ]
                 return {"station": predictions[0].station_name, "platforms": platforms}
 
-        tools.extend([plan_journey_tool, get_arrivals_tool])
+        tools.extend(
+            [query_tube_status, query_recent_disruptions, plan_journey_tool, get_arrivals_tool]
+        )
 
     if retriever is not None:
 
@@ -323,8 +270,8 @@ def make_tools(
             """Return passages from TfL strategy docs ranked by relevance.
 
             Cite each hit by ``doc_title`` and ``page_start``. Use this tool
-            for policy or forecast questions; reach for the SQL tools for
-            live operational data.
+            for policy or forecast questions; reach for the live tools for
+            current operational data.
             """
             with logfire.span(
                 "agent.tool.search_tfl_docs",
