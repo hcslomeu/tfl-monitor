@@ -43,7 +43,7 @@ rag = [
     "llama-index>=0.12",
     "llama-index-vector-stores-postgres>=0.4",
     "pgvector>=0.3",
-    "docling>=2.0",
+    "pymupdf>=1.24",
     # PGVectorStore's ORM delete path needs SQLAlchemy 2.0; the 0.8.x
     # metadata only declares >=1.4, so pin the real runtime floor here.
     "sqlalchemy>=2.0",
@@ -56,20 +56,6 @@ docs = [
     "mkdocs-minify-plugin>=0.8",
     "pymdown-extensions>=10.0",
 ]
-
-# Force CPU-only torch wheels. docling/transformers pull torch transitively;
-# without this pin, uv resolves the default CUDA-enabled wheel (~4 GB of
-# nvidia-cu13 libs). Production runs CPU-only on the Lightsail box, so the
-# CUDA payload is pure bloat and overflows the 58 GB disk during image unpack.
-[[tool.uv.index]]
-name = "pytorch-cpu"
-url = "https://download.pytorch.org/whl/cpu"
-explicit = true
-
-[tool.uv.sources]
-torch = [{ index = "pytorch-cpu" }]
-torchvision = [{ index = "pytorch-cpu" }]
-torchaudio = [{ index = "pytorch-cpu" }]
 
 [build-system]
 requires = ["hatchling"]
@@ -97,8 +83,6 @@ follow_untyped_imports = true
 
 [[tool.mypy.overrides]]
 module = [
-    "docling",
-    "docling.*",
     "llama_index.vector_stores.postgres",
     "llama_index.vector_stores.postgres.*",
     "pgvector",
@@ -106,6 +90,12 @@ module = [
 ]
 ignore_missing_imports = true
 follow_untyped_imports = true
+
+[[tool.mypy.overrides]]
+# PyMuPDF ships partial/untyped surface; treat as Any (no follow) so the
+# deferred `pymupdf.open()` call in rag.parse does not trip no-untyped-call.
+module = ["pymupdf", "pymupdf.*"]
+ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 # boto3/botocore ship no py.typed marker; treat as Any (no follow) so the

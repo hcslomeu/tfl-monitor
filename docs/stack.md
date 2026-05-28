@@ -17,10 +17,10 @@ Every choice is locked unless an ADR overrides it. The rejection column says
 | API | [FastAPI](https://fastapi.tiangolo.com/) + `sse-starlette` | Async, typed, OpenAPI 3.1 auto-emitted |
 | Agent framework | [LangGraph](https://langchain-ai.github.io/langgraph/) 1.x | Stateful graph, native tool calling, LangSmith integration |
 | Structured extraction | [Pydantic AI](https://ai.pydantic.dev/) | Tool-level typed LLM calls (e.g. `LineId` normaliser) |
-| RAG | [LlamaIndex](https://www.llamaindex.ai/) | `PineconeVectorStore`, namespace-per-doc fan-out |
-| Vector DB | [Pinecone](https://www.pinecone.io/) (serverless, free) | Single index `tfl-strategy-docs` (1536 dim, cosine) |
-| PDF | [Docling](https://github.com/DS4SD/docling) 2.x | `HybridChunker` with native section + table awareness |
-| Embeddings | OpenAI `text-embedding-3-small` | $0.02 / 1M tokens; ~£0.20 one-off for the corpus |
+| RAG | [LlamaIndex](https://www.llamaindex.ai/) | `PGVectorStore`, `doc_id` metadata filter per doc |
+| Vector DB | pgvector (Supabase Postgres) | `tfl_strategy_docs` table (1024 dim, cosine) |
+| PDF | [PyMuPDF](https://pymupdf.readthedocs.io/) | Text extraction + LlamaIndex `SentenceSplitter` (ADR 013) |
+| Embeddings | AWS Bedrock Titan v2 `amazon.titan-embed-text-v2:0` | 1024-dim; billed within Bedrock usage |
 | LLMs | Claude Sonnet (answers) + Haiku (router/extractor) | Sonnet 3.5 v2 + Haiku 3.5 — top-of-class tool calling |
 | Validation | Pydantic v2 | Used at *every* boundary: Kafka, FastAPI, config, tools |
 | LLM observability | [LangSmith](https://www.langchain.com/langsmith) | Auto-instruments LangGraph nodes / tools / LLM calls |
@@ -40,7 +40,7 @@ Every choice is locked unless an ADR overrides it. The rejection column says
 | LLM | AWS Bedrock (`us-east-1`) | ~$2-3/mo at portfolio traffic |
 | Postgres | Supabase free | $0 |
 | Kafka | Redpanda Cloud Serverless free | $0 |
-| Vector DB | Pinecone serverless free | $0 |
+| Vector DB | pgvector (in Supabase Postgres) | $0 |
 | Frontend | Vercel hobby free | $0 |
 | Image registry | GHCR (public repo) | $0 |
 | HTTPS | DuckDNS + Caddy auto-LE | $0 |
@@ -57,7 +57,7 @@ default* principle in [`CLAUDE.md`](https://github.com/hcslomeu/tfl-monitor/blob
 !!! danger "Anti-patterns"
     - **Multiple `pyproject.toml`s.** One root, one source of truth.
     - **Sidecar observability stacks.** No Prometheus / Grafana / OTel collector — Logfire and LangSmith cover what we need.
-    - **Single-implementation abstractions.** No `VectorStoreFactory` for one Pinecone, no `LLMProvider` for one Claude.
+    - **Single-implementation abstractions.** No `VectorStoreFactory` for one pgvector store, no `LLMProvider` for one Claude.
     - **Custom CLIs (Typer, Click)** when a 20-line `python -m` script does the job.
     - **Duplicate tooling.** No Biome + ESLint, no Ruff + Black.
     - **Custom structured logging.** Logfire wraps `logging`; `logfire.info(...)` for everything it does not auto-instrument.

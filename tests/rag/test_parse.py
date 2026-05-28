@@ -2,84 +2,54 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from pathlib import Path
 
-from rag.parse import Chunk, _default_converter, parse_pdf
+from rag.parse import (
+    Chunk,
+    PageText,
+    _default_extractor,
+    _default_splitter,
+    _LlamaIndexSplitter,
+    _PyMuPdfExtractor,
+    parse_pdf,
+)
 
 
-@dataclass
-class _FakeProv:
-    page_no: int
+class _FakeExtractor:
+    """Returns canned pages and records the path it was asked to extract."""
+
+    def __init__(self, pages: list[PageText]) -> None:
+        self._pages = pages
+        self.calls: list[Path] = []
+
+    def extract(self, pdf_path: Path) -> list[PageText]:
+        self.calls.append(pdf_path)
+        return self._pages
 
 
-@dataclass
-class _FakeDocItem:
-    prov: list[_FakeProv]
+class _DelimiterSplitter:
+    """Deterministic splitter: splits on ``|`` so tests control the pieces."""
+
+    def split_text(self, text: str) -> list[str]:
+        return text.split("|")
 
 
-@dataclass
-class _FakeMeta:
-    headings: list[str] = field(default_factory=list)
-    doc_items: list[_FakeDocItem] = field(default_factory=list)
-
-
-@dataclass
-class _FakeChunk:
-    text: str
-    meta: _FakeMeta
-
-
-@dataclass
-class _FakeConvertResult:
-    document: object
-
-
-class _FakeConverter:
-    def __init__(self, document: object) -> None:
-        self._document = document
+class _RecordingInnerSplitter:
+    def __init__(self, pieces: list[str]) -> None:
+        self._pieces = pieces
         self.calls: list[str] = []
 
-    def convert(self, source: str) -> _FakeConvertResult:
-        self.calls.append(source)
-        return _FakeConvertResult(document=self._document)
+    def split_text(self, text: str) -> list[str]:
+        self.calls.append(text)
+        return self._pieces
 
 
-class _FakeChunker:
-    def __init__(self, chunks: list[_FakeChunk]) -> None:
-        self._chunks = chunks
-
-    def chunk(self, _document: object) -> list[_FakeChunk]:
-        return self._chunks
-
-
-def _build_fake_chunk(
-    text: str,
-    *,
-    headings: list[str] | None = None,
-    pages: list[int] | None = None,
-) -> _FakeChunk:
-    return _FakeChunk(
-        text=text,
-        meta=_FakeMeta(
-            headings=list(headings or []),
-            doc_items=[_FakeDocItem(prov=[_FakeProv(page_no=p) for p in (pages or [])])],
-        ),
-    )
-
-
-def test_parse_pdf_emits_one_chunk_per_section(tmp_path: Path) -> None:
+def test_parse_pdf_emits_chunk_per_split_with_page_numbers(tmp_path: Path) -> None:
     pdf_path = tmp_path / "fake.pdf"
-    pdf_path.write_bytes(b"%PDF-1.4 fake")
-    converter = _FakeConverter(document=object())
-    chunker = _FakeChunker(
+    extractor = _FakeExtractor(
         [
-            _build_fake_chunk("Intro paragraph.", headings=["Introduction"], pages=[1, 2]),
-            _build_fake_chunk(
-                "Methodology details.",
-                headings=["Methods", "Subsection"],
-                pages=[3],
-            ),
+            PageText(page_no=1, text="intro one|intro two"),
+            PageText(page_no=2, text="methods"),
         ]
     )
 
@@ -88,58 +58,59 @@ def test_parse_pdf_emits_one_chunk_per_section(tmp_path: Path) -> None:
         doc_title="Test Doc",
         resolved_url="https://example.com/doc.pdf",
         pdf_path=pdf_path,
-        converter=converter,
-        chunker=chunker,
+        extractor=extractor,
+        splitter=_DelimiterSplitter(),
     )
 
-    assert [c.section_title for c in chunks] == ["Introduction", "Methods"]
-    assert [c.page_start for c in chunks] == [1, 3]
-    assert [c.page_end for c in chunks] == [2, 3]
-    assert [c.chunk_index for c in chunks] == [0, 1]
+    assert [c.text for c in chunks] == ["intro one", "intro two", "methods"]
+    assert [c.page_start for c in chunks] == [1, 1, 2]
+    assert [c.page_end for c in chunks] == [1, 1, 2]
+    assert [c.chunk_index for c in chunks] == [0, 1, 2]
     assert all(isinstance(c, Chunk) for c in chunks)
-    assert converter.calls == [str(pdf_path)]
+    assert all(c.doc_id == "doc" and c.doc_title == "Test Doc" for c in chunks)
+    assert extractor.calls == [pdf_path]
 
 
-def test_parse_pdf_skips_empty_text_chunks(tmp_path: Path) -> None:
+def test_parse_pdf_skips_whitespace_only_pieces(tmp_path: Path) -> None:
     pdf_path = tmp_path / "fake.pdf"
-    pdf_path.write_bytes(b"%PDF-1.4 fake")
-    converter = _FakeConverter(document=object())
-    chunker = _FakeChunker(
-        [
-            _build_fake_chunk("Real content"),
-            _build_fake_chunk("   "),  # whitespace-only
-            _build_fake_chunk("More content"),
-        ]
-    )
+    extractor = _FakeExtractor([PageText(page_no=1, text="real|   |more")])
 
     chunks = parse_pdf(
         doc_id="doc",
         doc_title="Test Doc",
         resolved_url="https://example.com/doc.pdf",
         pdf_path=pdf_path,
-        converter=converter,
-        chunker=chunker,
+        extractor=extractor,
+        splitter=_DelimiterSplitter(),
     )
 
-    assert [c.text for c in chunks] == ["Real content", "More content"]
-    # chunk_index reflects the chunker's enumeration so retrieval citation
-    # remains meaningful even when the parser skips whitespace.
-    assert [c.chunk_index for c in chunks] == [0, 2]
+    assert [c.text for c in chunks] == ["real", "more"]
+    # chunk_index stays contiguous over emitted chunks so vector ids are dense.
+    assert [c.chunk_index for c in chunks] == [0, 1]
 
 
-def test_default_converter_disables_ocr_and_restricts_to_pdf() -> None:
-    """The production Docling converter must keep OCR off and PDF-only.
+def test_default_extractor_is_pymupdf() -> None:
+    assert isinstance(_default_extractor(), _PyMuPdfExtractor)
 
-    ``parse_pdf`` lets tests inject a fake converter, so the real
-    ``_default_converter`` wiring is otherwise uncovered — a refactor could
-    silently re-enable OCR (heavy RapidOCR download + slow CPU parse) or drop
-    the format restriction. Construction is cheap: the layout model only loads
-    on ``convert()``, so this asserts the config without a model download.
+
+def test_default_splitter_returns_text_splitter() -> None:
+    """The default splitter must expose ``split_text`` over real input.
+
+    ``parse_pdf`` lets tests inject a fake splitter, so the real
+    ``_default_splitter`` wiring is otherwise uncovered — a refactor could
+    return an object without the Protocol method and only fail at ingest time.
     """
-    from docling.datamodel.base_models import InputFormat
+    splitter = _default_splitter()
+    pieces = splitter.split_text("A short sentence. Another short sentence.")
+    assert isinstance(pieces, list)
+    assert all(isinstance(p, str) for p in pieces)
 
-    converter = _default_converter()
 
-    assert converter.allowed_formats == [InputFormat.PDF]
-    pdf_options = converter.format_to_options[InputFormat.PDF]
-    assert pdf_options.pipeline_options.do_ocr is False
+def test_llamaindex_splitter_delegates_to_inner() -> None:
+    inner = _RecordingInnerSplitter(["a", "b"])
+    adapter = _LlamaIndexSplitter(inner)
+
+    result = adapter.split_text("a b")
+
+    assert result == ["a", "b"]
+    assert inner.calls == ["a b"]

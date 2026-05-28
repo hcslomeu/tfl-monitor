@@ -52,7 +52,7 @@ Hard rules:
 1. **One `pyproject.toml` at the root.** Python modules are plain folders under `src/`, not sub-packages with their own `pyproject.toml`.
 2. **A short `Makefile`** (max ~15 targets) for system orchestration (Docker, bootstrap, `check`). Pure-Python dev tasks use `uv run task <name>` via `[tool.taskipy.tasks]` in `pyproject.toml`.
 3. **Minimal Docker Compose**: only services essential for local dev. No sidecars, no local observability (Grafana/Prometheus stay out — we use hosted observability instead).
-4. **No "just-in-case" abstractions.** If there is one consumer of a function, don't create an interface. If there is one vector store (Pinecone), don't create an abstract factory. Abstract when the second case arrives.
+4. **No "just-in-case" abstractions.** If there is one consumer of a function, don't create an interface. If there is one vector store (pgvector), don't create an abstract factory. Abstract when the second case arrives.
 5. **No elaborate hierarchical configuration.** One `.env` file. No nested Pydantic `BaseSettings` unless there are ≥15 variables.
 6. **No custom structured logging wrapper.** Logfire handles structured logs; `logging.basicConfig` for anything it doesn't cover.
 7. **No custom CLI** (Typer/Click) when a ~20-line script solves it.
@@ -97,9 +97,9 @@ If a detailed spec exists at `.claude/specs/TM-XXX-spec.md` for the active WP, i
 | Agent framework | LangGraph v1.x |
 | Structured LLM extraction | Pydantic AI (for tool-level extraction; LangGraph remains the main agent) |
 | RAG framework | LlamaIndex |
-| Vector DB | Pinecone (serverless) |
-| PDF ingestion | Docling |
-| Embeddings | OpenAI `text-embedding-3-small` |
+| Vector DB | pgvector (Supabase Postgres) |
+| PDF ingestion | PyMuPDF (ADR 013) |
+| Embeddings | AWS Bedrock Titan `amazon.titan-embed-text-v2:0` |
 | LLMs | Anthropic Claude (Haiku for routing, Sonnet for final answer) |
 | Data validation | Pydantic v2 (everywhere — Kafka events, API models, config) |
 | LLM observability | LangSmith |

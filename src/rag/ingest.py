@@ -72,8 +72,8 @@ async def _amain(
     embedding_factory: Any = None,
     vector_store_factory: Any = None,
     httpx_factory: Any = None,
-    docling_converter: Any = None,
-    docling_chunker: Any = None,
+    extractor: Any = None,
+    splitter: Any = None,
 ) -> int:
     configure_logfire()
     settings = load_settings()
@@ -105,8 +105,8 @@ async def _amain(
                 embed_model=embed_model,
                 vector_store=vector_store,
                 dry_run=dry_run,
-                docling_converter=docling_converter,
-                docling_chunker=docling_chunker,
+                extractor=extractor,
+                splitter=splitter,
             )
         except Exception as exc:  # noqa: BLE001 - aggregate per-doc failures
             logfire.error(
@@ -137,8 +137,8 @@ async def _ingest_one(
     embed_model: Any,
     vector_store: Any,
     dry_run: bool,
-    docling_converter: Any,
-    docling_chunker: Any,
+    extractor: Any,
+    splitter: Any,
 ) -> int:
     with logfire.span(
         "rag.ingest.cycle",
@@ -158,8 +158,8 @@ async def _ingest_one(
             doc_title=result.source.name,
             resolved_url=str(result.source.resolved_url),
             pdf_path=result.local_path,
-            converter=docling_converter,
-            chunker=docling_chunker,
+            extractor=extractor,
+            splitter=splitter,
         )
         if not chunks:
             logfire.warn("rag.ingest.empty_chunks", doc_id=result.source.doc_id)
@@ -204,7 +204,7 @@ def main(argv: list[str] | None = None) -> None:
     """CLI entrypoint for ``python -m rag.ingest``."""
     parser = argparse.ArgumentParser(
         prog="rag.ingest",
-        description="Ingest TfL strategy PDFs into pgvector via Docling + Bedrock.",
+        description="Ingest TfL strategy PDFs into pgvector via PyMuPDF + Bedrock.",
     )
     parser.add_argument(
         "--force-refetch",

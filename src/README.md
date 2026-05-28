@@ -10,7 +10,7 @@ flows through `contracts/`; nothing in `src/` defines its own DTOs.
 | [`api/`](./api) | D-api-agent | FastAPI app, route handlers, async psycopg pool, LangGraph agent |
 | [`agent/`](./agent) | D-api-agent | Legacy graph (kept for parity until TM-A5 collapses it) |
 | [`ingestion/`](./ingestion) | B-ingestion | Async TfL client, three producers, three consumers |
-| [`rag/`](./rag) | D-api-agent | Docling → OpenAI → Pinecone ingestion CLI |
+| [`rag/`](./rag) | D-api-agent | PyMuPDF → Bedrock → pgvector ingestion CLI |
 
 ```mermaid
 flowchart LR
@@ -21,8 +21,8 @@ flowchart LR
     KAFKA --> CONS[src/ingestion/consumers]
     CONS --> PG[(Postgres)]
     PG --> API
-    RAG --> PINE[(Pinecone)]
-    PINE --> API
+    RAG --> PGVEC[(pgvector)]
+    PGVEC --> API
 ```
 
 ## Build

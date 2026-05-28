@@ -1,8 +1,8 @@
 """LlamaIndex retrieval over the pgvector tfl-strategy-docs table.
 
-A single ``VectorStoreIndex`` backs every query; ``doc_id`` becomes a
-metadata filter rather than a Pinecone namespace, so targeting one
-document is just an extra ``WHERE`` clause. Page sentinel ``-1`` maps to
+A single ``VectorStoreIndex`` backs every query; ``doc_id`` is a
+pgvector metadata filter, so targeting one document is just an extra
+``WHERE`` clause. Page sentinel ``-1`` maps to
 ``None`` so the LLM never sees a sentinel page number.
 """
 

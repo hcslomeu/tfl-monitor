@@ -2,8 +2,8 @@
 
 Wires a ``FakeAgent`` into ``app.state.agent`` and a ``FakeAsyncPool``
 into ``app.state.db_pool`` to exercise the SSE projection plus the
-chat-history side effect without ever talking to Anthropic, OpenAI,
-Pinecone, or Postgres.
+chat-history side effect without ever talking to the LLM, the pgvector
+retriever, or Postgres.
 """
 
 from __future__ import annotations
