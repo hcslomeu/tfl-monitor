@@ -43,9 +43,9 @@ function modeColor(mode: string): string {
  * mode colour.
  */
 function legColor(mode: string, summary: string): string {
-	if (mode === "tube") {
+	if (mode === "tube" && summary) {
 		const match = /^(.*?)\s+line\b/i.exec(summary);
-		const lineColor = match && TUBE_LINE_COLOR[match[1].toLowerCase()];
+		const lineColor = match && TUBE_LINE_COLOR[match[1].trim().toLowerCase()];
 		if (lineColor) {
 			return lineColor;
 		}
