@@ -1,28 +1,30 @@
 # Deployment
 
-The production stack is intentionally minimalist: **one EC2 spot instance**
-runs the existing docker-compose layout, **AWS Bedrock** powers the LLM, and
-every other tier rides on a free plan. The full design is locked in
-[`.claude/specs/TM-A5-plan.md`](https://github.com/hcslomeu/tfl-monitor/blob/main/.claude/specs/TM-A5-plan.md).
+The production stack is intentionally minimalist: the API runs as a **single
+container on a shared AWS Lightsail box**, **AWS Bedrock** powers the LLM, and
+every other tier rides on a free plan. There is no broker and no ingestion
+worker — the app reads TfL live (ADR 014). The infra is locked in
+[`infra/README.md`](https://github.com/hcslomeu/tfl-monitor/blob/main/infra/README.md)
+and ADR 006.
 
 ## Cost lock
 
+tfl-monitor is a **second tenant** on a Lightsail box it shares with
+`alpha-whale` and future portfolio projects, so the $10/mo box splits roughly
+three ways.
+
 | Layer | Host | Tier | $/mo |
 |-------|------|------|------|
-| Backend compute | AWS EC2 t4g.small **spot** (`us-east-1`) via ASG min=max=1 | persistent spot | ~3-4 |
-| LLM | AWS Bedrock — `claude-3-5-sonnet-20241022-v2:0` + `claude-3-5-haiku-20241022-v1:0` | on-demand | ~2-3 |
-| Postgres warehouse + Airflow metadata | Supabase | free | 0 |
-| Kafka broker | Redpanda Cloud Serverless | free | 0 |
+| Backend compute | Shared AWS Lightsail (eu-west-2, 2 GB RAM, 60 GB SSD) | shared $10 box | ~3.50 effective |
+| LLM | AWS Bedrock — Claude Sonnet 4.5 + Haiku 4.5 (`eu.anthropic.*` inference profiles) | on-demand | ~2-3 |
+| Postgres + pgvector | Supabase | free | 0 |
 | Frontend | Vercel | hobby | 0 |
-| Vector DB | Pinecone serverless | free | 0 |
-| HTTPS termination | DuckDNS subdomain + Caddy auto Let's Encrypt | — | 0 |
-| Image registry | GHCR (public repo) | free | 0 |
+| HTTPS termination | shared Caddy + Let's Encrypt + Cloudflare DNS-only | — | 0 |
+| Image build | on-box `docker compose --build` | — | 0 |
 | Observability | Logfire + LangSmith | free | 0 |
-| Bandwidth (≈1 GB egress/mo) | AWS | — | ~0.10 |
-| **Steady-state target** | | | **~$5-8** |
+| **Steady-state target** | | | **~$5-7** |
 
-A CloudWatch billing alarm fires at $20/mo as the safety net (~10× the
-expected burn).
+A CloudWatch billing alarm guards the Bedrock spend.
 
 ## Topology on the box
 
@@ -30,155 +32,119 @@ expected burn).
 flowchart TB
     INET((Internet))
     INET -->|443 / 80| CADDY
-    subgraph EC2["EC2 t4g.small spot · Amazon Linux 2023 ARM64"]
+    subgraph LS["AWS Lightsail · Ubuntu 24.04 · eu-west-2 · 13.41.145.33"]
       direction TB
-      subgraph DOCKER["docker compose -f infra/docker-compose.prod.yml"]
-        CADDY[Caddy<br/>auto Let's Encrypt]
-        API[api<br/>FastAPI :8000]
-        PROD[producers<br/>3 daemons in 1 process]
-        CONS[consumers<br/>3 daemons in 1 process]
-        SCH[airflow-scheduler]
-        WEB[airflow-webserver]
+      CADDY[shared Caddy<br/>/opt/caddy/ · caddy_net]
+      subgraph INFRA["docker compose -p infra -f infra/docker-compose.prod.yml"]
+        API[api<br/>tfl-monitor-api-1 · FastAPI :8000]
       end
+      ALPHA[alpha-whale<br/>other tenant]
     end
     subgraph CLOUD[Managed services]
-      SB[(Supabase Postgres)]
-      RP[(Redpanda Cloud)]
-      PC[(Pinecone)]
+      SB[(Supabase Postgres<br/>+ pgvector)]
       BR[AWS Bedrock]
     end
     subgraph EDGE[Edge]
       VER[Vercel<br/>tfl-monitor.vercel.app]
     end
-    CADDY --> API
-    CADDY --> WEB
+    TFL[TfL Unified API]
+
+    CADDY -->|tfl-monitor-api.humbertolomeu.com| API
+    CADDY --> ALPHA
+    API -->|read-through| TFL
     API --> SB
     API --> BR
-    API --> PC
-    PROD --> RP
-    CONS --> RP
-    CONS --> SB
-    SCH --> SB
-    SCH --> RP
     VER -.fetch.-> CADDY
 ```
 
-Six long-running services on one box (down from 9 in local dev): three
-ingestion producers and three consumers each collapsed into one `asyncio.gather`
-process, plus Airflow (scheduler + webserver), the FastAPI process, and
-Caddy.
+One long-running container for tfl-monitor (`tfl-monitor-api-1`, compose project
+`infra`). The producers, consumers, broker, and Airflow that the original design
+ran are all gone (ADR 014 / ADR 008).
 
-## What changed from the original plan
+## DNS + reverse proxy
 
-The first iteration of TM-A5 targeted Railway for the backend. Two budget
-constraints flipped the design:
+- **DNS:** a Cloudflare A record `tfl-monitor-api.humbertolomeu.com` → the static
+  IP, **DNS-only** (gray cloud) — no Cloudflare proxy, no Origin Cert.
+- **TLS:** the shared Caddy at `/opt/caddy/` joins the external `caddy_net`
+  docker network and reverse-proxies the hostname to `tfl-monitor-api-1:8000`,
+  issuing a Let's Encrypt cert via HTTP-01. `infra/caddyfile.snippet` is the
+  source of truth for the tfl-monitor site block, merged once into
+  `/opt/caddy/Caddyfile`.
 
-1. The author has **$100 of AWS credit** to spread across two portfolio
-   projects, so AWS-only compute is now essentially free.
-2. Anthropic-direct API spend is real money; **Bedrock pricing** for the same
-   models lands in the same $100 credit envelope.
+SSE needs `flush_interval -1` in the Caddy site block — Caddy buffers by
+default, which times out the chat stream.
 
-Hence:
+## LLM access
 
-- Single EC2 spot replaces Railway's API + worker boxes.
-- Bedrock replaces Anthropic-direct in production (`ChatBedrockConverse` +
-  `pydantic-ai "bedrock:..."` model strings).
-- Anthropic-direct stays as an opt-in **local-dev fallback** so contributors
-  who only have an Anthropic key can still run the agent.
+AWS Bedrock cross-region inference profiles serve Claude Sonnet 4.5 (answers)
+and Haiku 4.5 (extraction), authenticated through a scoped `tfl-monitor-bedrock`
+IAM user — Lightsail has no native instance role, so the access keys live in
+`/opt/tfl-monitor/.env` (chmod 600). Anthropic-direct stays as an opt-in
+local-dev fallback for contributors who only have an Anthropic key.
 
-ADR 003 (Airflow on Railway) becomes superseded by ADR 006 (Bedrock +
-single-EC2 deploy), committed alongside TM-A5.
-
-## Provisioning runbook (high-level)
-
-The full step-by-step runbook lives in
-[`.claude/specs/TM-A5-plan.md` §3](https://github.com/hcslomeu/tfl-monitor/blob/main/.claude/specs/TM-A5-plan.md).
-
-```mermaid
-flowchart LR
-    PRE[Step 0<br/>Laptop prereqs] --> BR[Step 1<br/>Bedrock model access]
-    BR --> SAAS[Step 2<br/>Supabase + Redpanda<br/>+ Pinecone + DuckDNS]
-    SAAS --> PR1[PR-1<br/>Bedrock swap +<br/>ingestion collapse]
-    PR1 --> PR2[PR-2<br/>Terraform +<br/>compose.prod +<br/>Caddy + GHA OIDC]
-    PR2 --> FIRST[First deploy<br/>SSM session →<br/>paste .env →<br/>bootstrap]
-    FIRST --> SMOKE[Smoke<br/>curl /health<br/>/status/live<br/>/chat/stream]
-    SMOKE --> PR3[PR-3<br/>ADR 006 +<br/>doc updates]
-```
-
-## Three PRs under the TM-A5 banner
-
-| # | Branch | Tracks | Approx LoC |
-|---|--------|--------|-----------|
-| **PR-1** | `feature/TM-A5-bedrock-swap` | D-api-agent + B-ingestion (declared cross-track) | ~200 src + 80 tests |
-| **PR-2** | `feature/TM-A5-aws-deploy` | A-infra | ~450 |
-| **PR-3** | `feature/TM-A5-adr-progress` | meta (ADRs + ARCHITECTURE / README / PROGRESS) | ~250 markdown |
-
-## Image build + deploy pipeline
+## Deploy pipeline
 
 ```mermaid
 sequenceDiagram
-    participant Dev as Author push
+    participant Dev as push to main
     participant GHA as GitHub Actions
-    participant GHCR as GHCR
-    participant SSM as AWS SSM
-    participant EC2 as EC2 spot
+    participant BOX as Lightsail box
+    participant TFL as deploy.sh
 
-    Dev->>GHA: push to main
-    GHA->>GHA: matrix build (api, ingestion, airflow)
-    GHA->>GHCR: docker buildx push --platform linux/arm64
-    GHA->>SSM: aws ssm send-command (OIDC role)
-    SSM->>EC2: cd repo && docker compose pull && up -d
-    EC2-->>Dev: services restart, health checks pass
+    Dev->>GHA: push (backend paths only)
+    GHA->>BOX: rsync source (pinned host key)
+    GHA->>BOX: ssh (keepalive) → bash scripts/deploy.sh
+    TFL->>TFL: docker compose -p infra up -d --build
+    TFL->>TFL: internal + external healthcheck
+    TFL->>TFL: one-shot dbt seed + dim_stations build
+    BOX-->>Dev: /health 200
 ```
 
-Authentication chain:
+`.github/workflows/deploy.yml` triggers on push to `main`, ignoring
+markdown / `web/` / `.claude/` / `docs/` changes. Hardening learned the hard way
+(see the napkin): `set -o pipefail` through every pipe so `docker compose … | tail`
+can't mask a build failure; `ssh -o ServerAliveInterval=60` so buildkit's silent
+unpack phase doesn't drop the connection; a pinned `LIGHTSAIL_HOST_KEY` to close
+the keyscan TOFU window.
 
-1. GitHub OIDC token → IAM role with `ssm:SendCommand`.
-2. EC2 instance profile with `bedrock:InvokeModel*` scoped to the two model
-   ARNs only — no AWS access keys live anywhere on disk.
-3. GHCR pull on the box uses a short-lived `read:packages` PAT pasted once
-   into `.env`.
+`scripts/deploy.sh` also removes any legacy cron schedule (ADR 014 dropped the
+recurring dbt + retention cron) and runs a **one-shot** `dbt seed` +
+`dim_stations` build after the health check — non-fatal, because the
+station-name resolver falls back to a live TfL `/StopPoint` lookup when
+`dim_stations` is absent.
 
-## Reverse proxy + TLS
+## Operations
 
-```caddy
-{
-    email tflmonitor@example.com
-}
+| Action | Command |
+|--------|---------|
+| SSH to the box | `ssh ubuntu@13.41.145.33` |
+| Public smoke | `curl -fsS https://tfl-monitor-api.humbertolomeu.com/health` |
+| Recreate the API container | `cd /opt/tfl-monitor && docker compose -p infra -f infra/docker-compose.prod.yml up -d --force-recreate` |
+| Manual dbt rebuild | `ssh ubuntu@13.41.145.33 '/opt/tfl-monitor/scripts/cron-dbt-run.sh'` |
+| Reload Caddy | `docker exec shared-caddy caddy reload --config /etc/caddy/Caddyfile` |
 
-tflmonitor.duckdns.org {
-    handle_path /airflow* {
-        reverse_proxy airflow-webserver:8080
-    }
-    reverse_proxy api:8000 {
-        flush_interval -1   # disable buffering for SSE
-    }
-}
-```
+!!! warning "Shared box etiquette"
+    The box is a noisy-neighbour to two other tenants on 2 GB of RAM. Never run
+    a multi-GB-RAM job (RAG ingest, torch) on it — that OOMs the guest kernel and
+    takes every tenant down. Run RAG ingest off-box against the same Supabase
+    pgvector DSN. Use the `-p infra` project name for every compose op so it
+    targets `tfl-monitor-api-1` and not the local-dev stack.
 
-`flush_interval -1` is the difference between SSE working and timing out —
-Caddy buffers by default, which breaks the chat stream.
+## What changed from the original plan
 
-DuckDNS keeps `tflmonitor.duckdns.org` pointed at the EIP via a 5-minute cron
-on the box. Re-pointing to a custom domain in TM-F1 is one Caddyfile line.
+The first TM-A5 iteration targeted a dedicated EC2 spot box on DuckDNS with a
+full 6-service compose (producers, consumers, Airflow). Two shifts collapsed it:
 
-## Disaster scenarios
-
-| Risk | Response |
-|------|----------|
-| Spot interruption | ASG re-launches on `persistent` spot; ~5 min downtime per event, ~1-2× / week |
-| EBS volume loss on spot reclaim | `delete_on_termination = false` preserves the volume; ASG re-attaches |
-| Bedrock model access denied | Fall back to Anthropic-direct via `.env` (`unset BEDROCK_REGION` + set `ANTHROPIC_API_KEY`) |
-| RAM saturation on t4g.small | Drop Airflow webserver (CLI-only operations) — saves ~250 MB |
-| Free-tier expiry on Supabase / Redpanda / Pinecone | All three are indefinite at portfolio scale; documented limits in README |
-| Bedrock cost spike | CloudWatch billing alarm @ $20/mo notifies via SNS |
+1. An existing 2 GB Lightsail box had spare capacity, so tfl-monitor became a
+   second tenant behind a shared Caddy — cheaper than a dedicated instance
+   (ADR 006 supersedes ADR 003).
+2. ADR 014 removed the broker, ingestion workers, and warehouse entirely, so the
+   box now runs a single API container reading TfL live.
 
 ## Rollback paths
 
-Three granularities:
-
-1. **Per-image** — `docker compose pull` against a previous SHA tag (GHCR
-   retains all SHA tags).
-2. **Per-PR** — `git revert -m 1 <merge-sha>` then `terraform apply`.
-3. **Whole-pivot** — revert the three TM-A5 PRs and ship ADR 003's Railway
-   plan (preserved in git history).
+1. **Per-image** — `docker compose -p infra up -d` against a previous build /
+   git checkout on the box.
+2. **Per-PR** — `git revert -m 1 <merge-sha>`; the next push redeploys.
+3. **LLM fallback** — unset the Bedrock vars and set `ANTHROPIC_API_KEY` in
+   `/opt/tfl-monitor/.env` to fall back to Anthropic-direct.

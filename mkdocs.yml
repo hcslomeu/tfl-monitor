@@ -1,7 +1,7 @@
 site_name: tfl-monitor
 site_description: >-
-  A real-time data + AI engineering portfolio project — streaming TfL feeds
-  into a dbt-modelled warehouse, with a RAG agent over TfL strategy documents.
+  A real-time data + AI engineering portfolio project — a live Transport for
+  London proxy with a RAG agent over TfL strategy documents.
 site_author: Humberto Slomeu
 site_url: https://hcslomeu.github.io/tfl-monitor/
 
@@ -153,8 +153,8 @@ nav:
       - Observability: observability.md
   - Pipelines:
       - pipelines/index.md
-      - Streaming ingestion: pipelines/ingestion.md
-      - dbt warehouse: pipelines/warehouse.md
+      - Live TfL proxy: pipelines/ingestion.md
+      - Reference data: pipelines/warehouse.md
       - RAG ingestion: pipelines/rag.md
       - LangGraph agent: pipelines/agent.md
       - FastAPI surface: pipelines/api.md

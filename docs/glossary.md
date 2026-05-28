@@ -20,9 +20,9 @@ Project-specific vocabulary and TfL-specific terms a reviewer might not know.
     these on the wire.
 
 `Tier-2 schema`
-:   Pydantic model in **internal Kafka wire format** — snake_case, frozen,
-    flat. Lives in `contracts/schemas/{line_status,arrivals,disruptions}.py`.
-    Producers emit these; consumers and downstream services speak only this.
+:   Pydantic model in the **internal response shape** — snake_case, flat, typed.
+    Lives in `contracts/schemas/`. `tfl_client/normalise.py` maps tier-1 →
+    tier-2; FastAPI and the frontend speak only this.
 
 `ADR`
 :   Architecture Decision Record. Markdown file under `.claude/adrs/` with
@@ -37,7 +37,8 @@ Project-specific vocabulary and TfL-specific terms a reviewer might not know.
 
 `NaPTAN`
 :   National Public Transport Access Node. The UK-wide identifier for stops
-    and stations. Five NaPTAN hubs are sampled by the arrivals producer.
+    and stations. The `get_arrivals_tool` resolves a station name to a NaPTAN
+    before querying live arrivals.
 
 `ATCO`
 :   Association of Transport Coordinating Officers. ATCO codes are the
@@ -50,13 +51,13 @@ Project-specific vocabulary and TfL-specific terms a reviewer might not know.
 
 `Mode`
 :   TfL's transport-mode classifier — `tube`, `bus`, `dlr`, `overground`,
-    `elizabeth-line`, `tram`, `cable-car`. The disruptions producer polls
-    four modes.
+    `elizabeth-line`, `tram`, `cable-car`. `/status/live` and
+    `/disruptions/recent` query TfL across the rail modes.
 
 `Status severity`
 :   TfL's enum: `Good Service`, `Minor Delays`, `Severe Delays`, `Part Closure`,
-    `Suspended`, etc. `mart_tube_reliability_daily` aggregates per
-    `(line_id, calendar_date, status_severity)`.
+    `Suspended`, etc. Returned per line by `/status/live`; severity 10 is Good
+    Service, higher values map to delays / closures.
 
 ## Stack terms
 
@@ -81,6 +82,6 @@ Project-specific vocabulary and TfL-specific terms a reviewer might not know.
 :   A typed Python agent framework from the Pydantic team; we use it inside one tool (`LineId`
     extraction with Haiku). LangGraph remains the main agent.
 
-`HybridChunker`
-:   Docling 2.x utility that chunks a parsed document by sections + tables
-    rather than by raw character count, preserving semantic structure.
+`SentenceSplitter`
+:   LlamaIndex utility that splits PyMuPDF-extracted text into overlapping
+    chunks on sentence boundaries before embedding.

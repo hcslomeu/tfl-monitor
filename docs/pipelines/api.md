@@ -1,6 +1,6 @@
 # FastAPI surface
 
-Eight endpoints, all RFC 7807 errors, a single shared async psycopg pool, and
+Five endpoints, all RFC 7807 errors, a single shared async psycopg pool, and
 **OpenAPI 3.1 as the contract** — the frontend regenerates types from it.
 
 ## Code map
@@ -9,7 +9,9 @@ Eight endpoints, all RFC 7807 errors, a single shared async psycopg pool, and
 |---------|--------|
 | Application factory + lifespan | `src/api/main.py` |
 | Route handlers | `src/api/main.py` (in-line per endpoint) |
-| Postgres pool + fetchers | `src/api/db.py` |
+| Live TfL read-through | `src/api/live.py` |
+| Postgres pool + chat/history fetchers | `src/api/db.py` |
+| Station resolver | `src/api/stations.py` |
 | Pydantic response models | `src/api/schemas.py` |
 | Logfire wiring | `src/api/observability.py` |
 | Agent compilation | `src/api/agent/` |
@@ -19,13 +21,15 @@ Eight endpoints, all RFC 7807 errors, a single shared async psycopg pool, and
 | Method | Path | Source | Notes |
 |--------|------|--------|-------|
 | `GET` | `/health` | static | Liveness — returns build info |
-| `GET` | `/api/v1/status/live` | `raw.line_status` | 15-min freshness window |
-| `GET` | `/api/v1/status/history` | `analytics.stg_line_status` | 30-day cap, `LIMIT 10000` |
-| `GET` | `/api/v1/reliability/{line_id}` | `analytics.mart_tube_reliability_daily` | Aggregate + histogram, 404 on empty window |
-| `GET` | `/api/v1/disruptions/recent` | `analytics.stg_disruptions` | `?limit=50&mode=tube` |
-| `GET` | `/api/v1/bus/{stop_id}/punctuality` | `analytics.stg_arrivals` | 7-day window, on-time/early/late proxy |
+| `GET` | `/api/v1/status/live` | live TfL `/Line/Mode/{modes}/Status` | One status row per line; `502` on upstream failure |
+| `GET` | `/api/v1/disruptions/recent` | live TfL `/Status?detail=true` | `?limit=50&mode=tube`; affected stops resolved to names |
 | `POST` | `/api/v1/chat/stream` | LangGraph agent | SSE: `{type, content}` frames |
 | `GET` | `/api/v1/chat/{thread_id}/history` | `analytics.chat_messages` | Replays a thread |
+
+The `/status/live` and `/disruptions/recent` handlers call `TflClient` directly
+(`src/api/live.py`) — there is no database read on the request path beyond the
+station-name resolver's `dim_stations` fast path. See
+[Live TfL proxy](ingestion.md).
 
 ## Lifespan
 
@@ -34,30 +38,29 @@ sequenceDiagram
     participant Boot as uvicorn
     participant App as FastAPI
     participant DB as Postgres pool
+    participant TFL as TflClient
     participant LLM as compile_agent
 
     Boot->>App: lifespan startup
     alt DATABASE_URL set
       App->>DB: AsyncConnectionPool(min=1, max=4)
-      DB-->>App: open
     else
       App->>App: app.state.pool = None
     end
-    alt All 3 keys present
+    App->>TFL: open shared TflClient on app.state.tfl_client
+    alt LLM creds present
       App->>LLM: compile_agent()
-      LLM-->>App: graph
-      App->>App: app.state.agent = graph
+      LLM-->>App: graph (app.state.agent)
     else
       App->>App: app.state.agent = None
     end
-
     Note over App: serving requests
-    Note over Boot,LLM: lifespan shutdown reverses both
+    Note over Boot,LLM: lifespan shutdown reverses all three
 ```
 
-Each handler reads `app.state.pool` / `app.state.agent` and returns a
-RFC 7807 `503` if the dependency is missing — `make check` and unit tests run
-without any external services.
+Each handler reads `app.state.pool` / `app.state.tfl_client` / `app.state.agent`
+and returns a problem+json error if a dependency is missing — `make check` and
+unit tests run without any external services.
 
 ## Error contract
 
@@ -66,21 +69,20 @@ Every error response is `application/problem+json`:
 ```json
 {
   "type": "about:blank",
-  "title": "Service Unavailable",
-  "status": 503,
-  "detail": "DATABASE_URL not configured",
+  "title": "Bad Gateway",
+  "status": 502,
+  "detail": "Upstream TfL request failed",
   "instance": "/api/v1/status/live"
 }
 ```
 
-The `_problem` helper in `src/api/main.py` wraps the four documented surfaces:
+The `_problem` helper in `src/api/main.py` wraps the documented surfaces:
 
 | Status | When |
 |--------|------|
-| 404 | `reliability` window has no rows; bus stop unknown |
 | 422 | Pydantic validation failure (FastAPI default, RFC 7807-mapped) |
-| 503 | Pool unset (no `DATABASE_URL`) or agent unset (missing key) |
-| 502 | Bedrock / Anthropic upstream failure (mapped from `langchain_*` exceptions) |
+| 502 | Upstream failure — TfL request error, or Bedrock / Anthropic LLM error |
+| 503 | Pool unset (no `DATABASE_URL`) or agent unset (missing LLM credentials) |
 
 ## Pool sizing
 
@@ -97,8 +99,9 @@ Two reasons for the `max=4` ceiling:
 
 1. The Supabase free tier caps connections strictly (~30 across all clients
    sharing the project).
-2. Most queries are single-statement reads that finish in <50 ms, so a small
-   pool sustains the portfolio's RPS comfortably.
+2. The remaining DB reads — chat history and the `dim_stations` resolver fast
+   path — are single-statement and finish in <50 ms, so a small pool sustains
+   the portfolio's RPS comfortably.
 
 ## OpenAPI 3.1 as the source of truth
 
@@ -118,8 +121,8 @@ flowchart LR
     GEN[web/lib/types.ts<br/>regenerated] -->|diff| TS
 ```
 
-So adding a route involves three pinned files: the Pydantic schema, the
-OpenAPI entry, and the TypeScript types. Drift in any direction breaks CI.
+So adding a route involves three pinned files: the Pydantic schema, the OpenAPI
+entry, and the TypeScript types. Drift in any direction breaks CI.
 
 ## Observability
 
@@ -131,22 +134,21 @@ logfire.instrument_psycopg()
 logfire.instrument_httpx()
 ```
 
-Per-request spans cover route + status + latency. Per-query spans cover the
-parameterised SQL + duration. LangSmith captures the agent traces — see
-[Observability](../observability.md).
+Per-request spans cover route + status + latency; `httpx` spans cover the
+outbound TfL calls (`app_key` redacted). LangSmith captures the agent traces —
+see [Observability](../observability.md).
 
 ## Tests
 
-| Suite | Count | Notable |
-|-------|-------|---------|
-| `tests/api/test_stubs.py` | parametrised | Validates that every committed route is implemented (no 501 stubs left) |
-| `tests/api/test_status_live.py` | 5 | Freshness window, RFC 7807 on no pool, ordering |
-| `tests/api/test_reliability.py` | 6 | Histogram shape, 404 empty window, severity ordering |
-| `tests/api/test_disruptions.py` | 6 | `mode` filter via EXISTS, `limit` bounds, `last_update DESC NULLS LAST` |
-| `tests/api/test_bus_punctuality.py` | 5 | Proxy math, RFC 7807 404 on empty stop |
-| `tests/api/test_chat_stream.py` | 6 | SSE happy path, 503 no graph, mid-stream `end:error` |
-| `tests/api/test_chat_history.py` | 3 | Order, empty, 503 |
-| Integration smokes | 11 | Gated on `DATABASE_URL`, run with `-m integration` |
+| Suite | Notable |
+|-------|---------|
+| `tests/api/test_stubs.py` | Every committed route is implemented (no 501 stubs left) |
+| `tests/api/` live endpoints | `status/live` + `disruptions/recent` happy path, empty modes, `502` on upstream failure |
+| `tests/api/test_cors.py` | Apex pin + anchored Vercel-preview regex, attacker-origin reject |
+| `tests/api/` chat | SSE happy path, 503 no graph, mid-stream `end:error`, journey/arrivals frames |
+| `tests/api/` history | Order, empty, RFC 7807 503 |
+| Integration smokes | Gated on `DATABASE_URL`, run with `-m integration` |
 
-`tests/conftest.py::FakeAsyncPool` replaces the live psycopg pool in unit
-tests — the fixture returns predictable rows without a Postgres dependency.
+`tests/conftest.py::FakeAsyncPool` replaces the live psycopg pool in unit tests,
+and `TflClient` calls are faked — no Postgres or TfL dependency in the unit
+suite.

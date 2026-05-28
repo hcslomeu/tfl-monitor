@@ -1,153 +1,64 @@
-# dbt warehouse
+# Reference data (dbt)
 
-Three Postgres schemas, ten dbt models, generic + singular tests, and five
-exposures wiring marts to the API endpoints that consume them.
+ADR 014 removed the feed warehouse — the `raw.*` landing tables, the staging
+models, and the reliability / bus / disruptions marts are all gone. What
+remains is a **small, static reference layer**: a station seed and one mart
+built from it. Nothing here grows with feed volume.
 
-## Schema layout
+## What dbt builds now
 
-| Schema | Purpose | Owned by |
-|--------|---------|----------|
-| `raw.*` | Append-only JSONB landing tables | Consumers (`src/ingestion/consumers/`) |
-| `ref.*` | Reference data (lines, stations, modes) | TM-A2 static-ingest DAG (deferred) |
-| `analytics.*` | dbt-built staging + marts | dbt project under `dbt/models/` |
-
-## Lineage
+| Object | Type | Source of truth |
+|--------|------|-----------------|
+| `tfl_stations` | dbt **seed** (`dbt/seeds/tfl_stations.csv`) | `scripts/build_stations_seed.py` (one-off, from `/StopPoint/Mode/{mode}`) |
+| `analytics.dim_stations` | dbt **model** (`dbt/models/marts/dim_stations.sql`) | the seed above |
 
 ```mermaid
-flowchart TB
-    subgraph RAW[raw schema]
-      r1[(raw.line_status)]
-      r2[(raw.arrivals)]
-      r3[(raw.disruptions)]
-    end
-
-    subgraph STG[staging]
-      s1[stg_line_status]
-      s2[stg_arrivals]
-      s3[stg_disruptions]
-    end
-
-    subgraph MART[marts]
-      m1[mart_tube_reliability_daily]
-      m2[mart_tube_reliability_daily_summary]
-      m3[mart_disruptions_daily]
-      m4[mart_bus_metrics_daily]
-    end
-
-    subgraph EXP[exposures]
-      e1[/status/live, /status/history]
-      e2[/reliability/{line_id}]
-      e3[/disruptions/recent]
-      e4[/bus/{stop_id}/punctuality]
-    end
-
-    r1 --> s1 --> m1 --> m2
-    r2 --> s2 --> m4
-    r3 --> s3 --> m3
-
-    s1 --> e1
-    m2 --> e2
-    s3 --> e3
-    s2 --> e4
+flowchart LR
+    SCRIPT[scripts/build_stations_seed.py<br/>one-off scrape] --> SEED[(tfl_stations.csv<br/>~919 rows)]
+    SEED -->|dbt seed| REF[(seed table)]
+    REF -->|dbt run| DIM[(analytics.dim_stations<br/>NaPTAN → name)]
+    DIM -->|fast path| RESOLVER[src/api/stations.py]
+    RESOLVER -.miss.-> TFL[live TfL /StopPoint]
 ```
 
-## Staging models
+`dim_stations` is the fast path for the NaPTAN → station-name resolver
+(`src/api/stations.py`). It is static, so it is built **once per deploy** rather
+than on a schedule.
 
-All three staging models share the same shape:
+## How it runs
 
-- **Materialisation:** `incremental` with `unique_key='event_id'`, `merge`
-  strategy, `on_schema_change='fail'`.
-- **Lookback:** 5 minutes — incremental runs scan the last 5 min of `raw` rows
-  in case a late event arrives.
-- **Defensive dedup:** `row_number() OVER (PARTITION BY event_id ORDER BY
-  ingested_at DESC)` then keep `rn = 1`.
-- **JSONB unnesting:** explicit casts into typed columns (text / int /
-  numeric / timestamptz). No silent JSONB leakage downstream.
+There is no orchestrator. Apache Airflow was removed (ADR 008), and ADR 014
+removed the recurring dbt + retention cron. `scripts/deploy.sh` runs a one-shot
+`dbt seed` + `dbt build` of `dim_stations` after the API container passes its
+health check (`scripts/cron-dbt-run.sh`). The build is **non-fatal**: if it
+fails, the app still serves live data and the resolver falls back to the live
+TfL `/StopPoint` lookup.
 
-Reading the staging models is the cheapest way to understand the wire format
-of each topic.
-
-## Marts
-
-| Model | Grain | Notable columns |
-|-------|-------|-----------------|
-| `mart_tube_reliability_daily` | `(line_id, calendar_date_utc, status_severity)` | `snapshot_count`, `first_observed_at`, `last_observed_at`, `minutes_observed_estimate` |
-| `mart_tube_reliability_daily_summary` | `(line_id, calendar_date_utc)` | `pct_good_service`, `longest_disruption_window_minutes` (gaps-and-islands) |
-| `mart_disruptions_daily` | `(calendar_date_utc, line_id)` | `affected_routes` JSONB fan-out, `distinct_categories`, `max_severity` |
-| `mart_bus_metrics_daily` | `(calendar_date_utc, line_id, station_id)` | Filtered to bus lines via `source('tfl', 'lines')` |
-
-The `mart_tube_reliability_daily_summary` model is the most interesting — it
-runs a gaps-and-islands SQL pattern to compute the longest contiguous
-non-`Good Service` window per line per day:
-
-```sql
-with islands as (
-    select
-        line_id,
-        calendar_date_utc,
-        last_observed_at,
-        sum(case when status_severity = 'Good Service' then 1 else 0 end)
-            over (partition by line_id, calendar_date_utc order by last_observed_at) as island_id
-    from {{ ref('mart_tube_reliability_daily') }}
-)
-select
-    line_id,
-    calendar_date_utc,
-    max(extract(epoch from (last_observed_at - first_observed_at)) / 60.0)
-        as longest_disruption_window_minutes
-from (
-    select
-        line_id,
-        calendar_date_utc,
-        island_id,
-        min(last_observed_at) as first_observed_at,
-        max(last_observed_at) as last_observed_at
-    from islands
-    where status_severity != 'Good Service'
-    group by 1, 2, 3
-) windows
-group by 1, 2
+```bash
+# Manual rebuild on the box (what the deploy step calls):
+ssh ubuntu@13.41.145.33 '/opt/tfl-monitor/scripts/cron-dbt-run.sh'
 ```
+
+## Why keep dbt at all
+
+For one seed and one model, raw SQL would also work. dbt earns its place
+because it ships **tests, lineage, and documentation** with the data for
+near-zero cost, and because regenerating the station reference from scratch is a
+single `dbt build` against any fresh Postgres — useful given the database has
+been recreated from empty more than once.
+
+## The rest of the database
+
+Everything else in Postgres is application state, not a dbt artifact:
+
+| Object | Purpose |
+|--------|---------|
+| pgvector store (`public.data_tfl_strategy_docs`) | RAG retrieval — see [RAG ingestion](rag.md) |
+| `analytics.chat_messages` | chat memory backing `/chat/{thread_id}/history` |
+| `ref.lines`, `ref.stations` | line / station lookup seeds |
 
 ## Tests
 
-| Type | Count | Examples |
-|------|-------|----------|
-| Generic (`unique`, `not_null`, `accepted_values`, relationships) | 14 | `event_id` is unique on every staging model |
-| Singular | 8 | `pct_good_service` is bounded `[0, 100]`; `affected_routes` is valid JSONB; disruption category enum |
-
-Singular tests live under `dbt/tests/` and run via `dbt test`. CI gates the
-parser via `uv run task dbt-parse` on every PR.
-
-## Exposures
-
-Five exposures wire marts to the FastAPI endpoints that consume them, so
-`dbt docs generate` produces a useful lineage graph for a recruiter:
-
-```yaml
-- name: api_status_live
-  type: application
-  url: https://tflmonitor.duckdns.org/api/v1/status/live
-  depends_on: [source('tfl', 'line_status')]
-
-- name: api_reliability_window
-  type: application
-  url: https://tflmonitor.duckdns.org/api/v1/reliability/{line_id}
-  depends_on: [ref('mart_tube_reliability_daily')]
-```
-
-Five total — one per warehouse-backed endpoint.
-
-## Idempotency and lateness
-
-Three properties combine to make every mart re-runnable from scratch:
-
-1. **`merge` materialisation** with `unique_key='event_id'` — re-running a
-   batch updates rows in place rather than appending duplicates.
-2. **5-minute lookback** — staging models scan the last 5 min of `raw` rows
-   to catch late arrivals.
-3. **UTC anchoring** — every `calendar_date_utc` derives from `ingested_at` in
-   UTC, so re-running across timezones yields identical rows.
-
-A nightly `dbt build` (`0 1 * * *` in `airflow/dags/dbt_nightly.py`)
-rebuilds the marts from staging.
+`uv run task dbt-parse` gates the project on every PR. The `dim_stations` model
+and the `tfl_stations` seed carry generic dbt tests (`unique`, `not_null` on the
+NaPTAN key) under `dbt/models/marts/schema.yml` and `dbt/seeds/schema.yml`.

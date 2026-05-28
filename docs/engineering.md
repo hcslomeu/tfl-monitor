@@ -17,7 +17,7 @@ quadrantChart
     "1 pyproject + flat compose": [0.85, 0.25]
     "Sub-packages with own toml": [0.20, 0.75]
     "Single AbstractVectorStore": [0.30, 0.65]
-    "Plain pinecone client": [0.85, 0.30]
+    "Plain pgvector client": [0.85, 0.30]
     "Custom Typer CLI": [0.30, 0.55]
     "python -m module entry": [0.80, 0.25]
 ```
@@ -40,65 +40,59 @@ now?"* If no — the abstraction can wait.
 ## Contracts-first parallelism
 
 Every cross-service interface lives in `contracts/`. Two tiers of Pydantic
-schemas separate the messy outside world from the clean internal wire format,
-so producers, consumers, FastAPI, and the frontend can be built in parallel by
-separate agents without colliding.
+schemas separate the messy outside world from the clean internal shape, so the
+TfL client, FastAPI, and the frontend can be built in parallel by separate
+agents without colliding.
 
 ```mermaid
 flowchart TB
     subgraph SOURCE[contracts/]
       OAPI[openapi.yaml<br/>OpenAPI 3.1]
       T1[schemas/tfl_api.py<br/>tier-1 raw shapes]
-      T2[schemas/{line_status,arrivals,disruptions}.py<br/>tier-2 frozen events]
-      DDL[sql/00*.sql<br/>raw + ref + analytics]
-      DBTSRC[dbt_sources.yml]
+      T2[schemas/*.py<br/>tier-2 typed models]
+      DDL[sql/00*.sql<br/>ref + analytics + chat]
     end
 
     OAPI -->|openapi-typescript| TS[web/lib/types.ts]
     OAPI -->|FastAPI route shapes| API[src/api]
-    T1 -->|tfl_client normalises| ING[src/ingestion]
-    T2 -->|wire format| KAFKA[(Kafka)]
+    T1 -->|tfl_client normalises| ING[src/ingestion/tfl_client]
+    T2 -->|FastAPI response| API
     DDL -->|psql -f| PG[(Postgres)]
-    DBTSRC -->|copied to| DBTSOURCES[dbt/sources/tfl.yml]
 ```
 
-CI enforces the source-of-truth via `diff contracts/dbt_sources.yml
-dbt/sources/tfl.yml` and a bidirectional OpenAPI ↔ Python drift test.
+CI enforces the source-of-truth via a bidirectional OpenAPI ↔ Python drift
+test — the emitted schema must equal the committed contract, both directions.
 
-## Kafka earns its place
+## Live proxy over a warehouse
 
-A cron-to-Postgres pipeline would technically deliver the same rows. Kafka is
-worth its operational cost only because we exploit three properties:
+Hoarding TfL's feeds as warehouse history bought nothing but disk-full
+incidents — the free-tier database was bricked three times before ADR 014
+turned the app into a live proxy. The principle is YAGNI applied to data: TfL
+already exposes the live API, so reading through on demand is simpler, cheaper,
+and removes an entire failure class. A bounded-retention warehouse can return
+under a future ADR if analytics ever justify it.
 
-1. **Decoupling** — producers keep polling while consumers redeploy.
-2. **Replay** — rewinding `line-status` re-hydrates `stg_line_status` without a
-   re-poll.
-3. **Fan-out** — the same `arrivals` topic feeds `mart_bus_metrics_daily` and
-   could feed a future live-dashboard pusher with no producer change.
-
-If the WP only needed (1), we would skip Kafka. We exploit all three.
-
-## dbt over raw SQL
+## dbt for the reference layer
 
 ```mermaid
 graph LR
-    raw[(raw.*<br/>JSONB landing)] --> stg[stg_*<br/>incremental merge<br/>defensive dedup]
-    stg --> ints[int_* if needed]
-    ints --> marts[mart_*<br/>composite-grain<br/>generic + singular tests]
-    marts --> exposures[Exposures<br/>→ /reliability /disruptions /bus]
+    script[scripts/build_stations_seed.py] --> seed[(tfl_stations seed)]
+    seed -->|dbt build| dim[analytics.dim_stations<br/>generic tests + docs]
+    dim --> resolver[NaPTAN → name resolver]
 ```
 
-Raw SQL would also work — until a second person reads the codebase. dbt buys
-us tests, lineage, and one-line documentation that ships with the code.
+For one seed and one model, raw SQL would also work — until a second person
+reads the codebase. dbt buys us tests, lineage, and one-line documentation that
+ships with the code, plus a one-command rebuild from an empty database.
 
 ## Agent that does not hallucinate
 
 Two design choices keep the agent honest:
 
-1. **All five tools have typed Pydantic input/output.** The model cannot call
-   `query_line_reliability` with a malformed `line_id` — Pydantic AI's Haiku
-   normaliser canonicalises free text first.
-2. **Retrieval cites chunks.** The RAG tool returns Pinecone chunks with their
+1. **Every tool has typed Pydantic input/output.** The model cannot call a tool
+   with malformed arguments — a Pydantic AI Haiku normaliser canonicalises free
+   text (e.g. a line name) into a validated struct first.
+2. **Retrieval cites chunks.** The RAG tool returns pgvector chunks with their
    `doc_id` and `page` so any answer is traceable to a paragraph in a public
    document. LangSmith records the exact chunks that made it into the context.
 
@@ -112,9 +106,9 @@ prunes the bad retrieval, not "the LLM."
 | How did the agent arrive at that answer? | LangSmith |
 | Which chunks made it into the prompt? | LangSmith |
 | How many tokens did this conversation cost? | LangSmith |
-| Is the Kafka consumer keeping up? | Logfire |
-| Why is `/reliability/{line_id}` p99 latency high? | Logfire |
+| Why is `/disruptions/recent` p99 latency high? | Logfire |
 | Is TfL throttling us with 429s? | Logfire |
+| Did the `dim_stations` resolver fall back to a live lookup? | Logfire |
 
 Two hosted tools, zero self-hosted telemetry. ADR 004 has the full rationale.
 
@@ -166,7 +160,7 @@ This ships small, intentional PRs and avoids drift.
 |------|-----------|
 | Typo, one-line fix, dependency bump | Direct PR, tests already cover it |
 | New endpoint with one query | Plan inline, implement, ship |
-| New ingestion topic, new mart, new agent tool | Three phases, fresh context per phase |
+| New live endpoint, new dbt model, new agent tool | Three phases, fresh context per phase |
 | Anything touching `contracts/` | Mandatory ADR + cross-track broadcast |
 
 Track boundaries (A-infra / B-ingestion / C-dbt / D-api-agent / E-frontend /
