@@ -1,6 +1,6 @@
 # Production compose stack — deployed to /opt/tfl-monitor/ on the shared
 # Lightsail box (eu-west-2). Single service: api. Ingestion (producers,
-# consumers) and the Kafka broker were removed in ADR 014 — the app reads
+# consumers) and the message broker were removed in ADR 014 — the app reads
 # TfL live on demand. dbt seed + dim_stations builds are triggered by host
 # cron via `docker exec api`.
 #

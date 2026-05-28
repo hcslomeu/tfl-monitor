@@ -1,8 +1,8 @@
 # src/ingestion/
 
-The async TfL Unified API client. The streaming pipeline (Kafka producers
-and consumers, the `raw.*` warehouse) was removed in ADR 014 — the app now
-reads TfL state live on demand via `src/api/live.py`.
+The async TfL Unified API client. The streaming pipeline (the message broker,
+producers, and consumers, plus the `raw.*` warehouse) was removed in ADR 014 —
+the app now reads TfL state live on demand via `src/api/live.py`.
 
 ## Layout
 

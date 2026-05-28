@@ -1,14 +1,11 @@
-"""Tier-1 → tier-2 normalisation for TfL ingestion.
+"""Tier-1 → tier-2 normalisation for TfL responses.
 
 Pure functions mapping the raw camelCase shapes returned by the TfL
-Unified API (``contracts.schemas.tfl_api``) onto the snake_case Kafka
-payloads consumed by downstream services
-(``contracts.schemas.{line_status,arrivals,disruptions}``).
-
-Wrapping payloads into :class:`Event` envelopes (``event_id``,
-``ingested_at``, …) is intentionally left to the producers (TM-B2):
-those fields depend on Kafka delivery context and per-event UUID
-generation, neither of which belong in a pure data adapter.
+Unified API (``contracts.schemas.tfl_api``) onto the snake_case tier-2
+payloads in ``contracts.schemas.{line_status,arrivals,disruptions}``.
+``disruption_payloads`` builds the shape that ``/api/v1/disruptions/recent``
+returns; ``api.live`` consumes it so the synthetic-id and affected-stop
+logic lives in one place.
 """
 
 from __future__ import annotations

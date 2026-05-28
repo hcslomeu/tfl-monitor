@@ -1,9 +1,8 @@
 """Pydantic v2 response models for the API.
 
-Mirrors ``contracts/openapi.yaml`` ``LineStatus``, ``LineReliability``,
-``Disruption`` and ``BusPunctuality`` schemas. Kept separate from
-``contracts/schemas/*`` (Kafka tier) so the wire format and the API
-response can evolve independently.
+Mirrors the ``contracts/openapi.yaml`` ``LineStatus``, ``Disruption``, and
+chat schemas. Kept separate from the ``contracts/schemas/*`` tier-2 models
+so the wire format and the API response can evolve independently.
 """
 
 from __future__ import annotations
