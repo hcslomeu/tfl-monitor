@@ -24,16 +24,16 @@ import pytest
 psycopg = pytest.importorskip("psycopg")
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
-REQUIRED_KEYS = ("DATABASE_URL", "ANTHROPIC_API_KEY")
+# The agent selects Bedrock when BEDROCK_REGION is set, falling back to
+# ANTHROPIC_API_KEY (see src/api/agent/graph.py); accept either backend.
+_HAS_LLM_CREDS = bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("BEDROCK_REGION"))
 
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.slow,
     pytest.mark.skipif(
-        any(not os.environ.get(k) for k in REQUIRED_KEYS),
-        reason=(
-            "full agent stack requires DATABASE_URL plus Anthropic (or Bedrock) API credentials"
-        ),
+        not (DATABASE_URL and _HAS_LLM_CREDS),
+        reason="full agent stack requires DATABASE_URL plus Anthropic or Bedrock API credentials",
     ),
 ]
 

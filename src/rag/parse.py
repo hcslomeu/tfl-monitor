@@ -81,7 +81,8 @@ def parse_pdf(
     index = 0
     for page in extractor.extract(pdf_path):
         for piece in splitter.split_text(page.text):
-            if not piece.strip():
+            text = piece.strip()
+            if not text:
                 continue
             chunks.append(
                 Chunk(
@@ -92,7 +93,7 @@ def parse_pdf(
                     section_title="",
                     page_start=page.page_no,
                     page_end=page.page_no,
-                    text=piece,
+                    text=text,
                 )
             )
             index += 1
@@ -114,7 +115,10 @@ class _PyMuPdfExtractor:
         # iterated as Any, which is fine for the page-text extraction below.
         with pymupdf.open(str(pdf_path)) as document:  # type: ignore[no-untyped-call]
             for number, page in enumerate(document, start=1):
-                pages.append(PageText(page_no=number, text=page.get_text("text")))
+                # Postgres text/varchar reject null bytes; strip them before
+                # the extracted text reaches the pgvector store.
+                text = page.get_text("text").replace("\x00", "")
+                pages.append(PageText(page_no=number, text=text))
         return pages
 
 
