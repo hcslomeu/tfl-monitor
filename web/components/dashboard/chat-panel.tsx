@@ -262,9 +262,6 @@ export function ChatPanel({
 												</span>
 											) : who === "bot" ? (
 												<>
-													{message.content
-														? renderProse(message.content)
-														: null}
 													{message.views?.map((view, i) =>
 														view.kind === "journey" ? (
 															// biome-ignore lint/suspicious/noArrayIndexKey: view order is stable within a message.
@@ -274,6 +271,11 @@ export function ChatPanel({
 															<ArrivalsBoard key={i} view={view.data} />
 														),
 													)}
+													{message.content ? (
+														<span className="tfl-msg-prose">
+															{renderProse(message.content)}
+														</span>
+													) : null}
 												</>
 											) : (
 												message.content
