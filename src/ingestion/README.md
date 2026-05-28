@@ -1,119 +1,42 @@
 # src/ingestion/
 
-The streaming half: an async TfL client, three Kafka producers, and three
-consumers writing JSONB rows into `raw.*`. Every byte that crosses the wire
-is a Pydantic v2 model.
+The async TfL Unified API client. The streaming pipeline (Kafka producers
+and consumers, the `raw.*` warehouse) was removed in ADR 014 — the app now
+reads TfL state live on demand via `src/api/live.py`.
 
 ## Layout
 
 ```text
 src/ingestion/
-├─ Dockerfile               # ARM64 slim image (rebuilt by GHA matrix)
-├─ observability.py         # Logfire span helpers + namespace overrides
-├─ tfl_client/
-│  ├─ client.py             # async httpx with hand-rolled retry
-│  ├─ retry.py              # 429/5xx/timeout backoff
-│  └─ normalise.py          # tier-1 → tier-2 transformations
-├─ producers/
-│  ├─ kafka.py              # KafkaEventProducer wrapper (acks=all, idempotent)
-│  ├─ line_status.py        # 30s cadence, partition key=line_id
-│  ├─ arrivals.py           # 30s cadence × 5 NaPTAN hubs
-│  └─ disruptions.py        # 300s cadence × 4 modes
-└─ consumers/
-   ├─ kafka.py              # KafkaEventConsumer wrapper
-   ├─ event_consumer.py     # generic RawEventConsumer[E]
-   ├─ postgres.py           # RawEventWriter — INSERT … ON CONFLICT (event_id) DO NOTHING
-   ├─ line_status.py        # binds the generic consumer to the line-status topic
-   ├─ arrivals.py
-   └─ disruptions.py
+├─ observability.py    # Logfire span helpers (redacts app_key)
+└─ tfl_client/
+   ├─ client.py        # async httpx client with hand-rolled retry
+   ├─ retry.py         # 429/5xx/timeout backoff
+   └─ normalise.py     # tier-1 → tier-2 transformations
 ```
 
-## Producer cadences
+## TflClient
 
-| Producer | Cadence | Partition key | Event type |
-|----------|---------|---------------|------------|
-| `LineStatusProducer` | 30 s | `line_id` | `line-status.snapshot` |
-| `ArrivalsProducer` | 30 s × 5 hubs | `station_id` | `arrivals.snapshot` |
-| `DisruptionsProducer` | 300 s × 4 modes | `disruption_id` | `disruptions.snapshot` |
+`TflClient` wraps a single `httpx.AsyncClient`, authenticates via the
+`app_key` query parameter (redacted in Logfire spans), and parses responses
+into the tier-1 Pydantic contracts in `contracts.schemas.tfl_api`. Methods:
+`fetch_line_statuses` (`/Line/Mode/{modes}/Status`), `fetch_line_disruptions`
+(`?detail=true`), `fetch_arrivals`, `fetch_stop_point`, `search_stop`, and
+`plan_journey`.
 
-All three share the `KafkaEventProducer` wrapper — `acks="all"`,
-`enable_idempotence=true`, UUIDv4 `event_id`. A retry never duplicates a row.
-
-## Consumer guarantees
-
-| Failure | Handling |
-|---------|----------|
-| Poison pill (decode error) | Skip + commit |
-| Transient `OperationalError` | Reconnect + replay offset |
-| Unknown exception | Log + replay offset |
-
-Idempotency comes from `INSERT … ON CONFLICT (event_id) DO NOTHING` — a
-replay of a successful offset is a no-op at the row level.
-
-Lag is computed on every `kafka.consume` span and refreshed every
-**50 messages or 30 s** (whichever comes first).
-
-## Run locally
-
-```bash
-make up                       # boots Postgres + Redpanda + Airflow
-make seed                     # loads fixtures
-uv run task init-topics       # creates Redpanda topics
-
-# In separate terminals:
-uv run task ingest-line-status     uv run task consume-line-status
-uv run task ingest-arrivals        uv run task consume-arrivals
-uv run task ingest-disruptions     uv run task consume-disruptions
-```
-
-## Run in production
-
-TM-A5 collapses the six daemons into **two processes** so the EC2 box only
-runs two ingestion containers:
-
-```python
-# src/ingestion/run_producers.py (TM-A5)
-async def main() -> None:
-    await asyncio.gather(
-        LineStatusProducer().run_forever(),
-        ArrivalsProducer().run_forever(),
-        DisruptionsProducer().run_forever(),
-    )
-```
-
-`run_consumers.py` mirrors. The existing producer/consumer classes are
-untouched — only the entrypoint changes.
+`normalise.disruption_payloads` builds the disruption shape that
+`/api/v1/disruptions/recent` returns from a detailed line-status response;
+`api.live` reuses it so the synthetic-id and affected-stop logic lives in one
+place.
 
 ## Observability
 
-`observability.py` exposes per-topic span namespaces and **redacts the
-`app_key`** before any span is emitted. The httpx auto-instrumentation was
-removed because the manual `tfl.request` span already wraps every TfL call;
-`app_key` redaction happens inside that wrapper, so removing the auto layer
-does not weaken the secret-handling contract.
-
-Sampling is the shared `SamplingOptions.level_or_duration` tail strategy
-from `src/common/sampling.py`: warn+ spans and traces longer than five
-seconds are kept at 100%, everything else falls back to
-`LOGFIRE_SAMPLE_RATE` (default `0.1`).
-
-```python
-@logfire.instrument(
-    "ingestion.line_status.poll",
-    record_return=False,                 # payload is large; we record metadata
-)
-async def fetch_line_status(self) -> tier1.LineStatusResponse:
-    ...
-```
+`observability.py` redacts the `app_key` before any span is emitted. Sampling
+is the shared `SamplingOptions.level_or_duration` tail strategy from
+`src/common/sampling.py`: warn+ spans and traces longer than five seconds are
+kept at 100%, everything else falls back to `LOGFIRE_SAMPLE_RATE` (default
+`0.1`).
 
 ## Tests
 
-| Layer | Count |
-|-------|-------|
-| `tfl_client` (retry, normalise, redaction) | 14 |
-| Producers (×3) | 21 |
-| Consumers (×3, parametrised) | 28 |
-| Integration smokes (Redpanda + Postgres) | 4 |
-
-Total ~70 unit tests. Fixtures live under `tests/fixtures/tfl/` — tests
-never hit the live TfL API.
+Fixtures live under `tests/fixtures/tfl/`; tests never hit the live TfL API.

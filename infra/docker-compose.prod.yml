@@ -1,7 +1,8 @@
 # Production compose stack — deployed to /opt/tfl-monitor/ on the shared
-# Lightsail box (eu-west-2). Three services: api, producers, consumers.
-# Airflow is not part of prod (see ADR 006 + .claude/specs/TM-A5-plan.md
-# decision #17). dbt runs are triggered by host cron via `docker exec api`.
+# Lightsail box (eu-west-2). Single service: api. Ingestion (producers,
+# consumers) and the Kafka broker were removed in ADR 014 — the app reads
+# TfL live on demand. dbt seed + dim_stations builds are triggered by host
+# cron via `docker exec api`.
 #
 # The api container joins the host-wide `caddy_net` so the shared Caddy
 # at /opt/caddy/ can reverse-proxy `tfl-monitor-api.humbertolomeu.com` to
@@ -17,7 +18,6 @@ services:
     env_file: ../.env
     networks:
       - caddy_net
-      - tfl-monitor
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
       # 120s keeps the API still self-monitored but cuts the /health hit
@@ -27,34 +27,6 @@ services:
       timeout: 5s
       retries: 3
 
-  producers:
-    build:
-      context: ..
-      dockerfile: src/ingestion/Dockerfile
-    image: tfl-monitor-ingestion:latest
-    container_name: tfl-monitor-producers-1
-    restart: unless-stopped
-    env_file: ../.env
-    command: ["python", "-m", "ingestion.run_producers"]
-    networks:
-      - tfl-monitor
-
-  consumers:
-    image: tfl-monitor-ingestion:latest
-    # producers builds and tags this image; pull_policy: never blocks compose
-    # from racing to fetch it from a registry before the build completes.
-    pull_policy: never
-    container_name: tfl-monitor-consumers-1
-    restart: unless-stopped
-    env_file: ../.env
-    command: ["python", "-m", "ingestion.run_consumers"]
-    depends_on:
-      - producers
-    networks:
-      - tfl-monitor
-
 networks:
   caddy_net:
     external: true
-  tfl-monitor:
-    driver: bridge
