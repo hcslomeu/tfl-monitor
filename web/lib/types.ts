@@ -234,9 +234,7 @@ export interface components {
          */
         JourneyView: {
             total_minutes: number;
-            /** Format: date-time */
             start: string;
-            /** Format: date-time */
             arrival: string;
             legs: components["schemas"]["JourneyLeg"][];
         };

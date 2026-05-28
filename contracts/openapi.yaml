@@ -516,8 +516,8 @@ components:
       required: [total_minutes, start, arrival, legs]
       properties:
         total_minutes: { type: integer, minimum: 0 }
-        start: { type: string, format: date-time }
-        arrival: { type: string, format: date-time }
+        start: { type: string }
+        arrival: { type: string }
         legs:
           type: array
           items: { $ref: "#/components/schemas/JourneyLeg" }

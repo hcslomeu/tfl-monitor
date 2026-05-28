@@ -30,20 +30,25 @@ function parseView(
  * model output can never inject markup.
  */
 function renderProse(text: string) {
-	return text.split("\n").map((line, lineIndex) => (
-		// biome-ignore lint/suspicious/noArrayIndexKey: line order is stable for a given content string.
-		<span key={lineIndex} className="tfl-msg-line">
-			{line.split(/(\*\*[^*]+\*\*)/g).map((segment, segIndex) => {
-				const bold = /^\*\*[^*]+\*\*$/.test(segment);
-				return bold ? (
-					// biome-ignore lint/suspicious/noArrayIndexKey: segment order is stable for a given line.
-					<strong key={segIndex}>{segment.slice(2, -2)}</strong>
-				) : (
-					segment
-				);
-			})}
-		</span>
-	));
+	return text.split("\n").map((line, lineIndex) =>
+		line === "" ? (
+			// biome-ignore lint/suspicious/noArrayIndexKey: line order is stable for a given content string.
+			<br key={lineIndex} />
+		) : (
+			// biome-ignore lint/suspicious/noArrayIndexKey: line order is stable for a given content string.
+			<span key={lineIndex} className="tfl-msg-line">
+				{line.split(/(\*\*[^*]+\*\*)/g).map((segment, segIndex) => {
+					const bold = /^\*\*[^*]+\*\*$/.test(segment);
+					return bold ? (
+						// biome-ignore lint/suspicious/noArrayIndexKey: segment order is stable for a given line.
+						<strong key={segIndex}>{segment.slice(2, -2)}</strong>
+					) : (
+						segment
+					);
+				})}
+			</span>
+		),
+	);
 }
 
 export interface QuickPrompt {
@@ -142,6 +147,7 @@ export function ChatPanel({
 					assistantContent += frame.content;
 					setToolStatus(null);
 					setMessages((prev) => {
+						if (prev.length === 0) return prev;
 						const next = [...prev];
 						const last = next[next.length - 1];
 						next[next.length - 1] = { ...last, content: assistantContent };
@@ -154,6 +160,7 @@ export function ChatPanel({
 					if (view) {
 						setToolStatus(null);
 						setMessages((prev) => {
+							if (prev.length === 0) return prev;
 							const next = [...prev];
 							const last = next[next.length - 1];
 							next[next.length - 1] = {
@@ -169,6 +176,7 @@ export function ChatPanel({
 			}
 			if (endedWithError) {
 				setMessages((prev) => {
+					if (prev.length === 0) return prev;
 					const next = [...prev];
 					const last = next[next.length - 1];
 					next[next.length - 1] = {
