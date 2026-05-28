@@ -9,11 +9,11 @@ Every choice is locked unless an ADR overrides it. The rejection column says
 |-------|--------|-------------------------------|
 | Python package manager | [`uv`](https://docs.astral.sh/uv/) | Fast, single static binary, lockfile-first |
 | Python | 3.12 | Match production base images; PEP 695 generics |
-| Streaming broker | [Redpanda](https://redpanda.com/) | Kafka API, single binary, identical local ↔ prod |
-| Warehouse | PostgreSQL 16 | Supabase-compatible, JSONB-native, mature dbt adapter |
-| Transformations | [dbt-core](https://www.getdbt.com/) + dbt-postgres | Tests, docs, lineage — modern warehouse standard |
-| Orchestration | [Apache Airflow](https://airflow.apache.org/) 2.10+ | LocalExecutor; portfolio-relevant skill |
-| Ingestion | `httpx` + `aiokafka` + Pydantic v2 | Async retry, typed events end-to-end |
+| Streaming broker | None | Live TfL proxy — no broker (ADR 014) |
+| Database | PostgreSQL 16 | App-essentials + pgvector; no feed warehouse (ADR 014) |
+| Transformations | [dbt-core](https://www.getdbt.com/) + dbt-postgres | Seeds + `dim_stations` only — tests, docs, lineage |
+| Orchestration | Host cron | One-shot dbt seed + `dim_stations` build on deploy (ADR 008/014) |
+| Ingestion | `httpx` + Pydantic v2 | Async retry; read-through to the TfL live API (ADR 014) |
 | API | [FastAPI](https://fastapi.tiangolo.com/) + `sse-starlette` | Async, typed, OpenAPI 3.1 auto-emitted |
 | Agent framework | [LangGraph](https://langchain-ai.github.io/langgraph/) 1.x | Stateful graph, native tool calling, LangSmith integration |
 | Structured extraction | [Pydantic AI](https://ai.pydantic.dev/) | Tool-level typed LLM calls (e.g. `LineId` normaliser) |
@@ -22,7 +22,7 @@ Every choice is locked unless an ADR overrides it. The rejection column says
 | PDF | [PyMuPDF](https://pymupdf.readthedocs.io/) | Text extraction + LlamaIndex `SentenceSplitter` (ADR 013) |
 | Embeddings | AWS Bedrock Titan v2 `amazon.titan-embed-text-v2:0` | 1024-dim; billed within Bedrock usage |
 | LLMs | Claude Sonnet (answers) + Haiku (router/extractor) | Sonnet 3.5 v2 + Haiku 3.5 — top-of-class tool calling |
-| Validation | Pydantic v2 | Used at *every* boundary: Kafka, FastAPI, config, tools |
+| Validation | Pydantic v2 | Used at *every* boundary: FastAPI, config, tools |
 | LLM observability | [LangSmith](https://www.langchain.com/langsmith) | Auto-instruments LangGraph nodes / tools / LLM calls |
 | App observability | [Logfire](https://logfire.pydantic.dev/) | OpenTelemetry-native: FastAPI / Postgres / HTTP |
 | Frontend | Next.js 16 + shadcn/ui (Radix + Nova) | Server components, Tailwind v4, claude.design preset |
@@ -39,7 +39,6 @@ Every choice is locked unless an ADR overrides it. The rejection column says
 | Backend compute | AWS EC2 t4g.small spot, single instance | ~$4/mo |
 | LLM | AWS Bedrock (`us-east-1`) | ~$2-3/mo at portfolio traffic |
 | Postgres | Supabase free | $0 |
-| Kafka | Redpanda Cloud Serverless free | $0 |
 | Vector DB | pgvector (in Supabase Postgres) | $0 |
 | Frontend | Vercel hobby free | $0 |
 | Image registry | GHCR (public repo) | $0 |
@@ -91,6 +90,6 @@ The two entry-points an outside reader needs:
 
     ```bash
     make check     # chains all of the above
-    make up        # boots Postgres + Redpanda + Airflow locally
+    make up        # boots Postgres locally
     make seed      # loads fixtures into local Postgres
     ```

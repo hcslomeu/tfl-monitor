@@ -38,40 +38,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/status/history": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Historic line statuses over an arbitrary window */
-        get: operations["get_status_history"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/reliability/{line_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Reliability score for a single line over a rolling window */
-        get: operations["get_line_reliability"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/disruptions/recent": {
         parameters: {
             query?: never;
@@ -81,23 +47,6 @@ export interface paths {
         };
         /** Most recent disruptions, optionally scoped to a mode */
         get: operations["get_recent_disruptions"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/bus/{stop_id}/punctuality": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Punctuality statistics for a given bus stop */
-        get: operations["get_bus_punctuality"];
         put?: never;
         post?: never;
         delete?: never;
@@ -164,17 +113,6 @@ export interface components {
             /** Format: date-time */
             valid_to: string;
         };
-        LineReliability: {
-            line_id: string;
-            line_name: string;
-            mode: string;
-            window_days: number;
-            reliability_percent: number;
-            sample_size: number;
-            severity_histogram: {
-                [key: string]: number;
-            };
-        };
         Disruption: {
             disruption_id: string;
             /** @enum {string} */
@@ -201,15 +139,6 @@ export interface components {
         AffectedStop: {
             naptan_id: string;
             name?: string | null;
-        };
-        BusPunctuality: {
-            stop_id: string;
-            stop_name: string;
-            window_days: number;
-            on_time_percent: number;
-            early_percent: number;
-            late_percent: number;
-            sample_size: number;
         };
         ChatRequest: {
             thread_id: string;
@@ -367,101 +296,6 @@ export interface operations {
             500: components["responses"]["Problem"];
         };
     };
-    get_status_history: {
-        parameters: {
-            query: {
-                /** @description Restrict to a single line (e.g. `victoria`). */
-                line_id?: string;
-                /** @description Window start (UTC, inclusive). */
-                from: string;
-                /** @description Window end (UTC, exclusive). */
-                to: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Historic line statuses */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    /**
-                     * @example [
-                     *       {
-                     *         "line_id": "victoria",
-                     *         "line_name": "Victoria",
-                     *         "mode": "tube",
-                     *         "status_severity": 10,
-                     *         "status_severity_description": "Good Service",
-                     *         "reason": null,
-                     *         "valid_from": "2026-04-20T05:30:00Z",
-                     *         "valid_to": "2026-04-20T23:59:59Z"
-                     *       },
-                     *       {
-                     *         "line_id": "victoria",
-                     *         "line_name": "Victoria",
-                     *         "mode": "tube",
-                     *         "status_severity": 9,
-                     *         "status_severity_description": "Minor Delays",
-                     *         "reason": "Signalling issues earlier",
-                     *         "valid_from": "2026-04-21T05:30:00Z",
-                     *         "valid_to": "2026-04-21T23:59:59Z"
-                     *       }
-                     *     ]
-                     */
-                    "application/json": components["schemas"]["LineStatus"][];
-                };
-            };
-            400: components["responses"]["Problem"];
-            500: components["responses"]["Problem"];
-        };
-    };
-    get_line_reliability: {
-        parameters: {
-            query?: {
-                /** @description Window size in days. */
-                window?: number;
-            };
-            header?: never;
-            path: {
-                line_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Reliability summary */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    /**
-                     * @example {
-                     *       "line_id": "victoria",
-                     *       "line_name": "Victoria",
-                     *       "mode": "tube",
-                     *       "window_days": 7,
-                     *       "reliability_percent": 94.2,
-                     *       "sample_size": 2016,
-                     *       "severity_histogram": {
-                     *         "6": 12,
-                     *         "9": 48,
-                     *         "10": 1956
-                     *       }
-                     *     }
-                     */
-                    "application/json": components["schemas"]["LineReliability"];
-                };
-            };
-            404: components["responses"]["Problem"];
-            500: components["responses"]["Problem"];
-        };
-    };
     get_recent_disruptions: {
         parameters: {
             query?: {
@@ -584,41 +418,6 @@ export interface operations {
             500: components["responses"]["Problem"];
         };
     };
-    get_bus_punctuality: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                stop_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Punctuality summary */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    /**
-                     * @example {
-                     *       "stop_id": "490008660N",
-                     *       "stop_name": "Trafalgar Square",
-                     *       "window_days": 7,
-                     *       "on_time_percent": 88.5,
-                     *       "early_percent": 4.1,
-                     *       "late_percent": 7.4,
-                     *       "sample_size": 1240
-                     *     }
-                     */
-                    "application/json": components["schemas"]["BusPunctuality"];
-                };
-            };
-            404: components["responses"]["Problem"];
-            500: components["responses"]["Problem"];
-        };
-    };
     post_chat_stream: {
         parameters: {
             query?: never;
@@ -666,12 +465,12 @@ export interface operations {
                      * @example [
                      *       {
                      *         "role": "user",
-                     *         "content": "Which Tube line had the worst reliability last week?",
+                     *         "content": "Is the Piccadilly line running normally right now?",
                      *         "created_at": "2026-04-20T14:12:00Z"
                      *       },
                      *       {
                      *         "role": "assistant",
-                     *         "content": "The Piccadilly line averaged 87.5% reliability, the lowest of the network.",
+                     *         "content": "Yes — the Piccadilly line is reporting Good Service at the moment.",
                      *         "created_at": "2026-04-20T14:12:04Z"
                      *       }
                      *     ]

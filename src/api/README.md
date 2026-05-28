@@ -1,7 +1,7 @@
 # src/api/
 
-FastAPI application — six warehouse-backed endpoints, an SSE chat stream, a
-LangGraph agent compiled at startup, and OpenAPI 3.1 as the contract.
+FastAPI application — live TfL status/disruptions endpoints, an SSE chat
+stream, a LangGraph agent compiled at startup, and OpenAPI 3.1 as the contract.
 
 ## Layout
 
@@ -9,7 +9,9 @@ LangGraph agent compiled at startup, and OpenAPI 3.1 as the contract.
 src/api/
 ├─ __init__.py
 ├─ main.py             # FastAPI app, lifespan, route handlers
-├─ db.py               # Async psycopg pool + per-endpoint fetchers
+├─ live.py             # Live TfL read-through (status + disruptions)
+├─ db.py               # Async psycopg pool (build_pool); chat + resolver use it
+├─ stations.py         # NaPTAN → name resolver (dim_stations + TfL fallback)
 ├─ schemas.py          # Pydantic response models (mirror contracts/openapi.yaml)
 ├─ observability.py    # Logfire wiring (FastAPI only; sampled)
 └─ agent/              # LangGraph agent — see src/api/agent/README.md
@@ -41,11 +43,8 @@ dependency returns RFC 7807 `503` instead of crashing.
 | Method | Path | Source |
 |--------|------|--------|
 | `GET`  | `/health` | static |
-| `GET`  | `/api/v1/status/live` | `raw.line_status` (15-min freshness) |
-| `GET`  | `/api/v1/status/history` | `analytics.stg_line_status` (30-day cap) |
-| `GET`  | `/api/v1/reliability/{line_id}` | `analytics.mart_tube_reliability_daily` |
-| `GET`  | `/api/v1/disruptions/recent` | `analytics.stg_disruptions` |
-| `GET`  | `/api/v1/bus/{stop_id}/punctuality` | `analytics.stg_arrivals` |
+| `GET`  | `/api/v1/status/live` | TfL `/Line/Mode/{modes}/Status` (live) |
+| `GET`  | `/api/v1/disruptions/recent` | TfL `/Status?detail=true` (live) |
 | `POST` | `/api/v1/chat/stream` | LangGraph agent (SSE) |
 | `GET`  | `/api/v1/chat/{thread_id}/history` | `analytics.chat_messages` |
 
@@ -93,5 +92,5 @@ Smoke against `/chat/stream` (requires the three LLM-side keys):
 ```bash
 curl -N -X POST http://localhost:8000/api/v1/chat/stream \
   -H 'content-type: application/json' \
-  -d '{"thread_id":"smoke","message":"Which Tube line had the worst reliability last week?"}'
+  -d '{"thread_id":"smoke","message":"Is the Piccadilly line running normally right now?"}'
 ```

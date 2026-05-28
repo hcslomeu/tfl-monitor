@@ -9,18 +9,17 @@ flows through `contracts/`; nothing in `src/` defines its own DTOs.
 |------|-------|---------|
 | [`api/`](./api) | D-api-agent | FastAPI app, route handlers, async psycopg pool, LangGraph agent |
 | [`agent/`](./agent) | D-api-agent | Legacy graph (kept for parity until TM-A5 collapses it) |
-| [`ingestion/`](./ingestion) | B-ingestion | Async TfL client, three producers, three consumers |
+| [`ingestion/`](./ingestion) | B-ingestion | Async TfL Unified API client (the API reads it live) |
 | [`rag/`](./rag) | D-api-agent | PyMuPDF → Bedrock → pgvector ingestion CLI |
 
 ```mermaid
 flowchart LR
-    CONTRACTS[contracts/] --> ING[src/ingestion]
-    CONTRACTS --> API[src/api]
+    CONTRACTS[contracts/] --> API[src/api]
     CONTRACTS --> RAG[src/rag]
-    ING --> KAFKA[(Kafka)]
-    KAFKA --> CONS[src/ingestion/consumers]
-    CONS --> PG[(Postgres)]
-    PG --> API
+    CONTRACTS --> TFLC[src/ingestion/tfl_client]
+    TFLC --> TFL[(TfL Unified API)]
+    TFL --> API
+    PG[("Postgres: chat + dim_stations")] --> API
     RAG --> PGVEC[(pgvector)]
     PGVEC --> API
 ```
@@ -45,9 +44,7 @@ README in each subfolder. The most common ones:
 
 ```bash
 uv run task api                    # FastAPI on :8000
-uv run python -m ingestion.producers.line_status
-uv run python -m ingestion.consumers.line_status
-uv run python -m rag.ingest
+uv run python -m rag.ingest        # RAG corpus ingest → pgvector
 ```
 
 ## Lint + types

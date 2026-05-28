@@ -77,7 +77,7 @@ If a detailed spec exists at `.claude/specs/TM-XXX-spec.md` for the active WP, i
 
 ## Project overview
 
-**tfl-monitor** is a standalone portfolio project demonstrating end-to-end data engineering + AI engineering: a streaming pipeline ingesting TfL (Transport for London) live feeds into a dbt-modelled PostgreSQL warehouse, with a RAG layer over TfL strategy documents and a conversational agent that routes between SQL and document retrieval.
+**tfl-monitor** is a standalone portfolio project demonstrating data + AI engineering: a live TfL (Transport for London) proxy that reads through to the TfL API on demand, with a RAG layer over TfL strategy documents and a conversational agent that routes between live TfL queries and document retrieval (ADR 014 — the warehouse and streaming pipeline were decommissioned).
 
 **This is NOT part of the `ai-engineering-monorepo`.** It is a standalone repo. If you know patterns from the monorepo (`AsyncHTTPClient`, `VectorStore` abstraction, LangGraph agent state, etc.), **copy and adapt them** — do not import.
 
@@ -89,9 +89,9 @@ If a detailed spec exists at `.claude/specs/TM-XXX-spec.md` for the active WP, i
 |---|---|
 | Python package manager | `uv` |
 | Python version | 3.12 |
-| Warehouse | PostgreSQL 16 |
-| Streaming broker | Redpanda (Kafka-compatible) |
-| Batch orchestration | Host cron (see ADR 008; Airflow removed) |
+| Database | PostgreSQL 16 (app-essentials + pgvector; no warehouse — ADR 014) |
+| Streaming broker | None — live TfL proxy, no broker (ADR 014) |
+| Batch orchestration | Host cron (one-shot dbt seed + `dim_stations`; ADR 008/014) |
 | Transformations | dbt-core + dbt-postgres |
 | API | FastAPI + sse-starlette |
 | Agent framework | LangGraph v1.x |
@@ -101,14 +101,13 @@ If a detailed spec exists at `.claude/specs/TM-XXX-spec.md` for the active WP, i
 | PDF ingestion | PyMuPDF (ADR 013) |
 | Embeddings | AWS Bedrock Titan `amazon.titan-embed-text-v2:0` |
 | LLMs | Anthropic Claude (Haiku for routing, Sonnet for final answer) |
-| Data validation | Pydantic v2 (everywhere — Kafka events, API models, config) |
+| Data validation | Pydantic v2 (everywhere — API models, agent tools, config) |
 | LLM observability | LangSmith |
 | App observability | Logfire (FastAPI, Postgres, OpenTelemetry) |
 | Frontend | Next.js 16 + shadcn/ui (Radix + Nova preset) + TypeScript (design via claude.design) |
 | Backend hosting | Railway |
 | Frontend hosting | Vercel |
 | Postgres (prod) | Supabase free tier |
-| Kafka (prod) | Redpanda Cloud Serverless free tier |
 | Python linter/formatter | Ruff (lint + format) |
 | Type checker | Mypy strict |
 | TS linter/formatter | Biome (chosen — do not add ESLint or Prettier) |

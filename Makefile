@@ -1,4 +1,4 @@
-.PHONY: help bootstrap up down clean check seed openapi-ts sync-dbt-sources consume-line-status consume-arrivals consume-disruptions
+.PHONY: help bootstrap up down clean check seed openapi-ts sync-dbt-sources
 
 help:
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -11,7 +11,7 @@ bootstrap: ## Install Python + Node deps; create .env
 	@test -f .env || cp .env.example .env
 	@echo "Bootstrap complete. Edit .env and run 'make up'."
 
-up: ## Start Docker Compose (Postgres, Redpanda, MinIO)
+up: ## Start Docker Compose (Postgres)
 	docker compose up -d
 	@echo "Waiting for healthchecks..."
 	@docker compose ps
@@ -39,12 +39,3 @@ openapi-ts: ## Regenerate TS types from OpenAPI
 sync-dbt-sources: ## Sync dbt/sources/tfl.yml from contracts/dbt_sources.yml (single source of truth)
 	cp contracts/dbt_sources.yml dbt/sources/tfl.yml
 	@echo "dbt/sources/tfl.yml synced from contracts/dbt_sources.yml"
-
-consume-line-status: ## Run line-status consumer locally (host-side, against Compose Redpanda + Postgres)
-	uv run task consume-line-status
-
-consume-arrivals: ## Run arrivals consumer locally (host-side, against Compose Redpanda + Postgres)
-	uv run task consume-arrivals
-
-consume-disruptions: ## Run disruptions consumer locally (host-side, against Compose Redpanda + Postgres)
-	uv run task consume-disruptions

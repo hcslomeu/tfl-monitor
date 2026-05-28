@@ -11,7 +11,6 @@ dependencies = [
     "pydantic>=2.9",
     "pydantic-ai>=1.75",
     "pydantic-settings>=2.6",
-    "aiokafka>=0.12",
     "psycopg[binary,pool]>=3.2",
     "langchain-anthropic>=0.3",
     "langchain-aws>=0.2",
@@ -77,11 +76,6 @@ strict = true
 exclude = ["scripts/"]
 
 [[tool.mypy.overrides]]
-module = ["aiokafka", "aiokafka.*"]
-ignore_missing_imports = true
-follow_untyped_imports = true
-
-[[tool.mypy.overrides]]
 module = [
     "llama_index.vector_stores.postgres",
     "llama_index.vector_stores.postgres.*",
@@ -143,14 +137,5 @@ api = "uvicorn api.main:app --reload --app-dir src"
 # process, letting the Swagger UI proxy real TfL calls without manual
 # key entry. Local dev only — do not use in production.
 api-debug = "uvicorn api.main:app --reload --app-dir src --env-file .env"
-init-topics = "docker compose --profile init up redpanda-init"
-ingest-line-status = "python -m ingestion.producers.line_status"
-consume-line-status = "python -m ingestion.consumers.line_status"
-ingest-arrivals = "python -m ingestion.producers.arrivals"
-consume-arrivals = "python -m ingestion.consumers.arrivals"
-ingest-disruptions = "python -m ingestion.producers.disruptions"
-consume-disruptions = "python -m ingestion.consumers.disruptions"
-run-producers = "python -m ingestion.run_producers"
-run-consumers = "python -m ingestion.run_consumers"
 docs-serve = "mkdocs serve --config-file mkdocs.yml --dev-addr 127.0.0.1:8001"
 docs-build = "mkdocs build --config-file mkdocs.yml --strict"

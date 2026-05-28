@@ -1,8 +1,8 @@
 """Pydantic v2 response models for the API.
 
-Mirrors ``contracts/openapi.yaml`` ``LineStatus``, ``LineReliability``,
-``Disruption`` and ``BusPunctuality`` schemas. Kept separate from
-``contracts/schemas/*`` (Kafka tier) so the wire format and the API
+Each model mirrors a schema in ``contracts/openapi.yaml`` (line status,
+disruptions, chat, and the RFC 7807 problem body). Kept separate from the
+``contracts/schemas/*`` tier-2 models so the wire format and the API
 response can evolve independently.
 """
 
