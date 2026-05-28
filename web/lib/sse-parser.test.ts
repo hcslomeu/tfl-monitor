@@ -59,7 +59,26 @@ describe("SSEParser", () => {
 		expect(frames).toEqual<Frame[]>([{ type: "end", content: "" }]);
 	});
 
-	it("drops frames whose type is not token/tool/end", () => {
+	it("parses journey and arrivals card frames (content stays a JSON string)", () => {
+		const parser = new SSEParser();
+		const journey = '{"total_minutes":38,"start":"x","arrival":"y","legs":[]}';
+
+		const frames = parser.push(
+			bytes(
+				[
+					`data: {"type":"journey","content":${JSON.stringify(journey)}}\n\n`,
+					'data: {"type":"arrivals","content":"{\\"station\\":\\"Bank\\",\\"platforms\\":[]}"}\n\n',
+				].join(""),
+			),
+		);
+
+		expect(frames).toEqual<Frame[]>([
+			{ type: "journey", content: journey },
+			{ type: "arrivals", content: '{"station":"Bank","platforms":[]}' },
+		]);
+	});
+
+	it("drops frames whose type is not a known frame type", () => {
 		const parser = new SSEParser();
 
 		const frames = parser.push(

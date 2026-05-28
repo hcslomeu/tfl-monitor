@@ -136,6 +136,103 @@ describe("ChatPanel (TM-F2 SSE rewrite)", () => {
 		expect(screen.queryByTestId("agent-status")).not.toBeInTheDocument();
 	});
 
+	it("renders a JourneyCard when a journey frame arrives", async () => {
+		const view = {
+			total_minutes: 38,
+			start: "2026-05-27T14:02:00",
+			arrival: "2026-05-27T14:40:00",
+			legs: [
+				{ mode: "tube", summary: "Metropolitan line to Uxbridge", minutes: 38 },
+			],
+		};
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce(
+				streamingResponse(
+					streamFrom(
+						`data: ${JSON.stringify({ type: "journey", content: JSON.stringify(view) })}\n\n`,
+						'data: {"type":"token","content":"Here is your route."}\n\n',
+						'data: {"type":"end","content":""}\n\n',
+					),
+				),
+			);
+		vi.stubGlobal("fetch", fetchMock);
+
+		render(<ChatPanel />);
+		typeIntoTextbox("Baker Street to Uxbridge");
+		clickSend();
+
+		const card = await screen.findByTestId("journey-card");
+		expect(card).toHaveTextContent("Metropolitan line to Uxbridge");
+		expect(card).toHaveTextContent("38 min");
+		expect(card).toHaveTextContent("14:02");
+		expect(card).toHaveTextContent("14:40");
+		expect(screen.getByText("Here is your route.")).toBeInTheDocument();
+	});
+
+	it("renders an ArrivalsBoard when an arrivals frame arrives", async () => {
+		const view = {
+			station: "Bank",
+			platforms: [
+				{
+					platform: "Northbound - Platform 2",
+					arrivals: [
+						{ line: "Northern", destination: "Morden", seconds: 90 },
+						{ line: "Northern", destination: "Kennington", seconds: 30 },
+					],
+				},
+			],
+		};
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce(
+				streamingResponse(
+					streamFrom(
+						`data: ${JSON.stringify({ type: "arrivals", content: JSON.stringify(view) })}\n\n`,
+						'data: {"type":"end","content":""}\n\n',
+					),
+				),
+			);
+		vi.stubGlobal("fetch", fetchMock);
+
+		render(<ChatPanel />);
+		typeIntoTextbox("next arrivals at Bank");
+		clickSend();
+
+		const board = await screen.findByTestId("arrivals-board");
+		expect(board).toHaveTextContent("Bank");
+		expect(board).toHaveTextContent("Northbound - Platform 2");
+		expect(board).toHaveTextContent("Morden");
+		expect(board).toHaveTextContent("2 min");
+		expect(board).toHaveTextContent("due");
+	});
+
+	it("renders **bold** prose as <strong> without leaking asterisks", async () => {
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce(
+				streamingResponse(
+					streamFrom(
+						'data: {"type":"token","content":"The **Metropolitan** line."}\n\n',
+						'data: {"type":"end","content":""}\n\n',
+					),
+				),
+			);
+		vi.stubGlobal("fetch", fetchMock);
+
+		render(<ChatPanel />);
+		typeIntoTextbox("status");
+		clickSend();
+
+		const strong = await screen.findByText("Metropolitan");
+		expect(strong.tagName).toBe("STRONG");
+		const bubble = screen
+			.getByTestId("conversation")
+			.querySelector('[data-role="assistant"]');
+		expect(bubble).toHaveTextContent("The Metropolitan line.");
+		expect(bubble?.textContent).not.toContain("**");
+	});
+
 	it("rolls back the bubble pair and surfaces an alert on 503", async () => {
 		const fetchMock = vi.fn().mockResolvedValueOnce(
 			new Response(JSON.stringify({ detail: "agent unavailable" }), {

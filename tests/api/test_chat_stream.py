@@ -72,6 +72,18 @@ def _tool_event(tool_name: str) -> tuple[str, dict[str, Any]]:
     )
 
 
+def _tool_event_with_content(tool_name: str, content: str) -> tuple[str, dict[str, Any]]:
+    """Build an ``updates``-mode tool event carrying a result ``content``.
+
+    Mirrors what LangGraph emits after a tool node runs: the ``ToolMessage``
+    exposes both ``name`` and the (JSON-encoded) ``content`` of the return.
+    """
+    return (
+        "updates",
+        {"tools": {"messages": [SimpleNamespace(name=tool_name, content=content)]}},
+    )
+
+
 def _parse_sse(text: str) -> list[dict[str, str]]:
     """Extract JSON-decoded ``data:`` payloads from a buffered SSE response."""
     frames: list[dict[str, str]] = []
@@ -191,6 +203,113 @@ def test_chat_stream_skips_tool_message_content(
     ]
     assistant_insert = pool.conn.executed[1]
     assert assistant_insert[1]["content"] == "Piccadilly has severe delays."
+
+
+def test_chat_stream_emits_journey_card_frame(
+    fake_pool_factory: Callable[..., Any],
+    attach_pool: Callable[[Any], None],
+    attach_agent: Callable[[Any], None],
+) -> None:
+    """A successful plan_journey_tool result yields a `journey` card frame."""
+    pool = fake_pool_factory([], [])
+    attach_pool(pool)
+    view = {
+        "total_minutes": 38,
+        "start": "2026-05-27T14:02:00",
+        "arrival": "2026-05-27T14:40:00",
+        "legs": [{"mode": "tube", "summary": "Metropolitan to Uxbridge", "minutes": 38}],
+    }
+    agent = FakeAgent(
+        frames=[
+            _tool_event_with_content("plan_journey_tool", json.dumps(view)),
+            _token_chunk("Here is your route."),
+        ]
+    )
+    attach_agent(agent)
+
+    client = TestClient(app)
+    response = client.post(
+        "/api/v1/chat/stream",
+        json={"thread_id": "t-journey", "message": "Baker Street to Uxbridge"},
+    )
+
+    assert response.status_code == 200
+    frames = _parse_sse(response.text)
+    assert frames == [
+        {"type": "tool", "content": "plan_journey_tool"},
+        {"type": "journey", "content": json.dumps(view)},
+        {"type": "token", "content": "Here is your route."},
+        {"type": "end", "content": ""},
+    ]
+    # The card frame is not persisted — only assistant token text is.
+    assistant_insert = pool.conn.executed[1]
+    assert assistant_insert[1]["content"] == "Here is your route."
+
+
+def test_chat_stream_emits_arrivals_card_frame(
+    fake_pool_factory: Callable[..., Any],
+    attach_pool: Callable[[Any], None],
+    attach_agent: Callable[[Any], None],
+) -> None:
+    """A successful get_arrivals_tool result yields an `arrivals` card frame."""
+    pool = fake_pool_factory([], [])
+    attach_pool(pool)
+    view = {
+        "station": "Bank",
+        "platforms": [
+            {
+                "platform": "Northbound - Platform 2",
+                "arrivals": [{"line": "Northern", "destination": "Morden", "seconds": 90}],
+            }
+        ],
+    }
+    agent = FakeAgent(frames=[_tool_event_with_content("get_arrivals_tool", json.dumps(view))])
+    attach_agent(agent)
+
+    client = TestClient(app)
+    response = client.post(
+        "/api/v1/chat/stream",
+        json={"thread_id": "t-arrivals", "message": "next arrivals at Bank"},
+    )
+
+    assert response.status_code == 200
+    frames = _parse_sse(response.text)
+    assert frames == [
+        {"type": "tool", "content": "get_arrivals_tool"},
+        {"type": "arrivals", "content": json.dumps(view)},
+        {"type": "end", "content": ""},
+    ]
+
+
+def test_chat_stream_card_tool_error_string_has_no_card_frame(
+    fake_pool_factory: Callable[..., Any],
+    attach_pool: Callable[[Any], None],
+    attach_agent: Callable[[Any], None],
+) -> None:
+    """When a card tool returns a plain error string, no card frame is emitted."""
+    pool = fake_pool_factory([], [])
+    attach_pool(pool)
+    agent = FakeAgent(
+        frames=[
+            _tool_event_with_content("plan_journey_tool", "Couldn't find station 'Atlantis'."),
+            _token_chunk("I couldn't find that station."),
+        ]
+    )
+    attach_agent(agent)
+
+    client = TestClient(app)
+    response = client.post(
+        "/api/v1/chat/stream",
+        json={"thread_id": "t-journey-err", "message": "Atlantis to Bank"},
+    )
+
+    assert response.status_code == 200
+    frames = _parse_sse(response.text)
+    assert frames == [
+        {"type": "tool", "content": "plan_journey_tool"},
+        {"type": "token", "content": "I couldn't find that station."},
+        {"type": "end", "content": ""},
+    ]
 
 
 def test_chat_stream_503_when_agent_missing(

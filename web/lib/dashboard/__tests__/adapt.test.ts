@@ -6,6 +6,7 @@ import {
 	disruptionForLine,
 	disruptionsToNews,
 	disruptionToSnapshot,
+	lineColorByName,
 	lineStatusesToSummaries,
 	lineSummaryToFallbackSnapshot,
 	severityToBucket,
@@ -614,5 +615,23 @@ describe("disruptionsToNews", () => {
 		expect(items).toHaveLength(1);
 		expect(items[0].title).toBe(full);
 		expect(items[0].body).toBe("");
+	});
+});
+
+describe("lineColorByName", () => {
+	it("resolves canonical line names to their brand colour", () => {
+		expect(lineColorByName("Northern")).toBe("#000000");
+		expect(lineColorByName("Metropolitan")).toBe("#751056");
+	});
+
+	it("normalises trailing ' line', casing, and ampersands", () => {
+		expect(lineColorByName("Elizabeth line")).toBe("#6950A1");
+		expect(lineColorByName("DLR")).toBe("#00AFAD");
+		expect(lineColorByName("Hammersmith & City")).toBe("#E899A8");
+		expect(lineColorByName("Waterloo & City")).toBe("#76D0BD");
+	});
+
+	it("falls back to the neutral colour for unknown names", () => {
+		expect(lineColorByName("Thameslink")).toBe("#5A6A77");
 	});
 });

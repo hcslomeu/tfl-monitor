@@ -4,7 +4,52 @@ import { useEffect, useRef, useState } from "react";
 
 import { streamChat } from "@/lib/api/chat-stream";
 import { ApiError } from "@/lib/api-client";
+import { ArrivalsBoard, type ArrivalsView } from "./arrivals-board";
 import { AUDIO_PATH, Icon, SEND_PATH } from "./icons";
+import { JourneyCard, type JourneyView } from "./journey-card";
+
+type MessageView =
+	| { kind: "journey"; data: JourneyView }
+	| { kind: "arrivals"; data: ArrivalsView };
+
+function parseView(
+	kind: MessageView["kind"],
+	content: string,
+): MessageView | null {
+	try {
+		const data = JSON.parse(content);
+		return { kind, data } as MessageView;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Render assistant prose with minimal inline formatting: `**bold**` spans
+ * and newline breaks. Pure React nodes — no `dangerouslySetInnerHTML`, so
+ * model output can never inject markup.
+ */
+function renderProse(text: string) {
+	return text.split("\n").map((line, lineIndex) =>
+		line === "" ? (
+			// biome-ignore lint/suspicious/noArrayIndexKey: line order is stable for a given content string.
+			<br key={lineIndex} />
+		) : (
+			// biome-ignore lint/suspicious/noArrayIndexKey: line order is stable for a given content string.
+			<span key={lineIndex} className="tfl-msg-line">
+				{line.split(/(\*\*[^*]+\*\*)/g).map((segment, segIndex) => {
+					const bold = /^\*\*[^*]+\*\*$/.test(segment);
+					return bold ? (
+						// biome-ignore lint/suspicious/noArrayIndexKey: segment order is stable for a given line.
+						<strong key={segIndex}>{segment.slice(2, -2)}</strong>
+					) : (
+						segment
+					);
+				})}
+			</span>
+		),
+	);
+}
 
 export interface QuickPrompt {
 	label: string;
@@ -22,6 +67,7 @@ interface RenderableMessage {
 	id: string;
 	role: Role;
 	content: string;
+	views?: MessageView[];
 	errored?: boolean;
 }
 
@@ -101,6 +147,7 @@ export function ChatPanel({
 					assistantContent += frame.content;
 					setToolStatus(null);
 					setMessages((prev) => {
+						if (prev.length === 0) return prev;
 						const next = [...prev];
 						const last = next[next.length - 1];
 						next[next.length - 1] = { ...last, content: assistantContent };
@@ -108,12 +155,28 @@ export function ChatPanel({
 					});
 				} else if (frame.type === "tool") {
 					setToolStatus(`Using tool: ${frame.content}…`);
+				} else if (frame.type === "journey" || frame.type === "arrivals") {
+					const view = parseView(frame.type, frame.content);
+					if (view) {
+						setToolStatus(null);
+						setMessages((prev) => {
+							if (prev.length === 0) return prev;
+							const next = [...prev];
+							const last = next[next.length - 1];
+							next[next.length - 1] = {
+								...last,
+								views: [...(last.views ?? []), view],
+							};
+							return next;
+						});
+					}
 				} else if (frame.type === "end") {
 					endedWithError = frame.content === "error";
 				}
 			}
 			if (endedWithError) {
 				setMessages((prev) => {
+					if (prev.length === 0) return prev;
 					const next = [...prev];
 					const last = next[next.length - 1];
 					next[next.length - 1] = {
@@ -178,11 +241,13 @@ export function ChatPanel({
 						>
 							{messages.map((message, index) => {
 								const isLast = index === messages.length - 1;
+								const hasViews = (message.views?.length ?? 0) > 0;
 								const showSkeleton =
 									busy &&
 									isLast &&
 									message.role === "assistant" &&
-									message.content === "";
+									message.content === "" &&
+									!hasViews;
 								const who = message.role === "user" ? "user" : "bot";
 								return (
 									<li
@@ -203,6 +268,23 @@ export function ChatPanel({
 												>
 													…
 												</span>
+											) : who === "bot" ? (
+												<>
+													{message.views?.map((view, i) =>
+														view.kind === "journey" ? (
+															// biome-ignore lint/suspicious/noArrayIndexKey: view order is stable within a message.
+															<JourneyCard key={i} view={view.data} />
+														) : (
+															// biome-ignore lint/suspicious/noArrayIndexKey: view order is stable within a message.
+															<ArrivalsBoard key={i} view={view.data} />
+														),
+													)}
+													{message.content ? (
+														<span className="tfl-msg-prose">
+															{renderProse(message.content)}
+														</span>
+													) : null}
+												</>
 											) : (
 												message.content
 											)}

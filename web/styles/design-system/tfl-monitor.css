@@ -94,7 +94,12 @@
   flex-direction: column;
   gap: var(--space-4);
   flex: 1 1 0;
-  min-height: 0;
+  /* Floor the chat height so the shared grid row never collapses to the
+     left column when the line list is empty (e.g. no live line-status
+     yet) — otherwise the transcript shrinks to a few px and clips chat
+     cards. When the line list is populated and taller, the row tracks it
+     and the chat stretches past this floor as before. */
+  min-height: 22rem;
 }
 .tfl-right-col .tfl-chat-stack .tfl-chat-card { flex: 1 1 auto; min-height: 0; }
 .tfl-right-col .tfl-chat-stack .tfl-chatbox { flex: 0 0 auto; }
@@ -146,6 +151,80 @@
 .tfl-msg[data-errored="true"] .tfl-msg-bubble {
   border: 1px solid color-mix(in oklab, #c0392b 50%, transparent);
   background: color-mix(in oklab, #c0392b 8%, var(--canvas-elevated));
+}
+.tfl-msg-line { display: block; }
+/* Prose follows the card(s), so it only needs separation when present. */
+.tfl-msg-prose { display: block; }
+.tfl-msg-prose:not(:first-child) { margin-top: 10px; color: var(--ink-tertiary); }
+
+/* ---------- Chat structured cards: journey + arrivals -------------- */
+.tfl-journey, .tfl-arrivals {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-warm);
+  padding: var(--space-3);
+  font-family: var(--font-body);
+}
+.tfl-journey:not(:first-child), .tfl-arrivals:not(:first-child) { margin-top: 8px; }
+.tfl-journey-head, .tfl-arrivals-head {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+}
+.tfl-journey-title, .tfl-arrivals-title {
+  font-weight: 600; font-size: var(--ui-sm); color: var(--ink-primary);
+}
+.tfl-journey-total {
+  font-family: var(--font-mono); font-size: var(--ui-sm); font-weight: 600;
+  color: var(--accent-primary);
+}
+.tfl-journey-clocks {
+  display: flex; align-items: center; gap: 8px; margin: 6px 0 var(--space-3);
+  font-family: var(--font-mono); font-size: var(--ui-xs); color: var(--ink-secondary);
+}
+.tfl-journey-arrow { color: var(--ink-tertiary); }
+.tfl-journey-legs { list-style: none; margin: 0; padding: 0; }
+.tfl-journey-leg {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: start;
+  gap: 10px; padding: 5px 0;
+}
+.tfl-journey-dot {
+  position: relative; width: 10px; height: 10px; border-radius: 9999px; margin-top: 4px;
+}
+.tfl-journey-leg:not(:last-child) .tfl-journey-dot::after {
+  content: ''; position: absolute; left: 4px; top: 14px; bottom: -10px; width: 2px;
+  background: var(--border-strong);
+}
+.tfl-journey-leg-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tfl-journey-leg-mode {
+  font-family: var(--font-mono); font-size: var(--ui-xs); text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--ink-tertiary);
+}
+.tfl-journey-leg-summary { font-size: var(--ui-sm); color: var(--ink-primary); }
+.tfl-journey-leg-min {
+  font-family: var(--font-mono); font-size: var(--ui-xs); color: var(--ink-secondary);
+  white-space: nowrap;
+}
+.tfl-arrivals-sub {
+  font-family: var(--font-mono); font-size: var(--ui-xs); color: var(--ink-tertiary);
+}
+.tfl-arrivals-platform { margin-top: var(--space-2); }
+.tfl-arrivals-plat-label {
+  display: block; font-family: var(--font-mono); font-size: var(--ui-xs);
+  color: var(--ink-tertiary); margin-bottom: 4px;
+}
+.tfl-arrivals-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.tfl-arrivals-row {
+  display: grid; grid-template-columns: auto auto 1fr auto; align-items: center; gap: 8px;
+  font-size: var(--ui-sm);
+}
+.tfl-arrivals-dot { width: 8px; height: 8px; border-radius: 9999px; }
+.tfl-arrivals-line { font-weight: 500; color: var(--ink-primary); white-space: nowrap; }
+.tfl-arrivals-dest {
+  color: var(--ink-secondary); min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tfl-arrivals-eta {
+  font-family: var(--font-mono); font-size: var(--ui-xs); font-weight: 600;
+  color: var(--accent-primary); white-space: nowrap;
 }
 .tfl-chat-alert {
   margin: 8px 14px 4px;
@@ -567,7 +646,7 @@
     color: var(--ink-primary);
     background: var(--canvas-elevated);
   }
-  .tfl-right-col > .tfl-chat-stack { flex: 0 0 auto; }
+  .tfl-right-col > .tfl-chat-stack { flex: 0 0 auto; min-height: 0; }
   .tfl-right-col .tfl-chat-stack .tfl-chat-card { flex: 0 0 auto; }
   .tfl-chat-transcript { flex: 0 0 auto; min-height: 96px; max-height: 50vh; }
 }
