@@ -70,7 +70,7 @@ logfire.instrument_fastapi(app)
 warn+ spans and traces longer than five seconds are kept at 100%, everything
 else falls back to `LOGFIRE_SAMPLE_RATE` (default `0.1`).
 
-Outbound HTTP visibility (Anthropic, OpenAI, Pinecone, TfL) lives in
+Outbound HTTP visibility (Anthropic/Bedrock, TfL) lives in
 LangSmith — see [`src/api/agent/README.md`](./agent). Per-query psycopg
 spans were removed in favour of per-endpoint timing on the FastAPI side
 because the free-tier ingest budget could not absorb one span per SQL

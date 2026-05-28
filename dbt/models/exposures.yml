@@ -5,7 +5,7 @@ version: 2
 # lineage graph, making it obvious which model powers which endpoint.
 #
 # Chat endpoints (/api/v1/chat/...) are intentionally absent — the
-# agent reads from Pinecone (RAG) and the warehouse on demand; it is
+# agent reads from pgvector (RAG) and the warehouse on demand; it is
 # not a fixed mart consumer.
 
 exposures:

@@ -1,6 +1,6 @@
 # src/rag/
 
-The RAG ingestion CLI: TfL strategy PDFs → Docling parse → Bedrock Titan v2
+The RAG ingestion CLI: TfL strategy PDFs → PyMuPDF parse → Bedrock Titan v2
 embeddings → pgvector. **Conditional** (only refetches what changed) and
 **idempotent** (each changed doc is delete-then-inserted under its `doc_id`).
 
@@ -13,7 +13,7 @@ src/rag/
 ├─ sources.json     # Resolved direct-PDF URLs (overwritten by --refresh-urls)
 ├─ sources.py       # Landing-page URL resolver (per-source allowlist)
 ├─ fetch.py         # Conditional GET via If-None-Match + If-Modified-Since
-├─ parse.py         # Docling DocumentConverter + HybridChunker
+├─ parse.py         # PyMuPDF text extraction + LlamaIndex SentenceSplitter
 ├─ embeddings.py    # TitanEmbedding — Bedrock Titan v2 LlamaIndex embedding
 ├─ vectorstore.py   # PGVectorStore + embedding factories (shared with the agent)
 ├─ upsert.py        # Chunk → TextNode → pgvector (delete-then-insert per doc)
@@ -67,7 +67,7 @@ first use:
 Table:       data_tfl_strategy_docs (schema public)
 Dimension:   1024
 Metric:      cosine (exact scan)
-Doc scoping: metadata doc_id (replaces Pinecone namespaces)
+Doc scoping: metadata doc_id filter (one WHERE clause per document)
 Metadata:    doc_id, doc_title, section_title, page_start, page_end, resolved_url, chunk_index
 ```
 
@@ -87,13 +87,13 @@ transaction pooler (port 6543).
 
 ## Tests
 
-Unit tests with fakes for httpx / Docling / Bedrock / pgvector:
+Unit tests with fakes for httpx / PDF parsing / Bedrock / pgvector:
 
 | Module | Coverage |
 |--------|----------|
 | `sources.py` | landing-page resolver picks the right PDF URL via per-source allowlist |
 | `fetch.py` | 304 short-circuit, 200 with body, ETag round-trip |
-| `parse.py` | Docling output → chunks with stable text + page metadata |
+| `parse.py` | PyMuPDF pages → sentence-split chunks with stable text + page metadata |
 | `embeddings.py` | Titan invoke params (dimensions/normalize), batch, query path |
 | `upsert.py` | Node shape, delete-then-insert, batch sizing |
 | `ingest.py` | Orchestrator wiring, dry-run, 304 skip, exit-non-zero on partial failure |

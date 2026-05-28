@@ -1,19 +1,24 @@
-"""Parse a PDF via Docling and emit chunks with retrieval metadata.
+"""Parse a PDF into retrievable chunks with citation metadata.
 
-Docling 2.x's :class:`docling.chunking.HybridChunker` segments by
-document hierarchy and merges sibling chunks under a token cap, which
-matches the retrieval granularity we want for ``text-embedding-3-small``.
-The Docling imports are deferred to the call site so unit tests can
-inject lightweight fakes without paying the model-download cost.
+Text extraction uses PyMuPDF (lightweight, no torch) and chunking uses
+LlamaIndex's :class:`SentenceSplitter`. Both heavy imports are deferred to
+the call site so unit tests can inject lightweight fakes. The TfL corpus is
+born-digital prose, so the layout/OCR models Docling loaded are unnecessary
+here — see ADR 013.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Protocol, cast
+from typing import Any, Protocol
 
 from pydantic import BaseModel, Field
+
+# Chunking granularity for SentenceSplitter. ~512 tokens keeps each chunk
+# well under the Titan v2 input cap while staying large enough to retain
+# paragraph-level context; the overlap preserves continuity across splits.
+DEFAULT_CHUNK_SIZE = 512
+DEFAULT_CHUNK_OVERLAP = 64
 
 
 class Chunk(BaseModel):
@@ -29,12 +34,19 @@ class Chunk(BaseModel):
     text: str = Field(min_length=1)
 
 
-class _DoclingConverter(Protocol):
-    def convert(self, source: str) -> Any: ...
+class PageText(BaseModel):
+    """Extracted plain text for a single 1-indexed PDF page."""
+
+    page_no: int = Field(ge=1)
+    text: str
 
 
-class _DoclingChunker(Protocol):
-    def chunk(self, document: Any) -> Iterable[Any]: ...
+class _PdfExtractor(Protocol):
+    def extract(self, pdf_path: Path) -> list[PageText]: ...
+
+
+class _TextSplitter(Protocol):
+    def split_text(self, text: str) -> list[str]: ...
 
 
 def parse_pdf(
@@ -43,93 +55,82 @@ def parse_pdf(
     doc_title: str,
     resolved_url: str,
     pdf_path: Path,
-    converter: _DoclingConverter | None = None,
-    chunker: _DoclingChunker | None = None,
+    extractor: _PdfExtractor | None = None,
+    splitter: _TextSplitter | None = None,
 ) -> list[Chunk]:
     """Parse ``pdf_path`` and return a list of :class:`Chunk`.
 
+    Each page's text is split into sentence-aware chunks; every chunk carries
+    its source page number so the retriever can cite a page. ``chunk_index``
+    is a contiguous, deterministic counter over emitted chunks, which keeps
+    the per-chunk vector ids stable across re-ingestion runs.
+
     Args:
-        doc_id: Stable doc identifier (also the Pinecone namespace).
+        doc_id: Stable doc identifier.
         doc_title: Human-readable title carried into chunk metadata.
         resolved_url: URL the PDF was downloaded from.
         pdf_path: Local path to the PDF on disk.
-        converter: Optional injection point for tests; defaults to a
-            Docling :class:`DocumentConverter`.
-        chunker: Optional injection point for tests; defaults to
-            :class:`docling.chunking.HybridChunker` with library defaults.
+        extractor: Optional injection point for tests; defaults to a
+            PyMuPDF-backed extractor.
+        splitter: Optional injection point for tests; defaults to a
+            LlamaIndex :class:`SentenceSplitter`.
     """
-    converter = converter or _default_converter()
-    chunker = chunker or _default_chunker()
-    document = converter.convert(str(pdf_path)).document
+    extractor = extractor or _default_extractor()
+    splitter = splitter or _default_splitter()
     chunks: list[Chunk] = []
-    for index, raw in enumerate(chunker.chunk(document)):
-        text = _chunk_text(raw)
-        if not text.strip():
-            continue
-        section_title, page_start, page_end = _extract_meta(raw)
-        chunks.append(
-            Chunk(
-                doc_id=doc_id,
-                doc_title=doc_title,
-                resolved_url=resolved_url,
-                chunk_index=index,
-                section_title=section_title,
-                page_start=page_start,
-                page_end=page_end,
-                text=text,
+    index = 0
+    for page in extractor.extract(pdf_path):
+        for piece in splitter.split_text(page.text):
+            if not piece.strip():
+                continue
+            chunks.append(
+                Chunk(
+                    doc_id=doc_id,
+                    doc_title=doc_title,
+                    resolved_url=resolved_url,
+                    chunk_index=index,
+                    section_title="",
+                    page_start=page.page_no,
+                    page_end=page.page_no,
+                    text=piece,
+                )
             )
-        )
+            index += 1
     return chunks
 
 
-def _default_converter() -> _DoclingConverter:
-    from docling.datamodel.base_models import InputFormat
-    from docling.datamodel.pipeline_options import PdfPipelineOptions
-    from docling.document_converter import DocumentConverter, PdfFormatOption
+def _default_extractor() -> _PdfExtractor:
+    return _PyMuPdfExtractor()
 
-    # The TfL corpus is born-digital ("-acc.pdf" accessible exports), so OCR
-    # adds no text but pulls the heavy RapidOCR model download and makes the
-    # CPU parse far slower. Disable it; layout-based text extraction suffices.
-    # allowed_formats restricts Docling to the PDF parser so the unused
-    # DOCX/PPTX/HTML/image backends are never initialised — lower memory and
-    # startup cost, which matters on the resource-constrained ingest host.
-    pipeline_options = PdfPipelineOptions(do_ocr=False)
-    return cast(
-        _DoclingConverter,
-        DocumentConverter(
-            allowed_formats=[InputFormat.PDF],
-            format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)},
-        ),
+
+class _PyMuPdfExtractor:
+    """PyMuPDF-backed extractor emitting one :class:`PageText` per page."""
+
+    def extract(self, pdf_path: Path) -> list[PageText]:
+        import pymupdf  # noqa: PLC0415 - deferred so unit tests skip the import
+
+        pages: list[PageText] = []
+        # pymupdf.open aliases the untyped Document constructor; the result is
+        # iterated as Any, which is fine for the page-text extraction below.
+        with pymupdf.open(str(pdf_path)) as document:  # type: ignore[no-untyped-call]
+            for number, page in enumerate(document, start=1):
+                pages.append(PageText(page_no=number, text=page.get_text("text")))
+        return pages
+
+
+def _default_splitter() -> _TextSplitter:
+    from llama_index.core.node_parser import SentenceSplitter  # noqa: PLC0415
+
+    return _LlamaIndexSplitter(
+        SentenceSplitter(chunk_size=DEFAULT_CHUNK_SIZE, chunk_overlap=DEFAULT_CHUNK_OVERLAP)
     )
 
 
-def _default_chunker() -> _DoclingChunker:
-    from docling.chunking import HybridChunker  # type: ignore[attr-defined]
+class _LlamaIndexSplitter:
+    """Adapter exposing LlamaIndex's splitter through the ``_TextSplitter`` Protocol."""
 
-    return cast(_DoclingChunker, HybridChunker())
+    def __init__(self, splitter: Any) -> None:
+        self._splitter = splitter
 
-
-def _chunk_text(raw: Any) -> str:
-    text = getattr(raw, "text", None)
-    if isinstance(text, str):
-        return text
-    return str(raw)
-
-
-def _extract_meta(raw: Any) -> tuple[str, int | None, int | None]:
-    meta = getattr(raw, "meta", None)
-    headings = getattr(meta, "headings", None) or []
-    section_title = ""
-    for heading in headings:
-        if isinstance(heading, str) and heading.strip():
-            section_title = heading
-            break
-    pages: list[int] = []
-    for item in getattr(meta, "doc_items", None) or []:
-        for prov in getattr(item, "prov", None) or []:
-            page_no = getattr(prov, "page_no", None)
-            if isinstance(page_no, int):
-                pages.append(page_no)
-    page_start = min(pages) if pages else None
-    page_end = max(pages) if pages else None
-    return section_title, page_start, page_end
+    def split_text(self, text: str) -> list[str]:
+        return list(self._splitter.split_text(text))

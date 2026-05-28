@@ -12,11 +12,11 @@ import httpx
 import pytest
 
 from rag.ingest import _amain
+from rag.parse import PageText
 from rag.sources import write_sources
 from tests.rag.test_parse import (  # type: ignore[import-not-found]
-    _build_fake_chunk,
-    _FakeChunker,
-    _FakeConverter,
+    _DelimiterSplitter,
+    _FakeExtractor,
 )
 from tests.rag.test_upsert import (  # type: ignore[import-not-found]
     _FakeEmbedding,
@@ -69,15 +69,10 @@ def _build_httpx_factory_returning_304() -> Any:
     return lambda: httpx.AsyncClient(transport=transport)
 
 
-def _build_fakes() -> tuple[_FakeEmbedding, _FakeVectorStore, _FakeConverter, _FakeChunker]:
-    converter = _FakeConverter(document=object())
-    chunker = _FakeChunker(
-        [
-            _build_fake_chunk("first chunk", headings=["Intro"], pages=[1]),
-            _build_fake_chunk("second chunk", headings=["Body"], pages=[2, 3]),
-        ]
-    )
-    return _FakeEmbedding(), _FakeVectorStore(), converter, chunker
+def _build_fakes() -> tuple[_FakeEmbedding, _FakeVectorStore, _FakeExtractor, _DelimiterSplitter]:
+    # One page whose text splits into exactly two chunks on the "|" delimiter.
+    extractor = _FakeExtractor([PageText(page_no=1, text="first chunk|second chunk")])
+    return _FakeEmbedding(), _FakeVectorStore(), extractor, _DelimiterSplitter()
 
 
 def _run(
@@ -87,8 +82,8 @@ def _run(
     cache_path: Path,
     embed: _FakeEmbedding,
     store: _FakeVectorStore,
-    converter: _FakeConverter,
-    chunker: Any,
+    extractor: Any,
+    splitter: Any,
     httpx_factory: Any | None = None,
     dry_run: bool = False,
     force_refetch: bool = False,
@@ -105,8 +100,8 @@ def _run(
             embedding_factory=lambda _settings: embed,
             vector_store_factory=lambda _settings: store,
             httpx_factory=httpx_factory or _build_httpx_factory(),
-            docling_converter=converter,
-            docling_chunker=chunker,
+            extractor=extractor,
+            splitter=splitter,
         )
     )
 
@@ -114,7 +109,7 @@ def _run(
 def test_run_ingestion_end_to_end_with_fakes(tmp_path: Path) -> None:
     sources_path = tmp_path / "sources.json"
     _seed_sources(sources_path)
-    embed, store, converter, chunker = _build_fakes()
+    embed, store, extractor, splitter = _build_fakes()
 
     upserted = _run(
         sources_path=sources_path,
@@ -122,8 +117,8 @@ def test_run_ingestion_end_to_end_with_fakes(tmp_path: Path) -> None:
         cache_path=tmp_path / "cache" / "sources_state.json",
         embed=embed,
         store=store,
-        converter=converter,
-        chunker=chunker,
+        extractor=extractor,
+        splitter=splitter,
     )
 
     assert upserted == 2
@@ -136,7 +131,7 @@ def test_run_ingestion_end_to_end_with_fakes(tmp_path: Path) -> None:
 def test_run_ingestion_dry_run_skips_upsert(tmp_path: Path) -> None:
     sources_path = tmp_path / "sources.json"
     _seed_sources(sources_path)
-    embed, store, converter, chunker = _build_fakes()
+    embed, store, extractor, splitter = _build_fakes()
 
     upserted = _run(
         sources_path=sources_path,
@@ -144,8 +139,8 @@ def test_run_ingestion_dry_run_skips_upsert(tmp_path: Path) -> None:
         cache_path=tmp_path / "cache" / "sources_state.json",
         embed=embed,
         store=store,
-        converter=converter,
-        chunker=chunker,
+        extractor=extractor,
+        splitter=splitter,
         dry_run=True,
     )
 
@@ -179,15 +174,15 @@ def test_run_ingestion_skips_parse_and_embed_when_unchanged(tmp_path: Path) -> N
         )
     )
 
-    embed, store, converter, chunker = _build_fakes()
+    embed, store, extractor, splitter = _build_fakes()
     upserted = _run(
         sources_path=sources_path,
         data_dir=data_dir,
         cache_path=cache_path,
         embed=embed,
         store=store,
-        converter=converter,
-        chunker=chunker,
+        extractor=extractor,
+        splitter=splitter,
         httpx_factory=_build_httpx_factory_returning_304(),
     )
 
@@ -196,10 +191,10 @@ def test_run_ingestion_skips_parse_and_embed_when_unchanged(tmp_path: Path) -> N
     assert store.deleted == []
 
 
-class _ExplodingChunker:
-    """Chunker that raises mid-pipeline to verify partial-failure exit code."""
+class _ExplodingExtractor:
+    """Extractor that raises mid-pipeline to verify partial-failure exit code."""
 
-    def chunk(self, _document: object) -> list[object]:
+    def extract(self, _pdf_path: Path) -> list[PageText]:
         raise RuntimeError("simulated parse failure")
 
 
@@ -209,7 +204,7 @@ def test_run_ingestion_aggregates_per_doc_failures_and_exits_nonzero(
 ) -> None:
     sources_path = tmp_path / "sources.json"
     _seed_sources(sources_path)
-    embed, store, converter, _ = _build_fakes()
+    embed, store, _, splitter = _build_fakes()
 
     with pytest.raises(SystemExit) as excinfo:
         _run(
@@ -218,8 +213,8 @@ def test_run_ingestion_aggregates_per_doc_failures_and_exits_nonzero(
             cache_path=tmp_path / "cache" / "sources_state.json",
             embed=embed,
             store=store,
-            converter=converter,
-            chunker=_ExplodingChunker(),
+            extractor=_ExplodingExtractor(),
+            splitter=splitter,
         )
     assert excinfo.value.code == 1
     err = capsys.readouterr().err
@@ -250,7 +245,7 @@ def test_run_ingestion_refresh_urls_rewrites_sources(tmp_path: Path) -> None:
         return httpx.Response(200, content=_PDF_BYTES)
 
     transport = httpx.MockTransport(handler)
-    embed, store, converter, chunker = _build_fakes()
+    embed, store, extractor, splitter = _build_fakes()
     asyncio.run(
         _amain(
             force_refetch=False,
@@ -262,8 +257,8 @@ def test_run_ingestion_refresh_urls_rewrites_sources(tmp_path: Path) -> None:
             embedding_factory=lambda _settings: embed,
             vector_store_factory=lambda _settings: store,
             httpx_factory=lambda: httpx.AsyncClient(transport=transport),
-            docling_converter=converter,
-            docling_chunker=chunker,
+            extractor=extractor,
+            splitter=splitter,
         )
     )
 
