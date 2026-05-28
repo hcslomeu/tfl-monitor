@@ -1,79 +1,12 @@
 version: 2
 
 sources:
-  - name: tfl
-    description: "Raw Kafka-backed event streams for the TfL warehouse."
-    database: "{{ env_var('POSTGRES_DB', 'tflmonitor') }}"
-    schema: raw
-    tables:
-      - name: line_status
-        description: "Append-only snapshots of TfL line operational status."
-        columns:
-          - name: event_id
-            description: "Unique event identifier (UUIDv7)."
-            tests:
-              - not_null
-              - unique
-          - name: ingested_at
-            description: "UTC timestamp when the event landed in the warehouse."
-            tests:
-              - not_null
-          - name: event_type
-            tests:
-              - not_null
-          - name: source
-            tests:
-              - not_null
-          - name: payload
-            description: "Full JSON envelope from Kafka."
-            tests:
-              - not_null
-
-      - name: arrivals
-        description: "Append-only stream of predicted vehicle arrivals at stop points."
-        columns:
-          - name: event_id
-            tests:
-              - not_null
-              - unique
-          - name: ingested_at
-            tests:
-              - not_null
-          - name: event_type
-            tests:
-              - not_null
-          - name: source
-            tests:
-              - not_null
-          - name: payload
-            tests:
-              - not_null
-
-      - name: disruptions
-        description: "Append-only stream of reported disruptions across the network."
-        columns:
-          - name: event_id
-            tests:
-              - not_null
-              - unique
-          - name: ingested_at
-            tests:
-              - not_null
-          - name: event_type
-            tests:
-              - not_null
-          - name: source
-            tests:
-              - not_null
-          - name: payload
-            tests:
-              - not_null
-
-  # Static reference tables live in the `ref` schema, not `raw`. dbt only
-  # honours `schema` at the source level (not per-table), so these need
-  # their own source block rather than a per-table override under `tfl`.
+  # Static reference tables live in the `ref` schema. dbt only honours
+  # `schema` at the source level (not per-table), so these need their own
+  # source block. The `raw` Kafka-backed warehouse sources were removed in
+  # ADR 014 (the app reads TfL live; nothing writes `raw.*` any more).
   - name: tfl_ref
-    description: "External static reference tables (lines, stations) populated in the ref schema by the static-ingest batch job (TM-A2)."
+    description: "External static reference tables (lines, stations) in the ref schema."
     database: "{{ env_var('POSTGRES_DB', 'tflmonitor') }}"
     schema: ref
     tables:
