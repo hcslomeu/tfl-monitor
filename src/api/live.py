@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
-from typing import cast
+from typing import cast, get_args
 
 from psycopg_pool import AsyncConnectionPool
 
@@ -33,7 +33,7 @@ from ingestion.tfl_client.normalise import disruption_payloads
 # bus surface is a separate feature, so it is intentionally excluded.
 DEFAULT_STATUS_MODES: tuple[str, ...] = ("tube", "elizabeth-line", "overground", "dlr")
 
-_VALID_MODES: frozenset[str] = frozenset(Mode.__args__)  # type: ignore[attr-defined]
+_VALID_MODES: frozenset[str] = frozenset(get_args(Mode))
 _GOOD_SERVICE_SEVERITY = 10
 _FALLBACK_VALIDITY = timedelta(hours=12)
 
@@ -166,6 +166,11 @@ def _validity_window(status: TflLineStatusItem, now: datetime) -> tuple[datetime
     statuses with no validity periods.
     """
     if status.validity_periods:
-        period = status.validity_periods[0]
+        # Prefer the currently-active window when TfL returns several; fall
+        # back to the first entry otherwise.
+        period = next(
+            (candidate for candidate in status.validity_periods if candidate.is_now),
+            status.validity_periods[0],
+        )
         return period.from_date, period.to_date
     return now, now + _FALLBACK_VALIDITY

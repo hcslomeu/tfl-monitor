@@ -230,3 +230,20 @@ def test_missing_pool_returns_503(
 
     assert response.status_code == 503
     assert response.json()["status"] == 503
+
+
+def test_tfl_upstream_failure_returns_502(
+    fake_tfl_client_factory: Callable[..., Any],
+    attach_tfl_client: Callable[[Any], None],
+    fake_pool_factory: Callable[..., Any],
+    attach_pool: Callable[[Any], None],
+) -> None:
+    attach_tfl_client(fake_tfl_client_factory(fail=True))
+    attach_pool(fake_pool_factory([]))
+
+    response = TestClient(app).get("/api/v1/disruptions/recent")
+
+    assert response.status_code == 502
+    body = response.json()
+    assert body["status"] == 502
+    assert body["title"] == "Bad Gateway"

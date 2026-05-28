@@ -1,8 +1,8 @@
 # Production compose stack — deployed to /opt/tfl-monitor/ on the shared
 # Lightsail box (eu-west-2). Single service: api. Ingestion (producers,
 # consumers) and the message broker were removed in ADR 014 — the app reads
-# TfL live on demand. dbt seed + dim_stations builds are triggered by host
-# cron via `docker exec api`.
+# TfL live on demand. The dbt seed + dim_stations build runs one-shot from
+# scripts/deploy.sh (post-healthcheck) via `docker exec` in the api container.
 #
 # The api container joins the host-wide `caddy_net` so the shared Caddy
 # at /opt/caddy/ can reverse-proxy `tfl-monitor-api.humbertolomeu.com` to

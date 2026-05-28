@@ -149,3 +149,17 @@ def test_missing_tfl_client_returns_503(attach_tfl_client: Callable[[Any], None]
     assert body["status"] == 503
     assert body["title"] == "Service Unavailable"
     assert "TfL client" in body["detail"]
+
+
+def test_tfl_upstream_failure_returns_502(
+    fake_tfl_client_factory: Callable[..., Any], attach_tfl_client: Callable[[Any], None]
+) -> None:
+    attach_tfl_client(fake_tfl_client_factory(fail=True))
+
+    response = TestClient(app).get("/api/v1/status/live")
+
+    assert response.status_code == 502
+    assert response.headers["content-type"] == "application/problem+json"
+    body = response.json()
+    assert body["status"] == 502
+    assert body["title"] == "Bad Gateway"

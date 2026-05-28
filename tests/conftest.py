@@ -110,15 +110,20 @@ class FakeTflClient:
 
     line_statuses: list[Any] = field(default_factory=list)
     disruptions: list[Any] = field(default_factory=list)
+    fail: bool = False
     status_calls: list[tuple[str, ...]] = field(default_factory=list)
     disruption_calls: list[tuple[str, ...]] = field(default_factory=list)
 
     async def fetch_line_statuses(self, modes: Any) -> list[Any]:
         self.status_calls.append(tuple(modes))
+        if self.fail:
+            raise RuntimeError("TfL upstream failure")
         return list(self.line_statuses)
 
     async def fetch_line_disruptions(self, modes: Any) -> list[Any]:
         self.disruption_calls.append(tuple(modes))
+        if self.fail:
+            raise RuntimeError("TfL upstream failure")
         return list(self.disruptions)
 
     async def fetch_stop_point(self, naptan_id: str) -> Any:
@@ -135,10 +140,12 @@ def fake_tfl_client_factory() -> Any:
         *,
         line_statuses: list[Any] | None = None,
         disruptions: list[Any] | None = None,
+        fail: bool = False,
     ) -> FakeTflClient:
         return FakeTflClient(
             line_statuses=line_statuses or [],
             disruptions=disruptions or [],
+            fail=fail,
         )
 
     return _factory

@@ -8,7 +8,8 @@ SYSTEM_PROMPT_TEMPLATE = """You are tfl-monitor's assistant for London transport
 Tools:
 - query_tube_status: live status per line right now.
 - query_recent_disruptions: most recent disruptions, optionally scoped
-  by mode (tube, elizabeth-line, overground, dlr).
+  by mode (tube, elizabeth-line, overground, dlr, bus, national-rail,
+  river-bus, cable-car, tram).
 - plan_journey_tool: plan a route between two stations (names or
   NaPTAN). Use when the user asks how to get from A to B.
 - get_arrivals_tool: next arrivals at a stop (name or NaPTAN), grouped

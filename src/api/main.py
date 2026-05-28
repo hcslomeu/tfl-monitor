@@ -166,7 +166,11 @@ async def get_status_live(request: Request) -> list[LineStatusResponse] | Respon
     tfl_client = getattr(request.app.state, "tfl_client", None)
     if tfl_client is None:
         return _problem(503, "Service Unavailable", "TfL client is not configured")
-    return await fetch_live_status(tfl_client)
+    try:
+        return await fetch_live_status(tfl_client)
+    except Exception:
+        logfire.exception("get_status_live_failed")
+        return _problem(502, "Bad Gateway", "Failed to fetch live status from TfL")
 
 
 @app.get(
@@ -185,12 +189,16 @@ async def get_recent_disruptions(
         return _problem(503, "Service Unavailable", "TfL client is not configured")
     if pool is None:
         return _problem(503, "Service Unavailable", "Database pool is not available")
-    return await fetch_recent_disruptions(
-        tfl_client,
-        pool=pool,
-        limit=limit,
-        mode=mode,
-    )
+    try:
+        return await fetch_recent_disruptions(
+            tfl_client,
+            pool=pool,
+            limit=limit,
+            mode=mode,
+        )
+    except Exception:
+        logfire.exception("get_recent_disruptions_failed")
+        return _problem(502, "Bad Gateway", "Failed to fetch recent disruptions from TfL")
 
 
 @app.post("/api/v1/chat/stream", operation_id="post_chat_stream", response_model=None)
