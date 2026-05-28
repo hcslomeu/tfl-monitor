@@ -22,9 +22,8 @@ This directory holds the production deployment artifacts for tfl-monitor. The fu
 
 | Path | Purpose |
 | --- | --- |
-| `docker-compose.prod.yml` | 3 services: `api`, `producers`, `consumers`. No Airflow. |
+| `docker-compose.prod.yml` | 1 service: `api`. No broker or ingestion (ADR 014). |
 | `caddyfile.snippet` | Site block merged into `/opt/caddy/Caddyfile` once. |
-| `cron.d/tfl-monitor` | Host cron entries for periodic dbt runs. |
 | `.env.example` | Production env-var template. Copy to `/opt/tfl-monitor/.env` (chmod 600). |
 
 ## First deploy
@@ -46,9 +45,9 @@ ssh ubuntu@13.41.145.33 'chmod 600 /opt/tfl-monitor/.env'
 ssh ubuntu@13.41.145.33 \
   'cd /opt/tfl-monitor && docker compose -f infra/docker-compose.prod.yml up -d --build'
 
-ssh ubuntu@13.41.145.33 \
-  'sudo cp /opt/tfl-monitor/infra/cron.d/tfl-monitor /etc/cron.d/tfl-monitor \
-   && sudo chmod 644 /etc/cron.d/tfl-monitor'
+# Build the dim_stations mart once (subsequent deploys do this automatically
+# via scripts/deploy.sh after the healthcheck):
+ssh ubuntu@13.41.145.33 '/opt/tfl-monitor/scripts/cron-dbt-run.sh'
 ```
 
 Then add the Cloudflare A record and append `infra/caddyfile.snippet` to `/opt/caddy/Caddyfile`,

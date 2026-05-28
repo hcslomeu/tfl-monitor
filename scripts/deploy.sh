@@ -45,14 +45,13 @@ if [[ ! -f .env ]]; then
   exit 1
 fi
 
-# Reinstall the cron schedule + log-rotation policy on every deploy.
-# bootstrap-tenant.sh only runs once on first provisioning, so without this
-# step changes in the repo never reach /etc on the box. `install` is one
-# atomic rename, so cron/logrotate never read a half-written file mid-update.
-# The step runs before `compose up` so a failing build does not also block
-# host-config updates.
-echo "[$(date -Iseconds)] installing cron schedule"
-sudo install -m 644 "${APP_DIR}/infra/cron.d/tfl-monitor" /etc/cron.d/tfl-monitor
+# ADR 014 removed the recurring dbt + retention cron (the warehouse is gone;
+# dim_stations is now built one-shot after the healthcheck below). Remove any
+# stale schedule a previous deploy installed so it stops firing.
+echo "[$(date -Iseconds)] removing legacy cron schedule"
+sudo rm -f /etc/cron.d/tfl-monitor
+# Reinstall the log-rotation policy on every deploy so repo changes reach /etc.
+# `install` is one atomic rename, so logrotate never reads a half-written file.
 echo "[$(date -Iseconds)] installing logrotate policy"
 sudo install -m 644 "${APP_DIR}/infra/logrotate.d/tfl-monitor" /etc/logrotate.d/tfl-monitor
 
@@ -88,6 +87,15 @@ for ((attempt = 1; attempt <= MAX_ATTEMPTS; attempt++)); do
   fi
   sleep 5
 done
+
+# One-shot dbt seed + dim_stations build (replaces the old recurring cron).
+# Non-fatal: the app serves live data without it, and the station-name
+# resolver falls back to the live TfL /StopPoint lookup when dim_stations is
+# absent (src/api/stations.py).
+echo "[$(date -Iseconds)] one-shot dbt seed + dim_stations build"
+if ! bash "${APP_DIR}/scripts/cron-dbt-run.sh"; then
+  echo "WARN: dbt build failed — station-name resolution falls back to the live TfL /StopPoint lookup" >&2
+fi
 
 echo "[$(date -Iseconds)] external healthcheck ${HEALTHCHECK_URL}"
 for attempt in 1 2 3; do
