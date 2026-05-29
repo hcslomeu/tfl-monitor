@@ -21,7 +21,7 @@ Every choice is locked unless an ADR overrides it. The rejection column says
 | Vector DB | pgvector (Supabase Postgres) | `tfl_strategy_docs` table (1024 dim, cosine) |
 | PDF | [PyMuPDF](https://pymupdf.readthedocs.io/) | Text extraction + LlamaIndex `SentenceSplitter` (ADR 013) |
 | Embeddings | AWS Bedrock Titan v2 `amazon.titan-embed-text-v2:0` | 1024-dim; billed within Bedrock usage |
-| LLMs | Claude Sonnet (answers) + Haiku (router/extractor) | Sonnet 3.5 v2 + Haiku 3.5 — top-of-class tool calling |
+| LLMs | Claude Sonnet (answers) + Haiku (router/extractor) | Sonnet 4.5 + Haiku 4.5 via Bedrock (Anthropic 3.5 fallback) — top-of-class tool calling |
 | Validation | Pydantic v2 | Used at *every* boundary: FastAPI, config, tools |
 | LLM observability | [LangSmith](https://www.langchain.com/langsmith) | Auto-instruments LangGraph nodes / tools / LLM calls |
 | App observability | [Logfire](https://logfire.pydantic.dev/) | OpenTelemetry-native: FastAPI / Postgres / HTTP |
