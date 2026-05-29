@@ -32,7 +32,7 @@ export function Footer() {
 						href="https://humbertolomeu.com"
 						target="_blank"
 						rel="noopener noreferrer"
-						aria-label="Retrieverworks"
+						aria-label="Humberto Lomeu — portfolio"
 					>
 						<span className="hl-footer-mark-logo">
 							{/* eslint-disable-next-line @next/next/no-img-element */}
