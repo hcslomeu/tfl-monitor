@@ -6,9 +6,9 @@ hide:
 
 # tfl-monitor
 
-> A real-time data + AI engineering portfolio: streaming Transport for London
-> feeds into a dbt-modelled warehouse, with a LangGraph agent that routes
-> between SQL over the warehouse and RAG over TfL strategy documents.
+> A real-time data + AI engineering portfolio: a **live Transport for London
+> proxy** with a LangGraph agent that routes between live TfL queries and RAG
+> over TfL strategy documents.
 
 <div class="grid cards" markdown>
 
@@ -16,26 +16,26 @@ hide:
 
     ---
 
-    Async pollers fan TfL line-status, arrivals, and disruptions onto Kafka
-    topics every 30 s — replayable, decoupled from consumers.
+    `/status/live` and `/disruptions/recent` read through to the TfL Unified
+    API on demand — no broker, no feed warehouse to keep fresh (ADR 014).
 
-    [:octicons-arrow-right-24: Streaming ingestion](pipelines/ingestion.md)
+    [:octicons-arrow-right-24: Live TfL proxy](pipelines/ingestion.md)
 
--   :material-database-outline:{ .lg .middle } **dbt-modelled warehouse**
+-   :material-database-outline:{ .lg .middle } **Reference data in dbt**
 
     ---
 
-    Staging + mart models with `merge` incrementality, generic + singular
-    tests, and exposures wiring marts to API endpoints.
+    One station seed and a `dim_stations` mart, built one-shot on deploy — with
+    dbt tests, lineage, and docs for near-zero cost.
 
-    [:octicons-arrow-right-24: dbt warehouse](pipelines/warehouse.md)
+    [:octicons-arrow-right-24: Reference data](pipelines/warehouse.md)
 
 -   :material-robot-outline:{ .lg .middle } **Agent that doesn't hallucinate**
 
     ---
 
-    LangGraph routes between five typed tools (4 SQL + 1 RAG). Pydantic AI
-    extracts structured arguments. Every step traced in LangSmith.
+    LangGraph routes between typed tools — live status, disruptions, journey,
+    arrivals, and RAG. Every step traced in LangSmith.
 
     [:octicons-arrow-right-24: LangGraph agent](pipelines/agent.md)
 
@@ -48,12 +48,12 @@ hide:
 
     [:octicons-arrow-right-24: Observability](observability.md)
 
--   :material-cloud-outline:{ .lg .middle } **Deployable for ~$6/month**
+-   :material-cloud-outline:{ .lg .middle } **Runs for a few $/month**
 
     ---
 
-    Single EC2 spot box + AWS Bedrock + free-tier Supabase / Redpanda Cloud /
-    Vercel / Pinecone. $100 AWS credit covers ~12 months.
+    A second tenant on a shared AWS Lightsail box + AWS Bedrock + free-tier
+    Supabase / Vercel. Effective cost ~$3.50/mo.
 
     [:octicons-arrow-right-24: Deployment](deployment.md)
 
@@ -61,8 +61,8 @@ hide:
 
     ---
 
-    25 work packages organised into parallel tracks; every WP shipped with
-    tests, ADRs for cross-cutting decisions, contracts-first parallelism.
+    Work packages organised into parallel tracks; every WP shipped with tests,
+    ADRs for cross-cutting decisions, contracts-first parallelism.
 
     [:octicons-arrow-right-24: Roadmap](roadmap.md)
 
@@ -71,15 +71,15 @@ hide:
 ## What you can ask the agent
 
 ```text
-"Which Tube line had the worst reliability last week?"
-   → routes to SQL tool → mart_tube_reliability_daily_summary
+"How's the Piccadilly line running right now?"
+   → query_tube_status → live TfL /Line/Mode/{modes}/Status
 
-"What's TfL's strategy for Piccadilly Line upgrades?"
-   → routes to RAG tool → Pinecone over TfL Business Plan + MTS 2018 +
-     Annual Report (Docling-parsed)
+"Plan a journey from Oxford Circus to Bank."
+   → plan_journey_tool → live TfL /Journey/JourneyResults
 
-"Is the 207 bus running on time near Ealing Hospital?"
-   → SQL → bus punctuality proxy from arrivals topic
+"What's TfL's strategy for cycling?"
+   → search_tfl_docs → pgvector over TfL Business Plan + MTS 2018 +
+     Annual Report (PyMuPDF-parsed, Bedrock-embedded)
 ```
 
 ## Why this exists
@@ -87,31 +87,33 @@ hide:
 A portfolio that demonstrates the full data + AI engineering loop on a
 realistic public dataset, not a CRUD demo or a notebook prototype:
 
-- **Streaming that earns its broker.** Four polling endpoints with sub-minute
-  cadence, multiple consumers fanning out from the same topic.
-- **A warehouse modelled properly.** dbt staging → marts with tests, exposures,
-  documentation, and idempotent `merge` incrementality.
-- **An agent grounded in real data and real documents.** SQL tools run typed
-  Pydantic-validated queries; RAG retrieval cites exact PDF chunks.
+- **A live proxy that knows what not to store.** The warehouse was decommissioned
+  after it bricked the free-tier database three times; serving TfL live removed
+  the disk-full failure class entirely (ADR 014).
+- **A reference layer modelled properly.** dbt builds the station dimension with
+  tests, lineage, and documentation, regenerable from empty in one `dbt build`.
+- **An agent grounded in real data and real documents.** Typed,
+  Pydantic-validated tools hit the live TfL API; RAG retrieval cites exact PDF
+  chunks.
 - **Everything traced.** LangSmith answers "why did the agent decide X?";
-  Logfire answers "why is the consumer lagging?".
+  Logfire answers "which TfL endpoint is throttling us?".
 
 ## Tech stack at a glance
 
 | Layer | Choice |
 |-------|--------|
-| Streaming broker | Redpanda (Kafka API) |
-| Warehouse | PostgreSQL 16 / Supabase |
-| Transformations | dbt-core |
-| Orchestration | Apache Airflow 2.10 |
-| Ingestion | Python 3.12 + `httpx` + `aiokafka` |
+| Streaming broker | None — live TfL proxy (ADR 014) |
+| Database | PostgreSQL 16 / Supabase (app-essentials + pgvector) |
+| Transformations | dbt-core (seed + `dim_stations`) |
+| Orchestration | Host one-shot on deploy |
+| Ingestion | Python 3.12 + `httpx` (read-through) |
 | API | FastAPI + `sse-starlette` |
 | Agent | LangGraph 1.x + Pydantic AI |
-| RAG | LlamaIndex + Pinecone + Docling |
+| RAG | LlamaIndex + pgvector + PyMuPDF + Bedrock Titan |
 | Frontend | Next.js 16 + shadcn/ui + Biome |
 | LLM observability | LangSmith |
 | App observability | Logfire |
-| Deploy | AWS EC2 spot + Bedrock + Supabase + Redpanda Cloud + Vercel |
+| Deploy | Shared AWS Lightsail + Bedrock + Supabase + Vercel |
 
 [:octicons-arrow-right-24: Full tech-stack table](stack.md){ .md-button }
 [:octicons-arrow-right-24: Architecture deep-dive](architecture.md){ .md-button .md-button--primary }

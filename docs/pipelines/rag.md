@@ -1,8 +1,8 @@
 # RAG ingestion
 
-Three TfL strategy documents are fetched, parsed, embedded, and upserted into
-Pinecone. The pipeline is **conditional** (only re-downloads what changed) and
-**idempotent** (re-running upserts the same row IDs).
+Three TfL strategy documents are fetched, parsed, embedded, and upserted into a
+**pgvector** table. The pipeline is **conditional** (only re-downloads what
+changed) and **idempotent** (re-running upserts the same chunks).
 
 ## Documents indexed
 
@@ -12,7 +12,7 @@ Pinecone. The pipeline is **conditional** (only re-downloads what changed) and
 | `mts_2018` | Mayor's Transport Strategy 2018 | https://www.london.gov.uk/programmes-strategies/transport/our-vision-transport/mayors-transport-strategy-2018 |
 | `tfl_annual_report` | TfL Annual Report and Statement of Accounts | https://tfl.gov.uk/corporate/publications-and-reports/annual-report |
 
-The landing pages are the citation surface; the resolved CDN URLs are not
+The landing pages are the citation surface; the resolved CDN URLs are not,
 because TfL roll the URL stem yearly (`business-plan-2026` → `2027`).
 
 ## Pipeline
@@ -25,35 +25,37 @@ flowchart LR
 
     subgraph FETCH[Fetch]
       URL -->|If-None-Match + If-Modified-Since| HTTP[httpx GET]
-      HTTP -->|200| LOCAL[data/strategy_docs/]
-      HTTP -->|304| LOCAL
+      HTTP -->|200 / 304| LOCAL[data/strategy_docs/]
     end
 
     subgraph PARSE[Parse]
-      LOCAL --> DOC[Docling DocumentConverter]
-      DOC --> CHUNK[HybridChunker<br/>section + table aware]
+      LOCAL --> DOC[PyMuPDF<br/>text extraction]
+      DOC --> CHUNK[LlamaIndex<br/>SentenceSplitter]
     end
 
     subgraph EMBED[Embed]
-      CHUNK -->|"100 chunks/req"| OAI[OpenAI<br/>text-embedding-3-small]
-      OAI -->|retry on 429| VEC[1536-dim vectors]
+      CHUNK -->|batched| TITAN[AWS Bedrock<br/>Titan v2]
+      TITAN --> VEC[1024-dim vectors]
     end
 
     subgraph UPSERT[Upsert]
-      VEC -->|sha256 id| PC[Pinecone<br/>tfl-strategy-docs]
-      PC -->|namespace per doc_id| NS[(tfl_business_plan<br/>mts_2018<br/>tfl_annual_report)]
+      VEC -->|doc_id metadata| PG[(pgvector<br/>public.tfl_strategy_docs)]
     end
 ```
+
+PyMuPDF replaced Docling (ADR 013) — text extraction is fast and CPU-light, so
+the parse no longer OOMs the shared 2 GB box. Bedrock Titan v2 replaced OpenAI
+embeddings, and pgvector replaced Pinecone, in the TM-32 cutover.
 
 ## Idempotency strategy
 
 | Stage | Mechanism | Why |
 |-------|-----------|-----|
-| Fetch | `If-None-Match` + `If-Modified-Since` from `data/cache/sources_state.json` | TfL serves 304 unless the PDF changed |
-| Parse | Pure function of bytes → no caching needed | Docling output is deterministic |
-| Embed | OpenAI batch endpoint with retry on 429 | Async-batches 100 chunks per request |
-| Upsert | Stable id `sha256("{resolved_url}::{chunk_index}")` | Re-upsert produces the same vector ids |
-| Rollover | Delete-namespace before re-ingest | New URL stem ⇒ wipe stale vectors cleanly |
+| Fetch | `If-None-Match` + `If-Modified-Since` from the sources-state cache | TfL serves 304 unless the PDF changed |
+| Parse | Pure function of bytes → no caching needed | PyMuPDF output is deterministic |
+| Embed | Bedrock `InvokeModel`, batched per request | 1024-dim Titan vectors |
+| Upsert | Stable id keyed on `doc_id` + chunk index | Re-upsert produces the same rows |
+| Rollover | Delete the doc's rows before re-ingest | New URL stem ⇒ wipe stale chunks cleanly |
 
 ## CLI
 
@@ -67,51 +69,56 @@ uv run python -m rag.ingest --refresh-urls
 # Bypass ETag cache and re-download every PDF
 uv run python -m rag.ingest --force-refetch
 
-# Run fetch + parse + embed; skip Pinecone upsert (sizing dry-run)
+# Run fetch + parse only; skip embedding and the pgvector upsert (sizing dry-run)
 uv run python -m rag.ingest --dry-run
 ```
 
-If 1 of 3 documents fails its fetch / parse / embed / upsert cycle, the
-others still complete and the CLI exits non-zero so any future cron / GitHub
-Action surfaces the failure instead of swallowing it.
+If one of the three documents fails its fetch / parse / embed / upsert cycle,
+the others still complete and the CLI exits non-zero so the failure surfaces
+rather than being swallowed.
 
-A weekly Airflow DAG (`airflow/dags/rag_ingest_weekly.py`) re-runs the
-pipeline at `0 3 * * 1`.
+!!! note "Run off-box"
+    Ingest runs on a workstation (or a throwaway larger instance), never the
+    shared 2 GB Lightsail box, pointed at the same Supabase pgvector DSN +
+    Bedrock region. There is **no scheduler** — Airflow was removed (ADR 008)
+    and the corpus changes a few times a year, so ingest is a manual run.
 
-## Cost
-
-A full re-embedding of all three PDFs runs at well under £0.20 one-time at
-the current `text-embedding-3-small` price ($0.02 per 1M tokens).
-**Conditional GETs and stable Pinecone IDs mean steady-state runs incur
-near-zero embedding spend** — most weeks every doc returns 304 and the
-pipeline exits in under a second.
-
-## Pinecone index shape
+## pgvector store shape
 
 | Property | Value |
 |----------|-------|
-| Index name | `tfl-strategy-docs` |
-| Dimension | 1536 |
+| Table | `public.tfl_strategy_docs` |
+| Dimension | 1024 |
+| Embedding model | `amazon.titan-embed-text-v2:0` (Bedrock, `eu-west-2`) |
 | Metric | cosine |
-| Cloud | AWS, `us-east-1` (serverless) |
-| Namespaces | `tfl_business_plan`, `mts_2018`, `tfl_annual_report` |
 | Metadata fields | `doc_id`, `chunk_index`, `page`, `text` |
 
-The agent fans out across all three namespaces by default with optional
-`doc_id` targeting — see [LangGraph agent](agent.md).
+`build_vector_store` (`src/rag/vectorstore.py`) is the single LlamaIndex
+`PGVectorStore` factory shared by ingest (write) and the agent retriever (read),
+so both sides speak the same table and embedding. The agent filters on `doc_id`
+for per-document targeting — see [LangGraph agent](agent.md).
+
+## Cost
+
+A full re-embedding of all three PDFs is a one-time, sub-pound Bedrock spend.
+**Conditional GETs and stable ids mean steady-state runs incur near-zero
+embedding cost** — most runs return 304 for every doc and exit in under a
+second.
 
 ## Tests
 
-28 unit tests with fakes for httpx / Docling / OpenAI / Pinecone:
+30 unit tests with fakes for httpx / PyMuPDF / Bedrock / pgvector:
 
 | Module | Coverage |
 |--------|----------|
 | `sources.py` | landing-page resolver picks the right PDF URL via per-source allowlist |
 | `fetch.py` | 304 short-circuit, 200 with body, ETag round-trip, retry on 5xx |
-| `parse.py` | Docling output → chunks with stable text + page metadata |
-| `embed.py` | Batch sizing, retry on 429, async ordering preserved |
-| `upsert.py` | Id stability, namespace rollover, partial-failure handling |
+| `parse.py` | PyMuPDF text → chunks with stable text + page metadata; default extractor is PyMuPDF |
+| `embeddings.py` | Titan `InvokeModel` body shape, 1024-dim vector, error path |
+| `upsert.py` | Id stability, doc rollover, partial-failure handling |
 | `ingest.py` | Orchestrator argument parsing, exit-non-zero on partial failure |
 
-No live network is hit in unit tests — fakes ride alongside production
+A separate integration test drives `build_vector_store` against a real pgvector
+so the dialect / ORM / `SET`-param class of bug can't regress past the fakes.
+No live network is hit in the unit suite — fakes ride alongside the production
 clients via constructor injection.

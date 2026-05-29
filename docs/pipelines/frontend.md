@@ -1,37 +1,40 @@
 # Next.js frontend
 
-Three views, all server components by default, types regenerated from the
-OpenAPI contract. Single linter (Biome) and single test runner (Vitest + RTL).
+A single-page dashboard + chat, all server components by default, types
+regenerated from the OpenAPI contract. Single linter (Biome) and single test
+runner (Vitest + RTL).
 
 ## Code map
 
 | Concern | Path |
 |---------|------|
-| App Router routes | `web/app/{page,disruptions,ask}/page.tsx` |
+| App Router route | `web/app/page.tsx` (one-pager; legacy `/disruptions`, `/ask` 308-redirect to `/`) |
 | Server-side fetchers | `web/lib/api/*.ts` |
 | SSE parser + chat fetcher | `web/lib/sse-parser.ts`, `web/lib/api/chat-stream.ts` |
 | Generated TS types | `web/lib/types.ts` (do not edit) |
-| Chat UI | `web/components/chat-view.tsx` |
+| Dashboard + chat UI | `web/components/dashboard/*.tsx` (cards, `chat-panel.tsx`, journey/arrivals cards) |
 | shadcn primitives | `web/components/ui/*.tsx` |
 | Security headers | `web/next.config.ts` |
 | Tests | colocated with each module under `web/__tests__/` |
 
-## Views
+## One-pager dashboard
+
+The four routes collapsed into a single page (TM-E5): live status, disruptions,
+and chat sit side by side, with the legacy paths kept alive via 308 redirects.
 
 ```mermaid
 flowchart LR
-    LANDING[/page.tsx<br/>Network Now/] -->|server fetch| SL[/api/v1/status/live]
-    DISLOG[/disruptions/page.tsx<br/>Disruption Log/] -->|server fetch| DR[/api/v1/disruptions/recent]
-    ASK[/ask/page.tsx<br/>ChatView/] -->|POST SSE| CHAT[/api/v1/chat/stream]
-
-    LANDING -->|nav link| ASK
+    PAGE[/page.tsx<br/>dashboard one-pager/]
+    PAGE -->|poll 30s| SL[/api/v1/status/live]
+    PAGE -->|poll 5min| DR[/api/v1/disruptions/recent]
+    PAGE -->|POST SSE| CHAT[/api/v1/chat/stream]
 ```
 
-| View | Wired endpoint | Highlights |
-|------|----------------|------------|
-| **Network Now** (`/`) | `/api/v1/status/live` | Empty / error states surfaced via `Alert role="alert"`, fetcher catches `ApiError` |
-| **Disruption Log** (`/disruptions`) | `/api/v1/disruptions/recent` | Per-disruption Card with category-tone badge (severe / minor / info / neutral); `closure_text` in destructive Alert |
-| **Ask** (`/ask`) | `/api/v1/chat/stream` | SSE stream → token bubbles, ephemeral "Using tool …" status line |
+| Surface | Wired endpoint | Highlights |
+|---------|----------------|------------|
+| Network status + pulse | `/api/v1/status/live` | Mode tabs, severe/degraded/good tally; empty / error via `Alert role="alert"` |
+| Happening now / coming up / news | `/api/v1/disruptions/recent` | Category-tone cards; `closure_text` callout; resolved station names |
+| Chat panel | `/api/v1/chat/stream` | SSE → token bubbles, ephemeral "Using tool …" line, journey / arrivals cards (ADR 011) |
 
 ## Type generation
 
@@ -126,18 +129,18 @@ pnpm --dir web build
 
 ## Tests
 
-54 web tests covering:
+The Vitest + RTL suite covers:
 
 - **SSE parser** — single frame, multi-frame chunk, partial chunk buffering,
   `:`-comment skip, unknown-type drop, malformed-JSON survival.
 - **Fetchers** — URL/headers/body assertions, RFC 7807 `detail` surfacing,
   network `TypeError` propagation, multi-chunk reader buffering.
-- **Network Now page** — happy path, empty array, `ApiError` alert,
-  non-`ApiError` rejection fallback.
-- **Disruption Log page** — list rendering, category-tone mapping, closure
-  callout shown/hidden, affected-routes list, error fallback.
-- **ChatView** — empty shell, streaming tokens, tool-status lifecycle,
-  503 alert + conversation rollback, mid-stream `end:error` flagging.
+- **Dashboard surfaces** — status cards + network pulse, happening-now / coming-up
+  / news derivations, category-tone mapping, closure callout shown/hidden,
+  resolved station names, empty + error fallbacks.
+- **Chat panel** — empty shell, streaming tokens, tool-status lifecycle,
+  503 alert + conversation rollback, mid-stream `end:error` flagging,
+  journey / arrivals card rendering.
 
 `web/__tests__/setup.ts` initialises `jsdom` and stubs `fetch` per test via
 `vi.stubGlobal`.

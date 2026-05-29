@@ -1,7 +1,9 @@
 # Architecture
 
-A bird's-eye view of how data flows from TfL into the dashboard, with every
-component pinned to a directory in the repo.
+A bird's-eye view of how a request flows from the dashboard to TfL and back,
+with every component pinned to a directory in the repo. The app is a **live TfL
+proxy + RAG chat** — it reads through to TfL on demand and serves a LangGraph
+agent over TfL strategy documents (ADR 014; no broker, no feed warehouse).
 
 ## System diagram
 
@@ -12,36 +14,21 @@ flowchart LR
       PDF[TfL strategy PDFs]
     end
 
-    subgraph INGEST[Streaming ingestion]
-      P1[line-status producer]
-      P2[arrivals producer]
-      P3[disruptions producer]
-      KAFKA[(Redpanda<br/>Kafka topics)]
-      C1[line-status consumer]
-      C2[arrivals consumer]
-      C3[disruptions consumer]
-    end
-
-    subgraph WAREHOUSE[Postgres warehouse]
-      RAW[(raw.*<br/>JSONB)]
-      ANALYTICS[(analytics.*<br/>marts)]
-    end
-
-    subgraph DBT[dbt transformations]
-      STG[staging]
-      MART[marts + exposures]
-    end
-
-    subgraph RAG[RAG layer]
-      DOCLING[Docling parser]
-      EMB[OpenAI embeddings]
-      PINE[(Pinecone<br/>tfl-strategy-docs)]
-    end
-
     subgraph SERVE[Serving layer]
+      CLIENT[TflClient<br/>httpx + retry]
       AGENT[LangGraph agent<br/>5 typed tools]
-      API[FastAPI<br/>/status /reliability<br/>/disruptions /bus<br/>/chat/stream SSE]
+      API[FastAPI<br/>/status/live /disruptions/recent<br/>/chat/stream SSE]
       WEB[Next.js dashboard]
+    end
+
+    subgraph DATA[Postgres + pgvector]
+      PG[(ref.* seeds<br/>analytics.dim_stations<br/>analytics.chat_messages)]
+      VEC[(pgvector<br/>tfl_strategy_docs)]
+    end
+
+    subgraph RAG[RAG ingestion · off-box]
+      PYMU[PyMuPDF parse]
+      EMB[Bedrock Titan v2]
     end
 
     subgraph OBS[Observability]
@@ -49,124 +36,97 @@ flowchart LR
       LF[Logfire]
     end
 
-    TFL -->|httpx async polling| P1
-    TFL -->|httpx async polling| P2
-    TFL -->|httpx async polling| P3
-    P1 -->|Pydantic event| KAFKA
-    P2 -->|Pydantic event| KAFKA
-    P3 -->|Pydantic event| KAFKA
-    KAFKA --> C1 --> RAW
-    KAFKA --> C2 --> RAW
-    KAFKA --> C3 --> RAW
-    RAW --> STG --> MART --> ANALYTICS
-    PDF --> DOCLING --> EMB --> PINE
-    ANALYTICS --> AGENT
-    PINE --> AGENT
+    TFL -->|httpx on demand| CLIENT
+    CLIENT --> API
+    CLIENT --> AGENT
+    VEC --> AGENT
+    PG --> API
     AGENT --> API
     API -->|REST + SSE| WEB
 
+    PDF --> PYMU --> EMB --> VEC
+
     AGENT -.traces.-> LS
     API -.spans.-> LF
-    INGEST -.spans.-> LF
-    WAREHOUSE -.queries.-> LF
+    CLIENT -.spans.-> LF
 ```
 
 ## Component-to-directory map
 
 | Layer | Directory | Runtime |
 |-------|-----------|---------|
-| Async TfL client | [`src/ingestion/tfl_client/`](https://github.com/hcslomeu/tfl-monitor/tree/main/src/ingestion/tfl_client) | Python 3.12 |
-| Producers (×3) | [`src/ingestion/producers/`](https://github.com/hcslomeu/tfl-monitor/tree/main/src/ingestion/producers) | aiokafka |
-| Consumers (×3) | [`src/ingestion/consumers/`](https://github.com/hcslomeu/tfl-monitor/tree/main/src/ingestion/consumers) | aiokafka + psycopg |
-| Broker | [`docker-compose.yml`](https://github.com/hcslomeu/tfl-monitor/blob/main/docker-compose.yml) | Redpanda local; Redpanda Cloud prod |
-| Warehouse | `raw.*`, `ref.*`, `analytics.*` schemas | Postgres 16 / Supabase |
-| dbt project | [`dbt/`](https://github.com/hcslomeu/tfl-monitor/tree/main/dbt) | dbt-core 1.9 |
-| Orchestration | [`airflow/dags/`](https://github.com/hcslomeu/tfl-monitor/tree/main/airflow/dags) | Airflow 2.10 LocalExecutor |
-| RAG ingestion | [`src/rag/`](https://github.com/hcslomeu/tfl-monitor/tree/main/src/rag) | Docling + OpenAI + Pinecone |
+| Async TfL client | [`src/ingestion/tfl_client/`](https://github.com/hcslomeu/tfl-monitor/tree/main/src/ingestion/tfl_client) | Python 3.12 · httpx |
+| Read-through endpoints | [`src/api/live.py`](https://github.com/hcslomeu/tfl-monitor/blob/main/src/api/live.py) | FastAPI |
+| Station resolver | [`src/api/stations.py`](https://github.com/hcslomeu/tfl-monitor/blob/main/src/api/stations.py) | psycopg + TfL fallback |
+| dbt project (seed + `dim_stations`) | [`dbt/`](https://github.com/hcslomeu/tfl-monitor/tree/main/dbt) | dbt-core + dbt-postgres |
+| RAG ingestion | [`src/rag/`](https://github.com/hcslomeu/tfl-monitor/tree/main/src/rag) | PyMuPDF + Bedrock Titan + pgvector |
 | Agent | [`src/api/agent/`](https://github.com/hcslomeu/tfl-monitor/tree/main/src/api/agent) | LangGraph + Pydantic AI |
 | API | [`src/api/`](https://github.com/hcslomeu/tfl-monitor/tree/main/src/api) | FastAPI + sse-starlette |
 | Frontend | [`web/`](https://github.com/hcslomeu/tfl-monitor/tree/main/web) | Next.js 16 + shadcn |
 | Contracts | [`contracts/`](https://github.com/hcslomeu/tfl-monitor/tree/main/contracts) | OpenAPI + Pydantic + SQL DDL |
+| Deploy | [`infra/`](https://github.com/hcslomeu/tfl-monitor/tree/main/infra) | docker compose on shared Lightsail |
 
 ## Data flow walkthrough
 
-### 1. Producers poll TfL and emit Pydantic events
+### 1. The API reads TfL on demand
 
-Each producer is an async daemon that wakes on a fixed cadence
-(`LineStatusProducer` every 30 s, `ArrivalsProducer` every 30 s across 5 NaPTAN
-hubs, `DisruptionsProducer` every 300 s across 4 modes), normalises the tier-1
-TfL payload into a tier-2 [Pydantic event](pipelines/ingestion.md#contracts),
-and publishes to Kafka with `acks="all"` and a stable partition key.
+`/status/live` and `/disruptions/recent` call `TflClient` directly
+(`src/api/live.py`), normalise the tier-1 payload into the tier-2 response
+shape, and return it. Nothing is persisted; an upstream failure surfaces as
+RFC 7807 `502`. See [Live TfL proxy](pipelines/ingestion.md).
 
-### 2. Consumers idempotently land into `raw.*`
+### 2. Reference data is a static dbt layer
 
-`RawEventConsumer[E]` is generic over the event type; `RawEventWriter(table)`
-runs `INSERT … ON CONFLICT (event_id) DO NOTHING` over a single async psycopg
-connection with reconnect-on-`OperationalError`. Lag is traced on every span.
+The only dbt artifacts are the `tfl_stations` seed and the
+`analytics.dim_stations` mart built from it — the fast path for the NaPTAN →
+station-name resolver. Built one-shot on deploy, never on a schedule. See
+[Reference data](pipelines/warehouse.md).
 
-### 3. dbt stages and marts
-
-Staging models (`stg_line_status`, `stg_arrivals`, `stg_disruptions`) unnest
-JSONB into typed columns with defensive `row_number()` dedup. Marts are
-incremental `merge` on stable composite grains and ship with generic + singular
-tests.
-
-```mermaid
-flowchart TB
-    raw_line_status[(raw.line_status<br/>JSONB)] --> stg_line_status[stg_line_status]
-    raw_arrivals[(raw.arrivals)] --> stg_arrivals[stg_arrivals]
-    raw_disruptions[(raw.disruptions)] --> stg_disruptions[stg_disruptions]
-
-    stg_line_status --> reli_daily[mart_tube_reliability_daily]
-    reli_daily --> reli_summary[mart_tube_reliability_daily_summary]
-    stg_disruptions --> disruption_mart[mart_disruptions_daily]
-    stg_arrivals --> bus_mart[mart_bus_metrics_daily]
-```
-
-### 4. RAG ingest is conditional and idempotent
+### 3. RAG ingest is conditional and idempotent
 
 `uv run python -m rag.ingest` resolves the live PDF URL on each landing page,
-issues conditional `If-None-Match` / `If-Modified-Since` GETs, parses with
-Docling's `HybridChunker`, async-batches OpenAI embeddings (100/req, retry on
-429), and upserts into Pinecone with `sha256("{url}::{idx}")` ids — one
-namespace per document, delete-namespace-on-rollover for clean idempotency.
+issues conditional `If-None-Match` / `If-Modified-Since` GETs, extracts text
+with PyMuPDF, chunks with LlamaIndex's `SentenceSplitter`, embeds with AWS
+Bedrock Titan v2 (1024-dim), and upserts into the pgvector `tfl_strategy_docs`
+table with stable ids — keyed by `doc_id` metadata for per-document targeting.
+See [RAG ingestion](pipelines/rag.md).
 
-### 5. Agent fans out across five typed tools
+### 4. The agent fans out across five typed tools
 
 ```mermaid
 graph TD
     Q[User question] --> ROUTER{LangGraph<br/>create_react_agent}
-    ROUTER -->|live ops| T1[query_tube_status]
-    ROUTER -->|reliability| T2[query_line_reliability]
-    ROUTER -->|disruptions| T3[query_recent_disruptions]
-    ROUTER -->|bus| T4[query_bus_punctuality]
+    ROUTER -->|live status| T1[query_tube_status]
+    ROUTER -->|disruptions| T2[query_recent_disruptions]
+    ROUTER -->|journey| T3[plan_journey_tool]
+    ROUTER -->|arrivals| T4[get_arrivals_tool]
     ROUTER -->|strategy| T5[search_tfl_docs]
 
-    T1 --> WH[(warehouse)]
-    T2 --> WH
-    T3 --> WH
-    T4 --> WH
-    T5 --> PC[(Pinecone)]
-
-    T2 -.normalisation.-> PA[Pydantic AI<br/>Haiku LineId extractor]
+    T1 --> CLIENT[(TflClient → live TfL)]
+    T2 --> CLIENT
+    T3 --> CLIENT
+    T4 --> CLIENT
+    T5 --> VEC[(pgvector)]
 ```
 
-`compile_agent` returns `None` if any of `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`
-/ `PINECONE_API_KEY` is missing, so `/chat/stream` 503s while the history
-endpoint keeps working off `DATABASE_URL` alone.
+The live and journey/arrivals tools register only when a `TflClient` is wired;
+`search_tfl_docs` registers only when a retriever is available. `compile_agent`
+returns `None` if the LLM credentials are missing, so `/chat/stream` 503s while
+`/chat/{thread_id}/history` keeps working off `DATABASE_URL` alone. See
+[LangGraph agent](pipelines/agent.md).
 
-### 6. SSE projection over LangGraph events
+### 5. SSE projection over LangGraph events
 
 ```mermaid
 sequenceDiagram
-  participant W as Web (chat-view)
+  participant W as Web (chat panel)
   participant A as FastAPI /chat/stream
   participant G as LangGraph
   participant DB as analytics.chat_messages
   W->>A: POST {thread_id, message}
   A->>DB: INSERT user turn
   A->>G: agent.astream(stream_mode=["messages","updates"])
-  G-->>A: token / tool / token …
+  G-->>A: token / tool / journey / arrivals …
   A-->>W: data: {"type":"token",...}\n\n
   G-->>A: end
   A->>DB: INSERT assistant turn (concatenated tokens)
@@ -183,28 +143,28 @@ graph LR
       OAPI[openapi.yaml]
       PYD[schemas/*.py]
       SQL[sql/*.sql]
-      DBTSRC[dbt_sources.yml]
     end
 
     OAPI --> WEB[web/lib/types.ts<br/>via openapi-typescript]
     OAPI --> API[FastAPI route signatures]
-    PYD --> PROD[producers]
-    PYD --> CONS[consumers]
+    PYD --> CLIENT[TflClient tier-1 / tier-2]
     SQL --> PG[Postgres DDL]
-    SQL --> DBTSRC
-    DBTSRC --> DBT[dbt sources]
 ```
 
 Two tiers of Pydantic schemas separate the messy outside world from the clean
-internal wire format — see [tier-1 vs tier-2](pipelines/ingestion.md#contracts).
+internal shape — see [tier-1 vs tier-2](pipelines/ingestion.md#contracts).
 
 ## Related ADRs
 
-The handful of cross-cutting decisions worth a paper trail:
+The cross-cutting decisions worth a paper trail (full set under
+[`.claude/adrs/`](https://github.com/hcslomeu/tfl-monitor/tree/main/.claude/adrs)):
 
-- [001 — Redpanda over Apache Kafka](https://github.com/hcslomeu/tfl-monitor/blob/main/.claude/adrs/001-redpanda-over-kafka.md)
 - [002 — Contracts-first parallelism](https://github.com/hcslomeu/tfl-monitor/blob/main/.claude/adrs/002-contracts-first.md)
-- [003 — Airflow on Railway](https://github.com/hcslomeu/tfl-monitor/blob/main/.claude/adrs/003-airflow-on-railway.md) (superseded by 006)
 - [004 — Logfire + LangSmith split](https://github.com/hcslomeu/tfl-monitor/blob/main/.claude/adrs/004-logfire-langsmith-split.md)
-- [005 — Raw-table defaults](https://github.com/hcslomeu/tfl-monitor/blob/main/.claude/adrs/005-raw-table-defaults.md)
-- 006 — AWS Bedrock + single-EC2 deploy *(landing with TM-A5)*
+- [006 — AWS Bedrock + shared-box deploy](https://github.com/hcslomeu/tfl-monitor/blob/main/.claude/adrs/006-aws-deploy.md)
+- [007 — Disruption affected-stops shape](https://github.com/hcslomeu/tfl-monitor/blob/main/.claude/adrs/007-disruption-affected-stops-shape.md)
+- [008 — Remove Airflow for SQLAlchemy 2.0](https://github.com/hcslomeu/tfl-monitor/blob/main/.claude/adrs/008-remove-airflow-for-sqlalchemy2.md)
+- [010 — TfL hub → rail-child dereference](https://github.com/hcslomeu/tfl-monitor/blob/main/.claude/adrs/010-tfl-hub-children.md)
+- [011 — Structured journey/arrivals SSE frames](https://github.com/hcslomeu/tfl-monitor/blob/main/.claude/adrs/011-structured-journey-arrivals-sse-frames.md)
+- [013 — PyMuPDF over Docling](https://github.com/hcslomeu/tfl-monitor/blob/main/.claude/adrs/013-pymupdf-over-docling.md)
+- [014 — Decommission the warehouse → live proxy](https://github.com/hcslomeu/tfl-monitor/blob/main/.claude/adrs/014-decommission-warehouse-live-proxy.md) *(supersedes 001 + 005)*
