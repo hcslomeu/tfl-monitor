@@ -257,9 +257,9 @@
   border: 1px solid #2A2724;
   box-shadow: var(--shadow-card-hover);
 }
-.tfl-chatbox .tfl-chatbox-ta { min-height: 22px; padding: 2px 0 4px; }
+.tfl-chatbox .tfl-chatbox-ta { min-height: 22px; padding: 2px 0 4px; font-size: calc(var(--ui-sm) + 1px); }
 .tfl-chatbox .tfl-chatbox-row { gap: 6px; }
-.tfl-chatbox .tfl-chip-sm { padding: 2px 8px; font-size: var(--ui-xs); }
+.tfl-chatbox .tfl-chip-sm { padding: 2px 8px; font-size: calc(var(--ui-xs) + 1px); }
 .tfl-chatbox .tfl-chat-iconbtn { width: 22px; height: 22px; }
 .tfl-chatbox .tfl-chatbox-send { width: 24px; height: 24px; }
 .tfl-chatbox-ta {
