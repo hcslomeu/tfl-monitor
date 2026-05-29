@@ -22,7 +22,7 @@ Five endpoints, all RFC 7807 errors, a single shared async psycopg pool, and
 |--------|------|--------|-------|
 | `GET` | `/health` | static | Liveness — returns build info |
 | `GET` | `/api/v1/status/live` | live TfL `/Line/Mode/{modes}/Status` | One status row per line; `502` on upstream failure |
-| `GET` | `/api/v1/disruptions/recent` | live TfL `/Status?detail=true` | `?limit=50&mode=tube`; affected stops resolved to names |
+| `GET` | `/api/v1/disruptions/recent` | live TfL `/Line/Mode/{modes}/Status?detail=true` | `?limit=50&mode=tube`; affected stops resolved to names |
 | `POST` | `/api/v1/chat/stream` | LangGraph agent | SSE: `{type, content}` frames |
 | `GET` | `/api/v1/chat/{thread_id}/history` | `analytics.chat_messages` | Replays a thread |
 

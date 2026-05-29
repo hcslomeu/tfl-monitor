@@ -53,7 +53,7 @@ Everything else in Postgres is application state, not a dbt artifact:
 
 | Object | Purpose |
 |--------|---------|
-| pgvector store (`public.data_tfl_strategy_docs`) | RAG retrieval — see [RAG ingestion](rag.md) |
+| pgvector store (`public.tfl_strategy_docs`) | RAG retrieval — see [RAG ingestion](rag.md) |
 | `analytics.chat_messages` | chat memory backing `/chat/{thread_id}/history` |
 | `ref.lines`, `ref.stations` | line / station lookup seeds |
 
