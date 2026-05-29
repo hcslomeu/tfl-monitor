@@ -46,6 +46,14 @@ export const XIcon = brand(
 	<path d="M18 2h3l-7.5 8.6L22 22h-6.7l-5.2-6.8L4.2 22H1.2l8-9.2L1 2h6.8l4.7 6.2L18 2z" />,
 );
 
+export const GlobeIcon = brand(
+	<>
+		<circle cx="12" cy="12" r="10" />
+		<path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" />
+		<path d="M2 12h20" />
+	</>,
+);
+
 export const AtSignIcon = brand(
 	<>
 		<circle cx="12" cy="12" r="4" />
