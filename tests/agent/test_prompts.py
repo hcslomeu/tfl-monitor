@@ -38,6 +38,7 @@ def test_future_trip_rule_suppresses_live_conditions() -> None:
     collapsed = " ".join(render(today="2026-06-02").lower().split())
     assert "future trips" in collapsed
     assert "departure_time as an iso-8601 timestamp" in collapsed
+    assert "only the simplest, fastest route" in collapsed
     assert (
         "do not call query_tube_status or query_recent_disruptions for a future trip" in collapsed
     )
