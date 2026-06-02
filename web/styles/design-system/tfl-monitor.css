@@ -276,11 +276,11 @@
   font-family: var(--font-body); font-size: var(--ui-sm); color: #EEE9DE;
   line-height: 1.5; padding: 4px 0 10px; min-height: 44px;
 }
-.tfl-chatbox-ta:focus-visible {
-  outline: 2px solid var(--accent-display);
-  outline-offset: -2px;
-  border-radius: var(--radius-sm);
-}
+/* No inset focus ring on the textarea itself — it overlapped the typed
+   text and hurt readability. Focus is signalled on the composer edge via
+   `.tfl-chatbox:focus-within` (subtle, neutral, never over the text). */
+.tfl-chatbox-ta:focus-visible { outline: none; }
+.tfl-chatbox:focus-within { border-color: #4A4744; }
 .tfl-chatbox-ta::placeholder { color: rgba(238,233,222,0.45); }
 .tfl-chatbox-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .tfl-chatbox-l { display: flex; gap: 6px; flex-wrap: wrap; }
