@@ -1,11 +1,13 @@
 import {
 	GithubIcon,
+	GlobeIcon,
 	LinkedinIcon,
 	UpworkIcon,
 	XIcon,
 } from "@/components/icons";
 
 const socials = [
+	{ label: "Portfolio", href: "https://humbertolomeu.com", Icon: GlobeIcon },
 	{ label: "Github", href: "https://github.com/hcslomeu", Icon: GithubIcon },
 	{
 		label: "LinkedIn",
@@ -27,10 +29,10 @@ export function Footer() {
 				<div className="hl-footer-foot">
 					<a
 						className="hl-footer-mark"
-						href="https://retrieverworks.com"
+						href="https://humbertolomeu.com"
 						target="_blank"
 						rel="noopener noreferrer"
-						aria-label="Retrieverworks"
+						aria-label="Humberto Lomeu — portfolio"
 					>
 						<span className="hl-footer-mark-logo">
 							{/* eslint-disable-next-line @next/next/no-img-element */}
