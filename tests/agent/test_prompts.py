@@ -15,10 +15,16 @@ def test_render_substitutes_today() -> None:
 
 
 def test_render_defaults_today_to_utc_date() -> None:
-    """No argument → today's UTC date is substituted."""
+    """No argument → today's UTC date is substituted.
+
+    Capturing the date either side of ``render()`` tolerates a midnight-UTC
+    rollover landing between the two ``now()`` reads.
+    """
+    before = datetime.now(UTC).date().isoformat()
     out = render()
+    after = datetime.now(UTC).date().isoformat()
     assert "{today}" not in out
-    assert f"Today is {datetime.now(UTC).date().isoformat()}." in out
+    assert f"Today is {before}." in out or f"Today is {after}." in out
 
 
 def test_future_trip_rule_suppresses_live_conditions() -> None:
@@ -26,11 +32,13 @@ def test_future_trip_rule_suppresses_live_conditions() -> None:
 
     A trip planned for a future time must route through ``departure_time``
     and must not pull live status/disruptions (which only describe "now"),
-    and a missing time must be asked for rather than guessed.
+    and a missing time must be asked for rather than guessed. Whitespace is
+    collapsed so the assertions are immune to prompt line-wrapping.
     """
-    lowered = render(today="2026-06-02").lower()
-    assert "future trips" in lowered
-    assert "departure_time" in lowered
-    assert "query_tube_status" in lowered
-    assert "query_recent_disruptions" in lowered
-    assert "ask for the time" in lowered
+    collapsed = " ".join(render(today="2026-06-02").lower().split())
+    assert "future trips" in collapsed
+    assert "departure_time as an iso-8601 timestamp" in collapsed
+    assert (
+        "do not call query_tube_status or query_recent_disruptions for a future trip" in collapsed
+    )
+    assert "ask for the time before planning" in collapsed
