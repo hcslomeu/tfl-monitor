@@ -123,7 +123,10 @@ describe("HomePage", () => {
 
 		expect(await screen.findByText("Elizabeth line")).toBeInTheDocument();
 
-		expect(await screen.findByText(/Ask the Monitor/)).toBeInTheDocument();
+		expect(await screen.findByTestId("chat-intro")).toHaveAttribute(
+			"aria-label",
+			"hi there, where do you want to go today?",
+		);
 
 		const goodPill = await screen.findByText(/4 good/);
 		expect(goodPill).toBeInTheDocument();

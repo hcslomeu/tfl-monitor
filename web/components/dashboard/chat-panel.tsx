@@ -74,6 +74,33 @@ interface RenderableMessage {
 const DEFAULT_PLACEHOLDER =
 	"what is the next train leaving Baker Street to Uxbridge?";
 
+const INTRO_GREETING = "hi there, where do you want to go today?";
+
+/**
+ * Reveal `text` one character at a time. Returns the visible prefix and a
+ * `done` flag once the full string has been typed. The interval is cleared
+ * on unmount and whenever the source text changes.
+ */
+function useTypewriter(text: string, speed = 45) {
+	const [count, setCount] = useState(0);
+
+	useEffect(() => {
+		setCount(0);
+		const timer = setInterval(() => {
+			setCount((current) => {
+				if (current >= text.length) {
+					clearInterval(timer);
+					return current;
+				}
+				return current + 1;
+			});
+		}, speed);
+		return () => clearInterval(timer);
+	}, [text, speed]);
+
+	return { typed: text.slice(0, count), done: count >= text.length };
+}
+
 const DEFAULT_QUICK_PROMPTS: QuickPrompt[] = [
 	{
 		label: "Plan a journey",
@@ -208,14 +235,11 @@ export function ChatPanel({
 	}
 
 	const canSend = !busy && value.trim().length > 0;
+	const intro = useTypewriter(INTRO_GREETING);
 
 	return (
 		<div className="tfl-chat-stack">
 			<section className="tfl-card tfl-chat-card">
-				<div className="tfl-chat-card-h">
-					<h4>Ask the Monitor</h4>
-					<span className="meta">GPT · context · TfL</span>
-				</div>
 				{serviceError ? (
 					<div role="alert" className="tfl-chat-alert">
 						<strong>Agent unavailable.</strong> {serviceError}
@@ -226,6 +250,24 @@ export function ChatPanel({
 					ref={transcriptRef}
 					aria-live="polite"
 				>
+					{messages.length === 0 ? (
+						<div className="tfl-msg tfl-msg-bot tfl-chat-intro">
+							<span className="tfl-msg-avatar" aria-hidden />
+							<span
+								className="tfl-msg-bubble"
+								data-testid="chat-intro"
+								role="img"
+								aria-label={INTRO_GREETING}
+							>
+								<span className="tfl-chat-intro-text" aria-hidden>
+									{intro.typed}
+								</span>
+								{intro.done ? null : (
+									<span className="tfl-chat-intro-caret" aria-hidden />
+								)}
+							</span>
+						</div>
+					) : null}
 					{messages.length > 0 ? (
 						<ul
 							aria-label="Conversation"

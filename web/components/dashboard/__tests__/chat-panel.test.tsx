@@ -48,7 +48,7 @@ describe("ChatPanel (TM-F2 SSE rewrite)", () => {
 		render(<ChatPanel />);
 
 		expect(
-			screen.getByRole("heading", { name: /ask the monitor/i }),
+			screen.getByRole("img", { name: /where do you want to go today/i }),
 		).toBeInTheDocument();
 		expect(screen.getByRole("textbox")).toBeInTheDocument();
 		expect(screen.getByRole("button", { name: /send/i })).toBeDisabled();
