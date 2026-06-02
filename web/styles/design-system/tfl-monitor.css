@@ -107,13 +107,6 @@
 /* ---------- Chat (dark composer — matches portfolio + alphawhale) - */
 /* ---------- Chat stack: transcript card + dark composer --------- */
 .tfl-chat-card { background: var(--surface-warm); display: flex; flex-direction: column; min-height: 0; }
-.tfl-chat-card-h {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: var(--space-3) var(--space-4);
-  border-bottom: 1px solid var(--border-default);
-}
-.tfl-chat-card-h h4 { font-family: var(--font-body); font-size: var(--ui-sm); font-weight: 600; margin: 0; color: var(--ink-primary); }
-.tfl-chat-card-h .meta { font-family: var(--font-mono); font-size: var(--ui-xs); color: var(--ink-tertiary); }
 .tfl-chat-transcript {
   padding: var(--space-4);
   flex: 1 1 0;
@@ -156,6 +149,19 @@
 /* Prose follows the card(s), so it only needs separation when present. */
 .tfl-msg-prose { display: block; }
 .tfl-msg-prose:not(:first-child) { margin-top: 10px; color: var(--ink-tertiary); }
+
+/* ---------- Chat intro: dynamic typewriter greeting (empty state) -- */
+.tfl-chat-intro-text { color: var(--ink-secondary); }
+.tfl-chat-intro-caret {
+  display: inline-block; width: 2px; height: 1em;
+  margin-left: 2px; vertical-align: text-bottom;
+  background: var(--accent-primary);
+  animation: tfl-caret-blink 1s steps(1) infinite;
+}
+@keyframes tfl-caret-blink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .tfl-chat-intro-caret { animation: none; }
+}
 
 /* ---------- Chat structured cards: journey + arrivals -------------- */
 .tfl-journey, .tfl-arrivals {

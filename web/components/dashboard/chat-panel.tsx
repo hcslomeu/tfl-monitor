@@ -74,6 +74,53 @@ interface RenderableMessage {
 const DEFAULT_PLACEHOLDER =
 	"what is the next train leaving Baker Street to Uxbridge?";
 
+const INTRO_GREETING = "hi there, where do you want to go today?";
+const INTRO_SPEED_MS = 45;
+
+/**
+ * Empty-state greeting that types itself out one character at a time. The
+ * timer lives in this component (not in `ChatPanel`) so it mounts and unmounts
+ * with the intro: once the first message arrives the component stops rendering
+ * and the pending timeout is cleaned up automatically — no background ticks,
+ * no re-renders of the surrounding composer. Honors `prefers-reduced-motion`
+ * by revealing the full text immediately. The full phrase is always exposed
+ * via `aria-label`, so screen readers announce it once rather than per tick.
+ */
+function ChatIntro({ text }: { text: string }) {
+	const [count, setCount] = useState(0);
+
+	useEffect(() => {
+		if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+			setCount(text.length);
+			return;
+		}
+		if (count >= text.length) return;
+		const timer = setTimeout(
+			() => setCount((current) => current + 1),
+			INTRO_SPEED_MS,
+		);
+		return () => clearTimeout(timer);
+	}, [count, text.length]);
+
+	const done = count >= text.length;
+	return (
+		<div className="tfl-msg tfl-msg-bot">
+			<span className="tfl-msg-avatar" aria-hidden />
+			<span
+				className="tfl-msg-bubble"
+				data-testid="chat-intro"
+				role="img"
+				aria-label={text}
+			>
+				<span className="tfl-chat-intro-text" aria-hidden>
+					{text.slice(0, count)}
+				</span>
+				{done ? null : <span className="tfl-chat-intro-caret" aria-hidden />}
+			</span>
+		</div>
+	);
+}
+
 const DEFAULT_QUICK_PROMPTS: QuickPrompt[] = [
 	{
 		label: "Plan a journey",
@@ -212,10 +259,6 @@ export function ChatPanel({
 	return (
 		<div className="tfl-chat-stack">
 			<section className="tfl-card tfl-chat-card">
-				<div className="tfl-chat-card-h">
-					<h4>Ask the Monitor</h4>
-					<span className="meta">GPT · context · TfL</span>
-				</div>
 				{serviceError ? (
 					<div role="alert" className="tfl-chat-alert">
 						<strong>Agent unavailable.</strong> {serviceError}
@@ -226,6 +269,7 @@ export function ChatPanel({
 					ref={transcriptRef}
 					aria-live="polite"
 				>
+					{messages.length === 0 ? <ChatIntro text={INTRO_GREETING} /> : null}
 					{messages.length > 0 ? (
 						<ul
 							aria-label="Conversation"
