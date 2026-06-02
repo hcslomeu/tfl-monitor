@@ -75,30 +75,50 @@ const DEFAULT_PLACEHOLDER =
 	"what is the next train leaving Baker Street to Uxbridge?";
 
 const INTRO_GREETING = "hi there, where do you want to go today?";
+const INTRO_SPEED_MS = 45;
 
 /**
- * Reveal `text` one character at a time. Returns the visible prefix and a
- * `done` flag once the full string has been typed. The interval is cleared
- * on unmount and whenever the source text changes.
+ * Empty-state greeting that types itself out one character at a time. The
+ * timer lives in this component (not in `ChatPanel`) so it mounts and unmounts
+ * with the intro: once the first message arrives the component stops rendering
+ * and the pending timeout is cleaned up automatically — no background ticks,
+ * no re-renders of the surrounding composer. Honors `prefers-reduced-motion`
+ * by revealing the full text immediately. The full phrase is always exposed
+ * via `aria-label`, so screen readers announce it once rather than per tick.
  */
-function useTypewriter(text: string, speed = 45) {
+function ChatIntro({ text }: { text: string }) {
 	const [count, setCount] = useState(0);
 
 	useEffect(() => {
-		setCount(0);
-		const timer = setInterval(() => {
-			setCount((current) => {
-				if (current >= text.length) {
-					clearInterval(timer);
-					return current;
-				}
-				return current + 1;
-			});
-		}, speed);
-		return () => clearInterval(timer);
-	}, [text, speed]);
+		if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+			setCount(text.length);
+			return;
+		}
+		if (count >= text.length) return;
+		const timer = setTimeout(
+			() => setCount((current) => current + 1),
+			INTRO_SPEED_MS,
+		);
+		return () => clearTimeout(timer);
+	}, [count, text.length]);
 
-	return { typed: text.slice(0, count), done: count >= text.length };
+	const done = count >= text.length;
+	return (
+		<div className="tfl-msg tfl-msg-bot">
+			<span className="tfl-msg-avatar" aria-hidden />
+			<span
+				className="tfl-msg-bubble"
+				data-testid="chat-intro"
+				role="img"
+				aria-label={text}
+			>
+				<span className="tfl-chat-intro-text" aria-hidden>
+					{text.slice(0, count)}
+				</span>
+				{done ? null : <span className="tfl-chat-intro-caret" aria-hidden />}
+			</span>
+		</div>
+	);
 }
 
 const DEFAULT_QUICK_PROMPTS: QuickPrompt[] = [
@@ -235,7 +255,6 @@ export function ChatPanel({
 	}
 
 	const canSend = !busy && value.trim().length > 0;
-	const intro = useTypewriter(INTRO_GREETING);
 
 	return (
 		<div className="tfl-chat-stack">
@@ -250,24 +269,7 @@ export function ChatPanel({
 					ref={transcriptRef}
 					aria-live="polite"
 				>
-					{messages.length === 0 ? (
-						<div className="tfl-msg tfl-msg-bot tfl-chat-intro">
-							<span className="tfl-msg-avatar" aria-hidden />
-							<span
-								className="tfl-msg-bubble"
-								data-testid="chat-intro"
-								role="img"
-								aria-label={INTRO_GREETING}
-							>
-								<span className="tfl-chat-intro-text" aria-hidden>
-									{intro.typed}
-								</span>
-								{intro.done ? null : (
-									<span className="tfl-chat-intro-caret" aria-hidden />
-								)}
-							</span>
-						</div>
-					) : null}
+					{messages.length === 0 ? <ChatIntro text={INTRO_GREETING} /> : null}
 					{messages.length > 0 ? (
 						<ul
 							aria-label="Conversation"
