@@ -1,6 +1,6 @@
 # Pipelines
 
-Six end-to-end flows make up the system. Each page below walks the code path,
+Four end-to-end flows make up the system. Each page below walks the code path,
 the contract that locks its boundaries, and the tests that protect it.
 
 <div class="grid cards" markdown>
@@ -8,26 +8,17 @@ the contract that locks its boundaries, and the tests that protect it.
 -   :material-source-branch:{ .lg .middle } **[Live TfL proxy](ingestion.md)**
 
     Async read-through to the TfL Unified API on demand → tier-2 Pydantic
-    response. No broker, no feed warehouse (ADR 014).
-
--   :material-database-arrow-down:{ .lg .middle } **[Reference data (dbt)](warehouse.md)**
-
-    A station seed and one `dim_stations` mart, built one-shot on deploy — the
-    fast path for the NaPTAN → station-name resolver.
-
--   :material-file-document-multiple-outline:{ .lg .middle } **[RAG ingestion](rag.md)**
-
-    Conditional GET on TfL strategy PDFs → PyMuPDF parse → Bedrock Titan
-    embeddings → pgvector, keyed by `doc_id`.
+    response, cached 30 seconds at the CDN. No broker, no warehouse, no
+    database (ADR 014, ADR 015).
 
 -   :material-graph:{ .lg .middle } **[LangGraph agent](agent.md)**
 
-    Up to five typed tools (live status, disruptions, journey, arrivals, RAG),
-    a Pydantic AI extractor, and a structured SSE projection.
+    Four typed live TfL tools (status, disruptions, journey, arrivals), Claude
+    via the Anthropic API, and a structured SSE projection.
 
 -   :material-api:{ .lg .middle } **[FastAPI surface](api.md)**
 
-    Five endpoints, all RFC 7807 errors, a single async psycopg pool, and
+    Four endpoints, RFC 7807 errors, a stateless Vercel function, and
     OpenAPI 3.1 as the contract.
 
 -   :material-language-typescript:{ .lg .middle } **[Next.js frontend](frontend.md)**
@@ -36,3 +27,6 @@ the contract that locks its boundaries, and the tests that protect it.
     regenerated from OpenAPI.
 
 </div>
+
+The RAG ingestion pipeline and the dbt reference-data layer were removed in
+ADR 015.

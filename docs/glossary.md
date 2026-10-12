@@ -10,9 +10,9 @@ Project-specific vocabulary and TfL-specific terms a reviewer might not know.
     under `.claude/specs/TM-XXX-{spec,research,plan}.md`.
 
 `Track`
-:   A directory boundary. **A** infra, **B** ingestion, **C** dbt,
-    **D** api-agent, **E** frontend, **F** polish. At most two agents work
-    concurrently on different tracks.
+:   A directory boundary. **A** infra, **B** ingestion, **D** api-agent,
+    **E** frontend, **F** polish (track **C**, dbt, ended with ADR 015). At
+    most two agents work concurrently on different tracks.
 
 `Tier-1 schema`
 :   Pydantic model mirroring the **raw TfL Unified API** payload — camelCase,
@@ -45,9 +45,9 @@ Project-specific vocabulary and TfL-specific terms a reviewer might not know.
     granular bus-stop identifier used in TfL bus arrivals.
 
 `Line ID`
-:   TfL's slug for a transit line — e.g. `piccadilly`, `elizabeth`,
-    `bakerloo`. The `LineId` Pydantic AI normaliser converts free-text
-    questions ("how's the Piccadilly?") into the canonical slug.
+:   TfL's slug for a transit line, e.g. `piccadilly`, `elizabeth`,
+    `bakerloo`. Returned as `line_id` by `/status/live` and
+    `/disruptions/recent`.
 
 `Mode`
 :   TfL's transport-mode classifier — `tube`, `bus`, `dlr`, `overground`,
@@ -62,26 +62,30 @@ Project-specific vocabulary and TfL-specific terms a reviewer might not know.
 ## Stack terms
 
 `Logfire span`
-:   An OpenTelemetry span emitted by Logfire's auto-instrumentation. One per
-    request, query, or HTTP call.
+:   An OpenTelemetry span emitted by Logfire. One per FastAPI request
+    (auto-instrumented) and one per outbound TfL call (`tfl.request`).
 
 `LangSmith trace`
 :   A LangChain-native trace covering an entire `/chat/stream` invocation —
-    every node, tool call, LLM call, and retrieval inside the LangGraph run.
+    every node, tool call, and LLM call inside the LangGraph run.
 
 `SSE` (Server-Sent Events)
 :   The streaming protocol used by `/chat/stream`. Frames are
-    `data: {…}\n\n`-terminated JSON. Caddy needs `flush_interval -1` to avoid
-    buffering them.
+    `data: {…}\n\n`-terminated JSON. The Vercel function allows up to
+    300 seconds (`maxDuration`) for a stream.
 
 `create_react_agent`
 :   LangGraph's prebuilt ReAct loop — model picks tools, runs them, feeds the
     output back to the model, terminates on a final assistant message.
 
-`Pydantic AI`
-:   A typed Python agent framework from the Pydantic team; we use it inside one tool (`LineId`
-    extraction with Haiku). LangGraph remains the main agent.
+`InMemorySaver`
+:   LangGraph's in-process checkpointer. Holds chat memory per `thread_id`
+    for the life of one function instance; nothing is persisted.
 
-`SentenceSplitter`
-:   LlamaIndex utility that splits PyMuPDF-extracted text into overlapping
-    chunks on sentence boundaries before embedding.
+`Fluid compute`
+:   Vercel's function runtime mode that reuses warm instances across
+    concurrent requests. The API runs on it in region `lhr1`.
+
+`s-maxage`
+:   The `Cache-Control` directive that tells the Vercel CDN how long to serve
+    a cached response. The live GET endpoints set `s-maxage=30`.
