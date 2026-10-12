@@ -1,13 +1,12 @@
-"""Integration smoke test for ``POST /api/v1/chat/stream`` (TM-D5).
+"""Integration smoke test for ``POST /api/v1/chat/stream``.
 
-Hits the live agent stack: Bedrock/Anthropic Sonnet for synthesis, the
-Pydantic AI Haiku normaliser, the pgvector-backed RAG retriever, and
-the Postgres-backed history sink. Marked ``integration`` and ``slow``
-so the default hermetic suite stays free of API costs.
+Hits the live agent stack: Anthropic Claude for synthesis and the TfL
+Unified API for tool calls. Marked ``integration`` and ``slow`` so the
+default hermetic suite stays free of API costs.
 
 Run with::
 
-    DATABASE_URL=... ANTHROPIC_API_KEY=... \\
+    ANTHROPIC_API_KEY=... TFL_APP_KEY=... \\
     uv run pytest -m "integration and slow" \\
     tests/integration/test_chat_stream.py -v
 """
@@ -16,61 +15,20 @@ from __future__ import annotations
 
 import json
 import os
-from collections.abc import Iterator
 from typing import Any
 
 import pytest
-
-psycopg = pytest.importorskip("psycopg")
-
-DATABASE_URL = os.environ.get("DATABASE_URL")
-# The agent selects Bedrock when BEDROCK_REGION is set, falling back to
-# ANTHROPIC_API_KEY (see src/api/agent/graph.py); accept either backend.
-_HAS_LLM_CREDS = bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("BEDROCK_REGION"))
 
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.slow,
     pytest.mark.skipif(
-        not (DATABASE_URL and _HAS_LLM_CREDS),
-        reason="full agent stack requires DATABASE_URL plus Anthropic or Bedrock API credentials",
+        not (os.environ.get("ANTHROPIC_API_KEY") and os.environ.get("TFL_APP_KEY")),
+        reason="live agent stack requires ANTHROPIC_API_KEY and TFL_APP_KEY",
     ),
 ]
 
 THREAD = "tfl-monitor.integration.chat-stream"
-
-
-@pytest.fixture
-def cleanup_thread() -> Iterator[None]:
-    assert DATABASE_URL is not None
-    with psycopg.connect(DATABASE_URL) as conn:
-        with conn.cursor() as cur:
-            cur.execute("CREATE SCHEMA IF NOT EXISTS analytics")
-            cur.execute(
-                """
-                CREATE TABLE IF NOT EXISTS analytics.chat_messages (
-                    id BIGSERIAL PRIMARY KEY,
-                    thread_id TEXT NOT NULL,
-                    role TEXT NOT NULL
-                        CHECK (role IN ('user', 'assistant', 'system')),
-                    content TEXT NOT NULL,
-                    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-                )
-                """
-            )
-            cur.execute(
-                "DELETE FROM analytics.chat_messages WHERE thread_id = %s",
-                (THREAD,),
-            )
-        conn.commit()
-    yield
-    with psycopg.connect(DATABASE_URL) as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "DELETE FROM analytics.chat_messages WHERE thread_id = %s",
-                (THREAD,),
-            )
-        conn.commit()
 
 
 def _parse_sse(text: str) -> list[dict[str, Any]]:
@@ -85,7 +43,7 @@ def _parse_sse(text: str) -> list[dict[str, Any]]:
     return frames
 
 
-def test_chat_stream_emits_tokens_and_terminal_end(cleanup_thread: None) -> None:
+def test_chat_stream_emits_tokens_and_terminal_end() -> None:
     from fastapi.testclient import TestClient
 
     from api.main import app
@@ -93,11 +51,11 @@ def test_chat_stream_emits_tokens_and_terminal_end(cleanup_thread: None) -> None
     with TestClient(app) as client:
         response = client.post(
             "/api/v1/chat/stream",
-            json={"thread_id": THREAD, "message": "What is the Elizabeth line?"},
+            json={"thread_id": THREAD, "message": "Is the Victoria line running normally?"},
         )
 
     assert response.status_code == 200, response.text
     frames = _parse_sse(response.text)
-    assert any(f["type"] == "token" for f in frames), "expected at least one token frame"
     assert frames, "stream produced no frames"
-    assert frames[-1]["type"] == "end"
+    assert any(f["type"] == "token" for f in frames), "expected at least one token frame"
+    assert frames[-1] == {"type": "end", "content": ""}

@@ -14,7 +14,6 @@
 ## Checklist
 - [ ] `uv run task lint` passes
 - [ ] `uv run task test` passes
-- [ ] `uv run task dbt-parse` passes if `dbt/` or `contracts/sql/` was touched
 - [ ] `pnpm --dir web lint` passes if `web/` was touched
 - [ ] `pnpm --dir web build` passes if `web/` was touched
 - [ ] New files or deps justified

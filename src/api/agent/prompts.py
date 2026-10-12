@@ -14,9 +14,6 @@ Tools:
   NaPTAN). Use when the user asks how to get from A to B.
 - get_arrivals_tool: next arrivals at a stop (name or NaPTAN), grouped
   by platform. Use for "when's the next train/bus at X".
-- search_tfl_docs: passages from TfL strategy docs (Business Plan,
-  Mayor's Transport Strategy, Annual Report). Use for policy or
-  forecast questions; cite by doc_title + page_start.
 
 When you call plan_journey_tool or get_arrivals_tool, the UI renders the
 full result as a visual card (every leg, time, platform and countdown).

@@ -1,9 +1,7 @@
 """Unit tests for ``POST /api/v1/chat/stream`` (TM-D5).
 
-Wires a ``FakeAgent`` into ``app.state.agent`` and a ``FakeAsyncPool``
-into ``app.state.db_pool`` to exercise the SSE projection plus the
-chat-history side effect without ever talking to the LLM, the pgvector
-retriever, or Postgres.
+Wires a ``FakeAgent`` into ``app.state.agent`` to exercise the SSE
+projection without ever talking to the LLM.
 """
 
 from __future__ import annotations
@@ -14,9 +12,10 @@ from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import Any
 
+import anthropic
+import httpx
 from fastapi.testclient import TestClient
 
-from api.agent.history import INSERT_SQL
 from api.main import app
 
 
@@ -97,13 +96,9 @@ def _parse_sse(text: str) -> list[dict[str, str]]:
     return frames
 
 
-def test_chat_stream_happy_path_persists_and_streams(
-    fake_pool_factory: Callable[..., Any],
-    attach_pool: Callable[[Any], None],
+def test_chat_stream_happy_path_streams(
     attach_agent: Callable[[Any], None],
 ) -> None:
-    pool = fake_pool_factory([], [])  # one batch per INSERT
-    attach_pool(pool)
     agent = FakeAgent(
         frames=[
             _token_chunk("He"),
@@ -128,22 +123,17 @@ def test_chat_stream_happy_path_persists_and_streams(
         {"type": "end", "content": ""},
     ]
 
-    assert pool.conn.executed == [
-        (INSERT_SQL, {"thread_id": "t-happy", "role": "user", "content": "hi there"}),
-        (INSERT_SQL, {"thread_id": "t-happy", "role": "assistant", "content": "Hello"}),
-    ]
     assert len(agent.calls) == 1
-    assert agent.calls[0]["config"] == {"configurable": {"thread_id": "t-happy"}}
+    assert agent.calls[0]["config"] == {
+        "configurable": {"thread_id": "t-happy"},
+        "recursion_limit": 12,
+    }
     assert agent.calls[0]["stream_mode"] == ["messages", "updates"]
 
 
 def test_chat_stream_emits_tool_frame(
-    fake_pool_factory: Callable[..., Any],
-    attach_pool: Callable[[Any], None],
     attach_agent: Callable[[Any], None],
 ) -> None:
-    pool = fake_pool_factory([], [])
-    attach_pool(pool)
     agent = FakeAgent(
         frames=[
             _token_chunk("Looking up "),
@@ -167,19 +157,12 @@ def test_chat_stream_emits_tool_frame(
         {"type": "token", "content": "the data..."},
         {"type": "end", "content": ""},
     ]
-    # Only token content lands in the persisted assistant turn.
-    assistant_insert = pool.conn.executed[1]
-    assert assistant_insert[1]["content"] == "Looking up the data..."
 
 
 def test_chat_stream_skips_tool_message_content(
-    fake_pool_factory: Callable[..., Any],
-    attach_pool: Callable[[Any], None],
     attach_agent: Callable[[Any], None],
 ) -> None:
     """ToolMessage chunks (raw tool-result JSON) must not leak as tokens."""
-    pool = fake_pool_factory([], [])
-    attach_pool(pool)
     agent = FakeAgent(
         frames=[
             _tool_message_chunk('[{"line_id": "piccadilly", "status": "Severe Delays"}]'),
@@ -201,18 +184,12 @@ def test_chat_stream_skips_tool_message_content(
         {"type": "token", "content": "Piccadilly has severe delays."},
         {"type": "end", "content": ""},
     ]
-    assistant_insert = pool.conn.executed[1]
-    assert assistant_insert[1]["content"] == "Piccadilly has severe delays."
 
 
 def test_chat_stream_emits_journey_card_frame(
-    fake_pool_factory: Callable[..., Any],
-    attach_pool: Callable[[Any], None],
     attach_agent: Callable[[Any], None],
 ) -> None:
     """A successful plan_journey_tool result yields a `journey` card frame."""
-    pool = fake_pool_factory([], [])
-    attach_pool(pool)
     view = {
         "total_minutes": 38,
         "start": "2026-05-27T14:02:00",
@@ -241,19 +218,12 @@ def test_chat_stream_emits_journey_card_frame(
         {"type": "token", "content": "Here is your route."},
         {"type": "end", "content": ""},
     ]
-    # The card frame is not persisted — only assistant token text is.
-    assistant_insert = pool.conn.executed[1]
-    assert assistant_insert[1]["content"] == "Here is your route."
 
 
 def test_chat_stream_emits_arrivals_card_frame(
-    fake_pool_factory: Callable[..., Any],
-    attach_pool: Callable[[Any], None],
     attach_agent: Callable[[Any], None],
 ) -> None:
     """A successful get_arrivals_tool result yields an `arrivals` card frame."""
-    pool = fake_pool_factory([], [])
-    attach_pool(pool)
     view = {
         "station": "Bank",
         "platforms": [
@@ -282,13 +252,9 @@ def test_chat_stream_emits_arrivals_card_frame(
 
 
 def test_chat_stream_card_tool_error_string_has_no_card_frame(
-    fake_pool_factory: Callable[..., Any],
-    attach_pool: Callable[[Any], None],
     attach_agent: Callable[[Any], None],
 ) -> None:
     """When a card tool returns a plain error string, no card frame is emitted."""
-    pool = fake_pool_factory([], [])
-    attach_pool(pool)
     agent = FakeAgent(
         frames=[
             _tool_event_with_content("plan_journey_tool", "Couldn't find station 'Atlantis'."),
@@ -313,11 +279,8 @@ def test_chat_stream_card_tool_error_string_has_no_card_frame(
 
 
 def test_chat_stream_503_when_agent_missing(
-    fake_pool_factory: Callable[..., Any],
-    attach_pool: Callable[[Any], None],
     attach_agent: Callable[[Any], None],
 ) -> None:
-    attach_pool(fake_pool_factory())
     attach_agent(None)
 
     client = TestClient(app)
@@ -331,24 +294,6 @@ def test_chat_stream_503_when_agent_missing(
     body = response.json()
     assert body["title"] == "Service Unavailable"
     assert body["detail"] == "Chat agent is not configured"
-
-
-def test_chat_stream_503_when_pool_missing(
-    attach_pool: Callable[[Any], None],
-    attach_agent: Callable[[Any], None],
-) -> None:
-    attach_pool(None)
-    attach_agent(FakeAgent(frames=[]))
-
-    client = TestClient(app)
-    response = client.post(
-        "/api/v1/chat/stream",
-        json={"thread_id": "t-no-pool", "message": "hi"},
-    )
-
-    assert response.status_code == 503
-    body = response.json()
-    assert body["detail"] == "Database pool is not available"
 
 
 def test_chat_stream_422_on_empty_message() -> None:
@@ -371,12 +316,9 @@ def test_chat_stream_422_on_oversized_message() -> None:
 
 @dataclass
 class FailingAgent:
-    """Agent that raises mid-stream after emitting one token.
+    """Agent that raises ``error`` mid-stream after emitting one token."""
 
-    Exercises the ``finally`` block's ``completed`` guard so a truncated
-    assistant turn never lands in ``analytics.chat_messages``.
-    """
-
+    error: Exception
     calls: list[dict[str, Any]] = field(default_factory=list)
 
     def astream(
@@ -390,19 +332,15 @@ class FailingAgent:
 
         async def _gen() -> AsyncIterator[tuple[str, Any]]:
             yield _token_chunk("partial ")
-            raise RuntimeError("upstream model crashed")
+            raise self.error
 
         return _gen()
 
 
-def test_chat_stream_error_does_not_persist_partial_assistant(
-    fake_pool_factory: Callable[..., Any],
-    attach_pool: Callable[[Any], None],
+def test_chat_stream_error_ends_with_error_frame(
     attach_agent: Callable[[Any], None],
 ) -> None:
-    pool = fake_pool_factory([])  # only the user INSERT should fire
-    attach_pool(pool)
-    attach_agent(FailingAgent())
+    attach_agent(FailingAgent(error=RuntimeError("upstream model crashed")))
 
     client = TestClient(app)
     response = client.post(
@@ -412,9 +350,32 @@ def test_chat_stream_error_does_not_persist_partial_assistant(
 
     assert response.status_code == 200
     frames = _parse_sse(response.text)
-    assert frames[-1] == {"type": "end", "content": "error"}
-    # Exactly one INSERT — the user turn before streaming. The truncated
-    # assistant text must NOT have been persisted.
-    assert pool.conn.executed == [
-        (INSERT_SQL, {"thread_id": "t-error", "role": "user", "content": "trigger crash"}),
+    assert frames == [
+        {"type": "token", "content": "partial "},
+        {"type": "end", "content": "error"},
     ]
+
+
+def test_chat_stream_llm_rejection_explains_itself(
+    attach_agent: Callable[[Any], None],
+) -> None:
+    """An Anthropic API rejection (e.g. workspace spend limit) yields a readable token."""
+    request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+    rejection = anthropic.BadRequestError(
+        "workspace usage limit reached",
+        response=httpx.Response(400, request=request),
+        body=None,
+    )
+    attach_agent(FailingAgent(error=rejection))
+
+    client = TestClient(app)
+    response = client.post(
+        "/api/v1/chat/stream",
+        json={"thread_id": "t-limit", "message": "status?"},
+    )
+
+    assert response.status_code == 200
+    frames = _parse_sse(response.text)
+    assert frames[-1] == {"type": "end", "content": "error"}
+    assert frames[-2]["type"] == "token"
+    assert "unavailable" in frames[-2]["content"]

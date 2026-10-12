@@ -17,12 +17,6 @@ build/
 .superpowers/
 .vscode/
 
-# dbt
-dbt/target/
-dbt/dbt_packages/
-dbt/logs/
-dbt/.user.yml
-
 # Next.js
 web/.next/
 web/out/
@@ -47,3 +41,6 @@ mobile-700.png
 post-fix-desktop.png
 snapshot-*.md
 
+
+# Vercel CLI link + local build output
+.vercel/

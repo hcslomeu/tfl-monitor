@@ -1,6 +1,6 @@
 # ADR 013: Replace Docling with PyMuPDF for RAG PDF parsing
 
-- Status: Accepted
+- Status: Superseded by ADR 015 (2026-10-12): RAG and PDF ingestion were removed
 - Date: 2026-05-28
 
 ## Context

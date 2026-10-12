@@ -3,10 +3,8 @@
 Reads ``LOGFIRE_TOKEN`` from the environment. If missing, Logfire runs in
 no-op mode so local development and tests do not need credentials.
 
-Outbound LLM/agent HTTP visibility lives in LangSmith (see ``agent/``);
-psycopg per-query spans were removed because ``instrument_fastapi`` already
-surfaces per-endpoint timing and per-query spans dominate the free-tier
-ingest volume.
+Outbound LLM/agent visibility lives in LangSmith (see ``agent/``);
+``instrument_fastapi`` surfaces per-endpoint timing here.
 """
 
 from __future__ import annotations

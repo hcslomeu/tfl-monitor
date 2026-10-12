@@ -6,8 +6,11 @@ info:
     Public HTTP surface for the tfl-monitor platform.
 
     - Live line status and disruptions are read through to the TfL Unified
-      API on demand (ADR 014 — no warehouse history).
-    - Conversational endpoints route to a LangGraph agent with live TfL and RAG tools.
+      API on demand (ADR 014 — no warehouse history) and are CDN-cacheable
+      for 30 seconds.
+    - The chat endpoint routes to a LangGraph agent with live TfL tools.
+      The API is stateless (ADR 015): conversation memory is in-process
+      only and nothing is persisted.
 
     CORS allowlist (production) covers the dashboard origins only
     (`https://tfl-monitor.vercel.app`, `http://localhost:3000`). Never `*`.
@@ -16,7 +19,7 @@ info:
 servers:
   - url: http://localhost:8000
     description: Local development
-  - url: https://api.tfl-monitor.example
+  - url: https://tfl-monitor-api.humbertolomeu.com
     description: Production
 
 tags:
@@ -201,37 +204,6 @@ paths:
         "500":
           $ref: "#/components/responses/Problem"
 
-  /api/v1/chat/{thread_id}/history:
-    get:
-      tags: [chat]
-      operationId: get_chat_history
-      summary: Retrieve messages for an existing chat thread
-      parameters:
-        - in: path
-          name: thread_id
-          required: true
-          schema: { type: string }
-      responses:
-        "200":
-          description: Chat history
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/ChatMessage"
-              example:
-                - role: user
-                  content: "Is the Piccadilly line running normally right now?"
-                  created_at: "2026-04-20T14:12:00Z"
-                - role: assistant
-                  content: "Yes — the Piccadilly line is reporting Good Service at the moment."
-                  created_at: "2026-04-20T14:12:04Z"
-        "404":
-          $ref: "#/components/responses/Problem"
-        "500":
-          $ref: "#/components/responses/Problem"
-
 components:
   schemas:
     HealthStatus:
@@ -330,16 +302,6 @@ components:
       properties:
         thread_id: { type: string }
         message: { type: string, minLength: 1, maxLength: 4000 }
-
-    ChatMessage:
-      type: object
-      required: [role, content, created_at]
-      properties:
-        role:
-          type: string
-          enum: [user, assistant, system]
-        content: { type: string }
-        created_at: { type: string, format: date-time }
 
     JourneyLeg:
       type: object

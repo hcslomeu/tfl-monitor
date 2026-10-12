@@ -3,11 +3,11 @@
 These models validate the JSON we receive from
 ``https://api.tfl.gov.uk`` *before* normalisation. They intentionally
 mirror the TfL-side camelCase shape and cover only the fields the
-ingestion layer (TM-B*) consumes; every other attribute in the payload
-is discarded via ``extra="ignore"``.
+TfL client consumes; every other attribute in the payload is discarded
+via ``extra="ignore"``.
 
-Normalisation from these shapes into the tier-2 Kafka events defined in
-:mod:`contracts.schemas` is the responsibility of the ingestion client.
+Normalisation from these shapes into the payloads served by the API is
+the responsibility of :mod:`ingestion.tfl_client.normalise`.
 """
 
 from __future__ import annotations

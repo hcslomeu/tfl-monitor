@@ -1,92 +1,48 @@
 # src/api/agent/
 
-The LangGraph agent — `create_react_agent` over four SQL tools (plus the
-pgvector RAG tool when reachable), a Pydantic AI Haiku normaliser for
-`LineId`, an SSE projection for streaming, and a history adapter that
-persists chat turns into `analytics.chat_messages`.
+The LangGraph chat agent: `create_react_agent` over four live TfL tools,
+Anthropic Claude as the model, and an SSE projection for streaming.
 
 ## Layout
 
 ```text
 src/api/agent/
 ├─ __init__.py
-├─ graph.py          # compile_agent() — None when no LLM backend; RAG optional
-├─ tools.py          # 4 SQL tools (+ search_tfl_docs when a retriever is given)
-├─ rag.py            # RAG tool — LlamaIndex retriever over pgvector
-├─ extraction.py     # Pydantic AI Haiku → LineId
+├─ graph.py          # compile_agent(): None when ANTHROPIC_API_KEY is unset
+├─ tools.py          # query_tube_status, query_recent_disruptions,
+│                    # plan_journey_tool, get_arrivals_tool
 ├─ prompts.py        # System prompt + tool instructions
-├─ streaming.py      # LangGraph stream → SSE Frame projector
-└─ history.py        # analytics.chat_messages reader/writer
+└─ streaming.py      # LangGraph stream → SSE frame projector
 ```
 
-## Compilation
+## Model
 
-```python
-def compile_agent(*, pool) -> CompiledGraph | None:
-    chat_model = _build_chat_model()      # Bedrock Sonnet, else Anthropic; None if neither
-    if chat_model is None:
-        return None
-    retriever = _build_retriever_or_none()  # pgvector index, or None when no DSN
-    tools = make_tools(pool=pool, retriever=retriever)
-    return create_react_agent(chat_model, tools, prompt=render(), checkpointer=InMemorySaver())
-```
+`ChatAnthropic` against the Anthropic API direct (ADR 015). The model id
+comes from `CHAT_MODEL` (default `claude-haiku-5-5`) with `effort: low`, a
+4096-token response cap, and automatic prompt caching. Spend is capped by
+the Anthropic Console workspace that issued the key; when Anthropic rejects
+a call, `/chat/stream` emits a readable `token` frame followed by
+`end: "error"`. A LangGraph `recursion_limit` of 12 bounds tool loops.
 
-`compile_agent` returns `None` only when no LLM backend is configured
-(neither `BEDROCK_REGION` nor `ANTHROPIC_API_KEY`), so the FastAPI lifespan
-caches `None` on `app.state.agent` and `/chat/stream` 503s gracefully. The
-RAG tool is **optional**: with no Postgres DSN the agent still serves the
-four SQL tools; an unreachable pgvector store degrades to zero snippets
-rather than failing the request.
+## Frames
 
-## Streaming
+`{type, content}` is the stable contract with the frontend:
 
-```python
-async def project(stream: AsyncIterator[tuple[str, Any]]) -> AsyncIterator[Frame]:
-    async for kind, payload in stream:
-        if kind == "messages":
-            yield Frame(type="token", content=payload.content)
-        elif kind == "updates":
-            for tool_name in _tool_calls_from(payload):
-                yield Frame(type="tool", content=tool_name)
-    yield Frame(type="end", content="ok")
-```
+| `type` | `content` |
+|--------|-----------|
+| `token` | streamed assistant text |
+| `tool` | name of the tool just called |
+| `journey` / `arrivals` | JSON-encoded card view (ADR 011) |
+| `end` | `""` on success, `"error"` on failure |
 
-`Frame` is the **stable contract** with the frontend:
-`{type: "token" | "tool" | "end", content: str}`. Replacing LangGraph would
-not change a single line in the web client.
+## Memory
 
-## Persistence
-
-Chat turns land in `analytics.chat_messages` (DDL in
-`contracts/sql/004_chat.sql`):
-
-| Step | When |
-|------|------|
-| Insert user turn | Before the first frame is sent — a connection drop never loses the question |
-| Insert assistant turn | On stream end with the concatenated tokens |
-
-The `/chat/{thread_id}/history` endpoint replays the table ordered by
-`(thread_id, created_at ASC)`.
+Conversation memory is the in-process `InMemorySaver`, keyed by
+`thread_id`. Nothing is persisted; a cold start or another function
+instance starts the thread fresh.
 
 ## Tests
 
-| Module | Count | What it covers |
-|--------|-------|----------------|
-| `extraction.py` | 4 | Canonical / informal / ambiguous / empty `LineId` |
-| `tools.py` | 8 | Happy path, empty, parameter validation, db absent |
-| `rag.py` | 5 | No-filter, doc_id metadata filter, page sentinel, score sort, store-failure |
-| `graph.py` | 7 | No-backend, smoke invoke, retriever-on/off, model selection |
-| Route smokes | 9 | SSE happy / 503 / mid-stream `end:error`; history happy / empty / 503 |
-
-All run with fakes for Anthropic / Bedrock / pgvector — no live LLM cost in
-unit tests. Integration smokes are gated on a live LLM backend plus
-`DATABASE_URL`.
-
-## LLM backend
-
-Bedrock is the production backend: set `BEDROCK_REGION` +
-`BEDROCK_SONNET_MODEL_ID` and `ChatBedrockConverse` is selected, with boto3
-reading the standard credential chain. Leave `BEDROCK_REGION` unset and
-provide `ANTHROPIC_API_KEY` for the local-dev `ChatAnthropic` fallback. RAG
-embeddings use Bedrock Titan v2 over the same credentials, and the vectors
-live in pgvector.
+Unit tests use a fake chat model and fake TfL clients, so they never spend
+LLM budget. `tests/integration/test_chat_stream.py` hits the live stack and
+is gated on `ANTHROPIC_API_KEY` + `TFL_APP_KEY` (`-m "integration and slow"`).

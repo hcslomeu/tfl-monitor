@@ -47,6 +47,7 @@ def test_returns_one_row_per_line(
     response = TestClient(app).get("/api/v1/status/live")
 
     assert response.status_code == 200
+    assert response.headers["cache-control"] == "public, s-maxage=30, stale-while-revalidate=30"
     body = response.json()
     assert {item["line_id"] for item in body} == {"piccadilly", "victoria"}
     pic = next(item for item in body if item["line_id"] == "piccadilly")
@@ -163,3 +164,18 @@ def test_tfl_upstream_failure_returns_502(
     body = response.json()
     assert body["status"] == 502
     assert body["title"] == "Bad Gateway"
+
+
+def test_cached_response_varies_by_origin(
+    fake_tfl_client_factory: Callable[..., Any], attach_tfl_client: Callable[[Any], None]
+) -> None:
+    """The CDN-cached response echoes one CORS origin, so it must vary by Origin."""
+    attach_tfl_client(fake_tfl_client_factory(line_statuses=[_line("victoria")]))
+
+    response = TestClient(app).get(
+        "/api/v1/status/live", headers={"Origin": "https://tfl-monitor.humbertolomeu.com"}
+    )
+
+    assert response.status_code == 200
+    assert "s-maxage" in response.headers["cache-control"]
+    assert "Origin" in response.headers["vary"]

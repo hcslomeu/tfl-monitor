@@ -9,34 +9,12 @@ on:
 jobs:
   lint:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: postgres
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd="pg_isready -U postgres"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=5
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
       - run: uv sync --frozen
-      - name: Verify dbt sources mirror the contract
-        run: diff contracts/dbt_sources.yml dbt/sources/tfl.yml
       - run: uv run task lint
       - run: uv run bandit -r src contracts scripts --severity-level high
-      - run: uv run task dbt-parse
-        env:
-          POSTGRES_HOST: localhost
-          POSTGRES_PORT: "5432"
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: postgres
 
   test:
     runs-on: ubuntu-latest

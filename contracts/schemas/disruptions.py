@@ -1,13 +1,12 @@
-"""Disruption event contract."""
+"""Normalised disruption contract."""
 
 from __future__ import annotations
 
 from datetime import datetime
-from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from contracts.schemas.common import DisruptionCategory, Event
+from contracts.schemas.common import DisruptionCategory
 
 
 class DisruptionPayload(BaseModel):
@@ -32,9 +31,3 @@ class DisruptionPayload(BaseModel):
     severity: int = Field(..., ge=0, description="Disruption severity scale")
     created: datetime = Field(..., description="When the disruption was first published (UTC)")
     last_update: datetime = Field(..., description="Last update timestamp (UTC)")
-
-
-class DisruptionEvent(Event[DisruptionPayload]):
-    """Kafka event carrying a disruption record."""
-
-    TOPIC_NAME: ClassVar[str] = "disruptions"

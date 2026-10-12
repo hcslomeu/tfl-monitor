@@ -1,9 +1,9 @@
 """Regression: importing ``api.main`` must not eagerly load heavy deps.
 
-Cold-start on the Lightsail box is dominated by the transitive import
-graph of ``langchain_anthropic``, ``llama_index``, and ``pydantic_ai``.
-Those imports must be deferred until the first chat request actually
-needs them so ``/health`` and the SQL endpoints stay responsive. The
+Serverless cold start is dominated by the transitive import graph of
+``langchain_anthropic`` and ``langgraph``. Those imports must be deferred
+until the lifespan compiles the agent so the module import itself stays
+cheap. The
 heavyweight transitive deps that earlier RAG stacks pulled (``torch``,
 ``transformers``, ``cv2``, ``pinecone``) must never re-enter the eager
 import graph either.

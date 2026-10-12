@@ -9,16 +9,12 @@ kicks in at the package boundary, not in throwaway helpers.
 | Script | Purpose |
 |--------|---------|
 | [`fetch_tfl_samples.py`](./fetch_tfl_samples.py) | Pulls live TfL Unified API responses into `tests/fixtures/tfl/`. Re-run when TfL changes a schema. |
-| [`seed_fixtures.py`](./seed_fixtures.py) | Loads the captured fixtures into the local Postgres `raw.*` tables so the dashboard has data without running ingestion. |
 
-## When to re-run them
+## When to re-run it
 
 ```bash
 # After TfL change a response shape (rare):
 uv run python scripts/fetch_tfl_samples.py
-
-# After `make up` to populate the dashboard locally:
-make seed     # wraps `uv run python scripts/seed_fixtures.py`
 ```
 
 `fetch_tfl_samples.py` reads the TfL `app_key` from `.env`. The captured
