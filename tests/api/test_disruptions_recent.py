@@ -58,6 +58,7 @@ def test_happy_path_default_limit_and_modes(
 
     assert response.status_code == 200
     assert response.headers["cache-control"] == "public, s-maxage=30, stale-while-revalidate=30"
+    assert response.headers["vary"] == "Origin"
     body = response.json()
     assert {item["affected_routes"][0] for item in body} == {"piccadilly", "victoria"}
     assert client.disruption_calls == [DEFAULT_STATUS_MODES]
@@ -92,13 +93,18 @@ def test_custom_limit_truncates_results(
     attach_tfl_client: Callable[[Any], None],
 ) -> None:
     client = fake_tfl_client_factory(
-        disruptions=[_disrupted_line("piccadilly"), _disrupted_line("victoria")]
+        disruptions=[
+            _disrupted_line("piccadilly", affected_stops=["940GZZLUKSX"]),
+            _disrupted_line("victoria", affected_stops=["940GZZLUOXC"]),
+        ]
     )
     attach_tfl_client(client)
 
     response = TestClient(app).get("/api/v1/disruptions/recent", params={"limit": 1})
 
     assert len(response.json()) == 1
+    # Disruptions past ``limit`` are dropped before station enrichment.
+    assert client.stop_point_calls == ["940GZZLUKSX"]
 
 
 def test_invalid_mode_returns_422(

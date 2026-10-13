@@ -48,6 +48,12 @@ _RAIL_MODE_PRIORITY: Final = ("tube", "elizabeth-line", "dlr", "overground", "na
 _TFL_LOOKUP_CONCURRENCY: Final = 4
 _TFL_SEMAPHORE: asyncio.Semaphore | None = None
 
+# Wall-clock budget for one batch of uncached NaPTAN lookups. Names only
+# decorate disruption cards, so ids still unresolved at the deadline come
+# back as ``None`` (uncached) instead of letting a slow ``/StopPoint``
+# (30 s timeout x 3 attempts per call) run past the function time limit.
+_LOOKUP_DEADLINE_SECONDS: Final = 10.0
+
 
 def _cache_clear() -> None:
     """Reset the module-level caches and semaphore. Used by tests only."""
@@ -114,7 +120,8 @@ async def _lookup(
     Caches successful lookups and confirmed 404 misses; leaves transient
     failures (timeouts, 5xx, network errors) uncached so a future request
     retries them instead of surfacing ``Unknown`` for the rest of the
-    process lifetime.
+    process lifetime. Lookups still running after
+    ``_LOOKUP_DEADLINE_SECONDS`` are cancelled and stay in ``pending``.
     """
     semaphore = _get_tfl_semaphore()
 
@@ -132,8 +139,15 @@ async def _lookup(
                 return nid, None, False
             return nid, stop_point.common_name, True
 
-    pairs = await asyncio.gather(*(_resolve_one(nid) for nid in pending))
-    for nid, name, is_definitive in pairs:
+    tasks = [asyncio.create_task(_resolve_one(nid)) for nid in pending]
+    done, unfinished = await asyncio.wait(tasks, timeout=_LOOKUP_DEADLINE_SECONDS)
+    if unfinished:
+        for task in unfinished:
+            task.cancel()
+        await asyncio.gather(*unfinished, return_exceptions=True)
+        logfire.warning("stations.lookup_deadline_exceeded", unresolved=len(unfinished))
+    for task in done:
+        nid, name, is_definitive = task.result()
         result[nid] = name
         if is_definitive:
             _NAPTAN_CACHE[nid] = name

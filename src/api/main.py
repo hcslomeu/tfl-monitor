@@ -35,6 +35,10 @@ from ingestion.tfl_client.client import TflClient
 
 # Cached GET responses are shared by every dashboard viewer: the CDN
 # collapses concurrent polls into at most one function run per window.
+# ``Vary: Origin`` is set on every cached response, not only when
+# CORSMiddleware echoes an origin: otherwise a request without ``Origin``
+# (curl, an uptime probe) could seed the shared cache with a response that
+# lacks ``Access-Control-Allow-Origin`` and break the cross-origin dashboard.
 _LIVE_CACHE_CONTROL = "public, s-maxage=30, stale-while-revalidate=30"
 
 # LangGraph super-step ceiling per chat turn (roughly five tool calls).
@@ -153,6 +157,7 @@ async def get_status_live(
         logfire.exception("get_status_live_failed")
         return _problem(502, "Bad Gateway", "Failed to fetch live status from TfL")
     response.headers["Cache-Control"] = _LIVE_CACHE_CONTROL
+    response.headers["Vary"] = "Origin"
     return rows
 
 
@@ -176,6 +181,7 @@ async def get_recent_disruptions(
         logfire.exception("get_recent_disruptions_failed")
         return _problem(502, "Bad Gateway", "Failed to fetch recent disruptions from TfL")
     response.headers["Cache-Control"] = _LIVE_CACHE_CONTROL
+    response.headers["Vary"] = "Origin"
     return rows
 
 

@@ -29,6 +29,7 @@ class FakeTflClient:
     fail: bool = False
     status_calls: list[tuple[str, ...]] = field(default_factory=list)
     disruption_calls: list[tuple[str, ...]] = field(default_factory=list)
+    stop_point_calls: list[str] = field(default_factory=list)
 
     async def fetch_line_statuses(self, modes: Any) -> list[Any]:
         self.status_calls.append(tuple(modes))
@@ -45,6 +46,7 @@ class FakeTflClient:
     async def fetch_stop_point(self, naptan_id: str) -> Any:
         from ingestion.tfl_client.retry import TflClientError
 
+        self.stop_point_calls.append(naptan_id)
         if naptan_id in self.stop_names:
             return SimpleNamespace(common_name=self.stop_names[naptan_id])
         raise TflClientError(f"no stop point for {naptan_id}")

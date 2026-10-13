@@ -101,7 +101,8 @@ async def fetch_recent_disruptions(
     """
     query_modes: Sequence[str] = (mode,) if mode is not None else modes
     lines = await tfl_client.fetch_line_disruptions(query_modes)
-    payloads = disruption_payloads(lines)
+    # Cut to ``limit`` before enrichment so dropped disruptions cost no lookups.
+    payloads = disruption_payloads(lines)[:limit]
 
     all_naptan_ids = {nid for payload in payloads for nid in payload.affected_stops}
     name_by_naptan = await resolve_naptans(
@@ -128,7 +129,7 @@ async def fetch_recent_disruptions(
         )
         for payload in payloads
     ]
-    return results[:limit]
+    return results
 
 
 def _primary_status(statuses: list[TflLineStatusItem]) -> TflLineStatusItem | None:

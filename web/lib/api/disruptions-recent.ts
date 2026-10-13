@@ -49,7 +49,8 @@ export async function getRecentDisruptions(
 		return [toMockDisruption(new Date())];
 	}
 	return apiFetch<Disruption[]>("/api/v1/disruptions/recent", {
-		cache: "no-store",
+		// No `cache` override: `no-store` makes the browser send `Cache-Control:
+		// no-cache`, which can defeat the CDN's shared 30-second cache (ADR 015).
 		signal,
 	});
 }

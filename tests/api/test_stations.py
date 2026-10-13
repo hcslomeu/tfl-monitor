@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
 
 import httpx
@@ -184,6 +185,41 @@ async def test_transient_failures_are_not_cached() -> None:
     assert first == {"490FLAKY": None}
     assert second == {"490FLAKY": "Recovered Station"}
     assert fake_client.calls == ["490FLAKY", "490FLAKY"]
+
+
+@pytest.mark.asyncio
+async def test_lookups_past_the_deadline_return_none_uncached(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A hung ``/StopPoint`` call is cut at the batch deadline: fast ids
+    resolve, the slow id maps to ``None`` and is retried next time."""
+    monkeypatch.setattr(stations, "_LOOKUP_DEADLINE_SECONDS", 0.05)
+
+    @dataclass
+    class HangingClient:
+        hang_for: set[str]
+        calls: list[str] = field(default_factory=list)
+
+        async def fetch_stop_point(self, naptan_id: str) -> TflStopPoint:
+            self.calls.append(naptan_id)
+            if naptan_id in self.hang_for:
+                await asyncio.sleep(60)
+            return TflStopPoint(naptan_id=naptan_id, common_name=f"Name {naptan_id}")
+
+    slow_client = HangingClient(hang_for={"490SLOW"})
+    first = await stations.resolve_naptans(
+        tfl_client=slow_client,  # type: ignore[arg-type]
+        naptan_ids=["490FAST", "490SLOW"],
+    )
+    assert first == {"490FAST": "Name 490FAST", "490SLOW": None}
+
+    recovered_client = HangingClient(hang_for=set())
+    second = await stations.resolve_naptans(
+        tfl_client=recovered_client,  # type: ignore[arg-type]
+        naptan_ids=["490FAST", "490SLOW"],
+    )
+    assert second == {"490FAST": "Name 490FAST", "490SLOW": "Name 490SLOW"}
+    assert recovered_client.calls == ["490SLOW"]
 
 
 @pytest.mark.asyncio

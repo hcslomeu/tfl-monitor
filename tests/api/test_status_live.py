@@ -48,6 +48,7 @@ def test_returns_one_row_per_line(
 
     assert response.status_code == 200
     assert response.headers["cache-control"] == "public, s-maxage=30, stale-while-revalidate=30"
+    assert response.headers["vary"] == "Origin"
     body = response.json()
     assert {item["line_id"] for item in body} == {"piccadilly", "victoria"}
     pic = next(item for item in body if item["line_id"] == "piccadilly")

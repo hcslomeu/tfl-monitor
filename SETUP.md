@@ -192,7 +192,7 @@ certificates.
 
    ```bash
    curl -fsS https://tfl-monitor-api.humbertolomeu.com/health
-   curl -sI https://tfl-monitor-api.humbertolomeu.com/api/v1/status/live | grep -i -E "cache-control|x-vercel-cache"
+   curl -sS -D - -o /dev/null https://tfl-monitor-api.humbertolomeu.com/api/v1/status/live | grep -i -E "cache-control|x-vercel-cache"
    ```
 
 ### Rollback

@@ -113,7 +113,7 @@ then `end: "error"`. The live dashboard keeps working.
 | Action | How |
 |--------|-----|
 | Public smoke | `curl -fsS https://tfl-monitor-api.humbertolomeu.com/health` |
-| Check CDN caching | `curl -sI https://tfl-monitor-api.humbertolomeu.com/api/v1/status/live` and look for `x-vercel-cache` |
+| Check CDN caching | `curl -sS -D - -o /dev/null https://tfl-monitor-api.humbertolomeu.com/api/v1/status/live` (a GET; the route answers HEAD with 405) and look for `x-vercel-cache` |
 | Function logs | Vercel dashboard, `tfl-monitor-api` project, Logs tab |
 | Run the API locally | `make api` (uvicorn with `.env` loaded) |
 
