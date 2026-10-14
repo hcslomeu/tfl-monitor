@@ -1,118 +1,35 @@
 """Shared pytest fixtures for the API unit tests.
 
-Provides a minimal in-memory stand-in for ``psycopg_pool.AsyncConnectionPool``
-so handlers can be exercised without a live Postgres. The fakes record every
-``(sql, params)`` pair so tests can assert on the query the handler issued
-in addition to the JSON response shape.
+Provides in-memory stand-ins for the TfL client and the compiled agent so
+handlers can be exercised without network access or an LLM.
 """
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Iterator
-from contextlib import asynccontextmanager
+from collections.abc import Iterator
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
 
 @dataclass
-class FakeAsyncCursor:
-    """Async cursor that returns canned rows and records executed SQL."""
-
-    rows: list[Any]
-    executed: list[tuple[str, dict[str, Any] | None]]
-
-    async def __aenter__(self) -> FakeAsyncCursor:
-        return self
-
-    async def __aexit__(self, *_args: object) -> None:
-        return None
-
-    async def execute(self, sql: str, params: dict[str, Any] | None = None) -> None:
-        self.executed.append((sql, params))
-
-    async def fetchall(self) -> list[Any]:
-        return list(self.rows)
-
-    async def fetchone(self) -> Any | None:
-        return self.rows[0] if self.rows else None
-
-
-@dataclass
-class FakeAsyncConnection:
-    """Async connection that hands out cursors backed by primed batches.
-
-    ``batches`` is consumed in order: each ``cursor()`` call pops the next
-    batch of rows. Tests prime as many batches as the handler is expected
-    to issue queries.
-    """
-
-    batches: list[list[Any]]
-    executed: list[tuple[str, dict[str, Any] | None]] = field(default_factory=list)
-
-    def cursor(self, *, row_factory: Any = None) -> FakeAsyncCursor:
-        rows = self.batches.pop(0) if self.batches else []
-        return FakeAsyncCursor(rows=rows, executed=self.executed)
-
-
-@dataclass
-class FakeAsyncPool:
-    """Stand-in for ``AsyncConnectionPool`` with a single recorded connection."""
-
-    conn: FakeAsyncConnection
-
-    @asynccontextmanager
-    async def connection(self) -> AsyncIterator[FakeAsyncConnection]:
-        yield self.conn
-
-    async def open(self) -> None:
-        return None
-
-    async def close(self) -> None:
-        return None
-
-
-@pytest.fixture
-def fake_pool_factory() -> Any:
-    """Return a callable that builds a ``FakeAsyncPool`` from row batches."""
-
-    def _factory(*batches: list[Any]) -> FakeAsyncPool:
-        return FakeAsyncPool(conn=FakeAsyncConnection(batches=list(batches)))
-
-    return _factory
-
-
-@pytest.fixture
-def attach_pool() -> Iterator[Any]:
-    """Attach a fake pool to ``app.state.db_pool`` and restore on teardown."""
-    from api.main import app
-
-    original = app.state.db_pool
-
-    def _attach(pool: Any) -> None:
-        app.state.db_pool = pool
-
-    try:
-        yield _attach
-    finally:
-        app.state.db_pool = original
-
-
-@dataclass
 class FakeTflClient:
     """Stand-in for ``TflClient`` returning canned tier-1 line responses.
 
-    ``fetch_stop_point`` always raises ``TflClientError`` so the station
-    resolver's TfL fallback resolves to ``None`` (unit tests resolve
-    matched NaPTANs through the primed dim_stations pool batch instead).
+    ``fetch_stop_point`` returns a stop point named from ``stop_names``
+    and raises ``TflClientError`` for any other NaPTAN, so unmatched
+    codes resolve to ``None``.
     """
 
     line_statuses: list[Any] = field(default_factory=list)
     disruptions: list[Any] = field(default_factory=list)
+    stop_names: dict[str, str] = field(default_factory=dict)
     fail: bool = False
     status_calls: list[tuple[str, ...]] = field(default_factory=list)
     disruption_calls: list[tuple[str, ...]] = field(default_factory=list)
+    stop_point_calls: list[str] = field(default_factory=list)
 
     async def fetch_line_statuses(self, modes: Any) -> list[Any]:
         self.status_calls.append(tuple(modes))
@@ -129,6 +46,9 @@ class FakeTflClient:
     async def fetch_stop_point(self, naptan_id: str) -> Any:
         from ingestion.tfl_client.retry import TflClientError
 
+        self.stop_point_calls.append(naptan_id)
+        if naptan_id in self.stop_names:
+            return SimpleNamespace(common_name=self.stop_names[naptan_id])
         raise TflClientError(f"no stop point for {naptan_id}")
 
 
@@ -140,11 +60,13 @@ def fake_tfl_client_factory() -> Any:
         *,
         line_statuses: list[Any] | None = None,
         disruptions: list[Any] | None = None,
+        stop_names: dict[str, str] | None = None,
         fail: bool = False,
     ) -> FakeTflClient:
         return FakeTflClient(
             line_statuses=line_statuses or [],
             disruptions=disruptions or [],
+            stop_names=stop_names or {},
             fail=fail,
         )
 

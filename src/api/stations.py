@@ -1,11 +1,11 @@
-"""Hybrid NaPTAN ↔ station-name resolver.
+"""NaPTAN ↔ station-name resolver backed by the TfL ``/StopPoint`` API.
 
-Fast path queries ``analytics.dim_stations``; on miss, falls back to
-``/StopPoint/{naptan_id}`` via :class:`TflClient`. A process-lifetime
-in-memory cache absorbs repeated lookups across requests — station
-names are stable, so a stale entry only matters during a TfL rename
-(rare). ``None`` is cached for confirmed-miss codes (e.g. deprecated
-NaPTANs) so unresolved codes don't trigger a TfL call per request.
+Reverse lookups hit ``/StopPoint/{naptan_id}`` via :class:`TflClient`. A
+process-lifetime in-memory cache absorbs repeated lookups across
+requests — station names are stable, so a stale entry only matters
+during a TfL rename (rare). ``None`` is cached for confirmed-miss codes
+(e.g. deprecated NaPTANs) so unresolved codes don't trigger a TfL call
+per request.
 """
 
 from __future__ import annotations
@@ -16,15 +16,13 @@ from typing import Final
 
 import httpx
 import logfire
-from psycopg.rows import dict_row
-from psycopg_pool import AsyncConnectionPool
 
 from contracts.schemas.tfl_api import TflStopPoint
 from ingestion.tfl_client.client import TflClient, TflClientError
 
 # Process-lifetime cache mapping NaPTAN → resolved name. ``None`` value
 # means the resolver definitively confirmed the code is unknown
-# (warehouse miss + TfL 404). Transient failures (timeouts, 5xx) are
+# (TfL 404). Transient failures (timeouts, 5xx) are
 # *not* cached so the next request retries the lookup.
 _NAPTAN_CACHE: dict[str, str | None] = {}
 
@@ -44,17 +42,17 @@ _HUB_PREFIX: Final = "HUB"
 _RAIL_MODE_PRIORITY: Final = ("tube", "elizabeth-line", "dlr", "overground", "national-rail")
 
 # Cap concurrent in-flight TfL lookups across all requests when several
-# NaPTANs miss the seed at the same time. The free-tier TfL rate limit
+# NaPTANs miss the cache at the same time. The free-tier TfL rate limit
 # is 500 req/min per app-key; sharing one semaphore per process keeps
 # burst concurrency bounded even under simultaneous requests.
 _TFL_LOOKUP_CONCURRENCY: Final = 4
 _TFL_SEMAPHORE: asyncio.Semaphore | None = None
 
-_BATCH_LOOKUP_SQL: Final = """
-SELECT naptan_id, name
-FROM analytics.dim_stations
-WHERE naptan_id = ANY(%(naptan_ids)s::text[])
-"""
+# Wall-clock budget for one batch of uncached NaPTAN lookups. Names only
+# decorate disruption cards, so ids still unresolved at the deadline come
+# back as ``None`` (uncached) instead of letting a slow ``/StopPoint``
+# (30 s timeout x 3 attempts per call) run past the function time limit.
+_LOOKUP_DEADLINE_SECONDS: Final = 10.0
 
 
 def _cache_clear() -> None:
@@ -75,20 +73,17 @@ def _get_tfl_semaphore() -> asyncio.Semaphore:
 
 async def resolve_naptans(
     *,
-    pool: AsyncConnectionPool,
     tfl_client: TflClient | None,
     naptan_ids: Iterable[str],
 ) -> dict[str, str | None]:
     """Resolve a batch of NaPTAN codes to station names.
 
     Returns a dict keyed by ``naptan_id`` with either the resolved
-    human-readable name or ``None`` when both the seed and the TfL
-    fallback failed. Missing NaPTANs (empty / falsy input) are
-    silently dropped from the result.
+    human-readable name or ``None`` when the TfL lookup failed. Missing
+    NaPTANs (empty / falsy input) are silently dropped from the result.
 
     Args:
-        pool: Open ``AsyncConnectionPool`` against the warehouse.
-        tfl_client: Optional ``TflClient``. When ``None`` the fallback
+        tfl_client: Optional ``TflClient``. When ``None`` the lookup
             is skipped and unresolved NaPTANs map to ``None`` without
             being cached (so a future call with a wired client retries).
         naptan_ids: Iterable of NaPTAN codes to resolve. Duplicates are
@@ -106,11 +101,8 @@ async def resolve_naptans(
         else:
             pending.add(nid)
 
-    if pending:
-        await _fast_path(pool, pending, result)
-
     if pending and tfl_client is not None:
-        await _fallback_path(tfl_client, pending, result)
+        await _lookup(tfl_client, pending, result)
 
     for nid in pending:
         result[nid] = None
@@ -118,29 +110,7 @@ async def resolve_naptans(
     return result
 
 
-async def _fast_path(
-    pool: AsyncConnectionPool,
-    pending: set[str],
-    result: dict[str, str | None],
-) -> None:
-    pending_list = list(pending)
-    try:
-        async with pool.connection() as conn, conn.cursor(row_factory=dict_row) as cur:
-            await cur.execute(_BATCH_LOOKUP_SQL, {"naptan_ids": pending_list})
-            rows = await cur.fetchall()
-    except Exception:
-        logfire.exception("stations.dim_lookup_failed", naptan_count=len(pending_list))
-        return
-
-    for row in rows:
-        nid = str(row["naptan_id"])
-        name = str(row["name"])
-        result[nid] = name
-        _NAPTAN_CACHE[nid] = name
-        pending.discard(nid)
-
-
-async def _fallback_path(
+async def _lookup(
     tfl_client: TflClient,
     pending: set[str],
     result: dict[str, str | None],
@@ -150,7 +120,10 @@ async def _fallback_path(
     Caches successful lookups and confirmed 404 misses; leaves transient
     failures (timeouts, 5xx, network errors) uncached so a future request
     retries them instead of surfacing ``Unknown`` for the rest of the
-    process lifetime.
+    process lifetime. Lookups still running after
+    ``_LOOKUP_DEADLINE_SECONDS`` are cancelled and stay in ``pending``; if
+    the caller is cancelled, every lookup is cancelled before the
+    ``CancelledError`` propagates, so none outlives the request.
     """
     semaphore = _get_tfl_semaphore()
 
@@ -168,8 +141,20 @@ async def _fallback_path(
                 return nid, None, False
             return nid, stop_point.common_name, True
 
-    pairs = await asyncio.gather(*(_resolve_one(nid) for nid in pending))
-    for nid, name, is_definitive in pairs:
+    tasks = [asyncio.create_task(_resolve_one(nid)) for nid in pending]
+    try:
+        done, unfinished = await asyncio.wait(tasks, timeout=_LOOKUP_DEADLINE_SECONDS)
+    finally:
+        # ``asyncio.wait`` does not cancel its tasks when the caller is
+        # cancelled; without this, orphaned lookups would keep semaphore
+        # slots (and TfL calls) busy for other requests.
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+    if unfinished:
+        logfire.warning("stations.lookup_deadline_exceeded", unresolved=len(unfinished))
+    for task in done:
+        nid, name, is_definitive = task.result()
         result[nid] = name
         if is_definitive:
             _NAPTAN_CACHE[nid] = name

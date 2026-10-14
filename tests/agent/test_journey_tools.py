@@ -91,19 +91,19 @@ def _stub_resolver(monkeypatch: pytest.MonkeyPatch, mapping: dict[str, str | Non
 
 
 def _tool(tfl_client: Any, name: str) -> Any:
-    tools = make_tools(pool=object(), tfl_client=tfl_client)  # type: ignore[arg-type]
+    tools = make_tools(tfl_client=tfl_client)
     return next(t for t in tools if t.name == name)
 
 
 def test_make_tools_omits_tfl_tools_without_client() -> None:
-    names = [t.name for t in make_tools(pool=object())]  # type: ignore[arg-type]
+    names = [t.name for t in make_tools(tfl_client=None)]
     assert "plan_journey_tool" not in names
     assert "get_arrivals_tool" not in names
 
 
 def test_make_tools_includes_tfl_tools_with_client() -> None:
     client = FakeTflClient()
-    names = [t.name for t in make_tools(pool=object(), tfl_client=client)]  # type: ignore[arg-type]
+    names = [t.name for t in make_tools(tfl_client=client)]  # type: ignore[arg-type]
     assert "plan_journey_tool" in names
     assert "get_arrivals_tool" in names
 

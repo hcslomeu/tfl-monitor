@@ -8,11 +8,10 @@ the app now reads TfL state live on demand via `src/api/live.py`.
 
 ```text
 src/ingestion/
-├─ observability.py    # Logfire span helpers (redacts app_key)
 └─ tfl_client/
    ├─ client.py        # async httpx client with hand-rolled retry
    ├─ retry.py         # 429/5xx/timeout backoff
-   └─ normalise.py     # tier-1 → tier-2 transformations
+   └─ normalise.py     # tier-1 → disruption payload normalisation
 ```
 
 ## TflClient
@@ -31,11 +30,7 @@ place.
 
 ## Observability
 
-`observability.py` redacts the `app_key` before any span is emitted. Sampling
-is the shared `SamplingOptions.level_or_duration` tail strategy from
-`src/common/sampling.py`: warn+ spans and traces longer than five seconds are
-kept at 100%, everything else falls back to `LOGFIRE_SAMPLE_RATE` (default
-`0.1`).
+`client.py` masks the `app_key` query parameter in every span it emits.
 
 ## Tests
 

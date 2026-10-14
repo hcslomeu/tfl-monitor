@@ -72,23 +72,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/chat/{thread_id}/history": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Retrieve messages for an existing chat thread */
-        get: operations["get_chat_history"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -143,13 +126,6 @@ export interface components {
         ChatRequest: {
             thread_id: string;
             message: string;
-        };
-        ChatMessage: {
-            /** @enum {string} */
-            role: "user" | "assistant" | "system";
-            content: string;
-            /** Format: date-time */
-            created_at: string;
         };
         /** @description One leg of a planned journey. */
         JourneyLeg: {
@@ -441,44 +417,6 @@ export interface operations {
                 };
             };
             400: components["responses"]["Problem"];
-            500: components["responses"]["Problem"];
-        };
-    };
-    get_chat_history: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                thread_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Chat history */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    /**
-                     * @example [
-                     *       {
-                     *         "role": "user",
-                     *         "content": "Is the Piccadilly line running normally right now?",
-                     *         "created_at": "2026-04-20T14:12:00Z"
-                     *       },
-                     *       {
-                     *         "role": "assistant",
-                     *         "content": "Yes — the Piccadilly line is reporting Good Service at the moment.",
-                     *         "created_at": "2026-04-20T14:12:04Z"
-                     *       }
-                     *     ]
-                     */
-                    "application/json": components["schemas"]["ChatMessage"][];
-                };
-            };
-            404: components["responses"]["Problem"];
             500: components["responses"]["Problem"];
         };
     };

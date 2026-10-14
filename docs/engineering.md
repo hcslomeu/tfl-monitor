@@ -14,10 +14,10 @@ quadrantChart
     quadrant-2 "Fragile but readable"
     quadrant-3 "Avoid"
     quadrant-4 "Over-engineered"
-    "1 pyproject + flat compose": [0.85, 0.25]
+    "1 pyproject + flat src": [0.85, 0.25]
     "Sub-packages with own toml": [0.20, 0.75]
-    "Single AbstractVectorStore": [0.30, 0.65]
-    "Plain pgvector client": [0.85, 0.30]
+    "AbstractLLMProvider for one model": [0.30, 0.65]
+    "Plain ChatAnthropic client": [0.85, 0.30]
     "Custom Typer CLI": [0.30, 0.55]
     "python -m module entry": [0.80, 0.25]
 ```
@@ -50,65 +50,59 @@ flowchart TB
       OAPI[openapi.yaml<br/>OpenAPI 3.1]
       T1[schemas/tfl_api.py<br/>tier-1 raw shapes]
       T2[schemas/*.py<br/>tier-2 typed models]
-      DDL[sql/00*.sql<br/>ref + analytics + chat]
     end
 
     OAPI -->|openapi-typescript| TS[web/lib/types.ts]
     OAPI -->|FastAPI route shapes| API[src/api]
     T1 -->|tfl_client normalises| ING[src/ingestion/tfl_client]
     T2 -->|FastAPI response| API
-    DDL -->|psql -f| PG[(Postgres)]
 ```
 
-CI enforces the source-of-truth via a bidirectional OpenAPI ↔ Python drift
-test — the emitted schema must equal the committed contract, both directions.
+CI keeps the contract honest in both directions: every FastAPI route must
+match an OpenAPI operation (and vice versa), and the TypeScript types
+regenerated from the contract must equal the committed file.
 
 ## Live proxy over a warehouse
 
 Hoarding TfL's feeds as warehouse history bought nothing but disk-full
-incidents — the free-tier database was bricked three times before ADR 014
+incidents: the free-tier database was bricked three times before ADR 014
 turned the app into a live proxy. The principle is YAGNI applied to data: TfL
 already exposes the live API, so reading through on demand is simpler, cheaper,
-and removes an entire failure class. A bounded-retention warehouse can return
-under a future ADR if analytics ever justify it.
+and removes an entire failure class.
 
-## dbt for the reference layer
+## Cut what has no reader
 
-```mermaid
-graph LR
-    script[scripts/build_stations_seed.py] --> seed[(tfl_stations seed)]
-    seed -->|dbt build| dim[analytics.dim_stations<br/>generic tests + docs]
-    dim --> resolver[NaPTAN → name resolver]
-```
-
-For one seed and one model, raw SQL would also work — until a second person
-reads the codebase. dbt buys us tests, lineage, and one-line documentation that
-ships with the code, plus a one-command rebuild from an empty database.
+ADR 015 applied the same test to what was left. Once the RAG layer was no
+longer wanted, Postgres held only a write-only chat log (already covered by
+LangSmith traces) and a station table that already had a live TfL fallback.
+Removing the database, dbt, pgvector, Bedrock, and the Lightsail box left a
+stateless function with nothing to operate. A store can return under a future
+ADR when a feature actually reads from it.
 
 ## Agent that does not hallucinate
 
 Two design choices keep the agent honest:
 
-1. **Every tool has typed Pydantic input/output.** The model cannot call a tool
-   with malformed arguments — a Pydantic AI Haiku normaliser canonicalises free
-   text (e.g. a line name) into a validated struct first.
-2. **Retrieval cites chunks.** The RAG tool returns pgvector chunks with their
-   `doc_id` and `page` so any answer is traceable to a paragraph in a public
-   document. LangSmith records the exact chunks that made it into the context.
+1. **Every tool has typed Pydantic input.** The model cannot call a tool with
+   malformed arguments, and free-text station names are resolved through TfL
+   `/StopPoint/Search` before any journey or arrivals call.
+2. **Every answer comes from a live tool call.** Status, disruptions, journeys,
+   and arrivals are fetched from TfL at question time; journey and arrivals
+   results render as structured cards straight from the tool output (ADR 011),
+   so the model does not restate them in prose.
 
-If the answer hallucinates, the trace shows where — and the next iteration
-prunes the bad retrieval, not "the LLM."
+If an answer is wrong, the LangSmith trace shows which tool ran with which
+arguments and what it returned.
 
 ## Observability split
 
 | Question | Tool |
 |----------|------|
 | How did the agent arrive at that answer? | LangSmith |
-| Which chunks made it into the prompt? | LangSmith |
+| Which tool ran, with which arguments? | LangSmith |
 | How many tokens did this conversation cost? | LangSmith |
 | Why is `/disruptions/recent` p99 latency high? | Logfire |
 | Is TfL throttling us with 429s? | Logfire |
-| Did the `dim_stations` resolver fall back to a live lookup? | Logfire |
 
 Two hosted tools, zero self-hosted telemetry. ADR 004 has the full rationale.
 
@@ -160,9 +154,8 @@ This ships small, intentional PRs and avoids drift.
 |------|-----------|
 | Typo, one-line fix, dependency bump | Direct PR, tests already cover it |
 | New endpoint with one query | Plan inline, implement, ship |
-| New live endpoint, new dbt model, new agent tool | Three phases, fresh context per phase |
+| New live endpoint, new agent tool | Three phases, fresh context per phase |
 | Anything touching `contracts/` | Mandatory ADR + cross-track broadcast |
 
-Track boundaries (A-infra / B-ingestion / C-dbt / D-api-agent / E-frontend /
-F-polish) keep at most two agents on the codebase concurrently without
-collisions.
+Track boundaries (A-infra / B-ingestion / D-api-agent / E-frontend / F-polish)
+keep at most two agents on the codebase concurrently without collisions.

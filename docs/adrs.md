@@ -12,22 +12,24 @@ travels with `git log`.
 | 003 | [Airflow on Railway](https://github.com/hcslomeu/tfl-monitor/blob/main/.claude/adrs/003-airflow-on-railway.md) | Superseded by 006 | Original deploy plan for Airflow on Railway free tier |
 | 004 | [Logfire + LangSmith split](https://github.com/hcslomeu/tfl-monitor/blob/main/.claude/adrs/004-logfire-langsmith-split.md) | Accepted | App vs LLM observability split — what goes where, why |
 | 005 | [Raw-table defaults](https://github.com/hcslomeu/tfl-monitor/blob/main/.claude/adrs/005-raw-table-defaults.md) | Superseded by 014 | DB-side `gen_random_uuid()` + `now()` defaults on `raw.*` |
-| 006 | AWS Bedrock + single-EC2 deploy | Pending (TM-A5) | Replaces 003: $100 AWS credit + Bedrock collapses to one box |
+| 006 | [AWS Bedrock + shared Lightsail deploy](https://github.com/hcslomeu/tfl-monitor/blob/main/.claude/adrs/006-aws-deploy.md) | Superseded by 015 | Replaced 003: Bedrock for the LLM and the API as a second tenant on a shared Lightsail box |
+| 013 | [PyMuPDF over Docling](https://github.com/hcslomeu/tfl-monitor/blob/main/.claude/adrs/013-pymupdf-over-docling.md) | Superseded by 015 | Lighter PDF parsing for RAG ingestion; RAG removed in 015 |
 | 014 | [Decommission the warehouse — live TfL proxy + RAG only](https://github.com/hcslomeu/tfl-monitor/blob/main/.claude/adrs/014-decommission-warehouse-live-proxy.md) | Accepted | Drops `raw.*` + broker; reads TfL live on demand. Supersedes 001 + 005 |
+| 015 | [Stateless API on Vercel, Anthropic direct, no RAG or Postgres](https://github.com/hcslomeu/tfl-monitor/blob/main/.claude/adrs/015-vercel-stateless-api.md) | Accepted | API becomes a stateless Vercel function; drops RAG, Postgres, dbt, Bedrock and Lightsail. Supersedes 006 + 013 |
 
 ## When does work need an ADR?
 
 If a PR does any of the following, it must ship an ADR alongside the diff:
 
 !!! warning "Mandatory ADR triggers"
-    - **Adds or modifies anything under `contracts/`** — schemas, OpenAPI,
-      DDL, dbt sources mirror.
-    - **Substitutes a locked tech-stack choice** — e.g. swapping Redpanda for
-      RabbitMQ, or LangGraph for LangChain agents.
+    - **Adds or modifies anything under `contracts/`**: Pydantic schemas or
+      the OpenAPI spec.
+    - **Substitutes a locked tech-stack choice**: e.g. swapping LangGraph for
+      LangChain agents, or Vercel for another host.
     - **Crosses a track boundary** — e.g. a D-track WP touching `src/ingestion/`
       gets an ADR §"Consequences" entry declaring the cross-touch.
-    - **Adds a new long-running deployment artefact** — service in compose,
-      Airflow DAG, GitHub Actions workflow.
+    - **Adds a new deployment artefact**: a Vercel project, a stateful
+      service, or a GitHub Actions workflow.
 
 The ADR template lives in
 [`.claude/adrs/`](https://github.com/hcslomeu/tfl-monitor/tree/main/.claude/adrs)

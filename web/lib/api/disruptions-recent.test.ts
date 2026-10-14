@@ -61,7 +61,7 @@ describe("getRecentDisruptions", () => {
 		const [url, init] = fetchMock.mock.calls[0];
 		expect(url).toMatch(/\/api\/v1\/disruptions\/recent$/);
 		expect(init?.headers).toMatchObject({ Accept: "application/json" });
-		expect(init).toMatchObject({ cache: "no-store" });
+		expect(init?.cache).toBeUndefined();
 		expect(result).toEqual(SAMPLE);
 	});
 

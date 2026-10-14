@@ -1,10 +1,9 @@
-"""Unit tests for the hybrid NaPTAN ↔ station-name resolver."""
+"""Unit tests for the NaPTAN ↔ station-name resolver."""
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import asyncio
 from dataclasses import dataclass, field
-from typing import Any
 
 import httpx
 import pytest
@@ -75,77 +74,37 @@ class FakeTflClient:
 
 
 @pytest.mark.asyncio
-async def test_empty_input_returns_empty_dict(
-    fake_pool_factory: Callable[..., Any],
-) -> None:
-    pool = fake_pool_factory()
-
-    assert await stations.resolve_naptans(pool=pool, tfl_client=None, naptan_ids=[]) == {}
+async def test_empty_input_returns_empty_dict() -> None:
+    assert await stations.resolve_naptans(tfl_client=None, naptan_ids=[]) == {}
 
 
 @pytest.mark.asyncio
-async def test_fast_path_resolves_via_dim_stations(
-    fake_pool_factory: Callable[..., Any],
-) -> None:
-    pool = fake_pool_factory(
-        [
-            {"naptan_id": "940GZZLUOXC", "name": "Oxford Circus"},
-            {"naptan_id": "940GZZLUHBN", "name": "Holborn"},
-        ]
+async def test_misses_become_none_without_client() -> None:
+    result = await stations.resolve_naptans(tfl_client=None, naptan_ids=["490UNKNOWN"])
+
+    assert result == {"490UNKNOWN": None}
+
+
+@pytest.mark.asyncio
+async def test_resolves_names_via_tfl_stop_points() -> None:
+    fake_client = FakeTflClient(
+        responses={"940GZZLUOXC": "Oxford Circus", "940GZZLUHBN": "Holborn"}
     )
 
     result = await stations.resolve_naptans(
-        pool=pool,
-        tfl_client=None,
+        tfl_client=fake_client,  # type: ignore[arg-type]
         naptan_ids=["940GZZLUOXC", "940GZZLUHBN"],
     )
 
     assert result == {"940GZZLUOXC": "Oxford Circus", "940GZZLUHBN": "Holborn"}
+    assert sorted(fake_client.calls) == ["940GZZLUHBN", "940GZZLUOXC"]
 
 
 @pytest.mark.asyncio
-async def test_misses_become_none_when_no_fallback(
-    fake_pool_factory: Callable[..., Any],
-) -> None:
-    pool = fake_pool_factory(
-        [{"naptan_id": "940GZZLUOXC", "name": "Oxford Circus"}],
-    )
-
-    result = await stations.resolve_naptans(
-        pool=pool,
-        tfl_client=None,
-        naptan_ids=["940GZZLUOXC", "490UNKNOWN"],
-    )
-
-    assert result == {"940GZZLUOXC": "Oxford Circus", "490UNKNOWN": None}
-
-
-@pytest.mark.asyncio
-async def test_fallback_calls_tfl_client_on_miss(
-    fake_pool_factory: Callable[..., Any],
-) -> None:
-    pool = fake_pool_factory([])
-    fake_client = FakeTflClient(responses={"490UNKNOWN": "Mystery Bus Stop"})
-
-    result = await stations.resolve_naptans(
-        pool=pool,
-        tfl_client=fake_client,  # type: ignore[arg-type]
-        naptan_ids=["490UNKNOWN"],
-    )
-
-    assert result == {"490UNKNOWN": "Mystery Bus Stop"}
-    assert fake_client.calls == ["490UNKNOWN"]
-
-
-@pytest.mark.asyncio
-async def test_fallback_failure_returns_none(
-    fake_pool_factory: Callable[..., Any],
-) -> None:
-    pool = fake_pool_factory([])
+async def test_lookup_failure_returns_none() -> None:
     fake_client = FakeTflClient(responses={}, fail_for={"940GBOGUS"})
 
     result = await stations.resolve_naptans(
-        pool=pool,
         tfl_client=fake_client,  # type: ignore[arg-type]
         naptan_ids=["940GBOGUS"],
     )
@@ -155,60 +114,43 @@ async def test_fallback_failure_returns_none(
 
 
 @pytest.mark.asyncio
-async def test_resolved_names_are_cached_across_calls(
-    fake_pool_factory: Callable[..., Any],
-) -> None:
-    pool = fake_pool_factory(
-        [{"naptan_id": "940GZZLUOXC", "name": "Oxford Circus"}],
-        [],  # second call's seed batch should not be touched
-    )
+async def test_resolved_names_are_cached_across_calls() -> None:
+    fake_client = FakeTflClient(responses={"940GZZLUOXC": "Oxford Circus"})
 
     first = await stations.resolve_naptans(
-        pool=pool,
-        tfl_client=None,
+        tfl_client=fake_client,  # type: ignore[arg-type]
         naptan_ids=["940GZZLUOXC"],
     )
     second = await stations.resolve_naptans(
-        pool=pool,
-        tfl_client=None,
+        tfl_client=fake_client,  # type: ignore[arg-type]
         naptan_ids=["940GZZLUOXC"],
     )
 
     assert first == {"940GZZLUOXC": "Oxford Circus"}
     assert second == {"940GZZLUOXC": "Oxford Circus"}
-    # Only the first call drained a batch; the cached lookup short-circuits.
-    assert len(pool.conn.batches) == 1
+    # The cached lookup short-circuits the second TfL round-trip.
+    assert fake_client.calls == ["940GZZLUOXC"]
 
 
 @pytest.mark.asyncio
-async def test_misses_are_cached_only_when_fallback_is_wired(
-    fake_pool_factory: Callable[..., Any],
-) -> None:
-    """A confirmed miss caches as ``None`` only when the TfL fallback was
-    attempted — otherwise a later call with a wired client should retry."""
-    pool = fake_pool_factory([], [])  # two empty seed batches
+async def test_misses_are_cached_only_when_client_is_wired() -> None:
+    """A miss caches as ``None`` only when the TfL lookup was attempted —
+    otherwise a later call with a wired client should retry."""
     fake_client = FakeTflClient(responses={"490NEW": "New Stop"})
 
-    no_fallback = await stations.resolve_naptans(
-        pool=pool,
-        tfl_client=None,
-        naptan_ids=["490NEW"],
-    )
-    with_fallback = await stations.resolve_naptans(
-        pool=pool,
+    no_client = await stations.resolve_naptans(tfl_client=None, naptan_ids=["490NEW"])
+    with_client = await stations.resolve_naptans(
         tfl_client=fake_client,  # type: ignore[arg-type]
         naptan_ids=["490NEW"],
     )
 
-    assert no_fallback == {"490NEW": None}
-    assert with_fallback == {"490NEW": "New Stop"}
+    assert no_client == {"490NEW": None}
+    assert with_client == {"490NEW": "New Stop"}
     assert fake_client.calls == ["490NEW"]
 
 
 @pytest.mark.asyncio
-async def test_transient_failures_are_not_cached(
-    fake_pool_factory: Callable[..., Any],
-) -> None:
+async def test_transient_failures_are_not_cached() -> None:
     """A 5xx / timeout / network error must not poison the cache — the
     next request should retry the lookup rather than surfacing ``None``
     permanently after a single hiccup."""
@@ -229,16 +171,13 @@ async def test_transient_failures_are_not_cached(
                 raise TflClientError("TfL request failed: HTTP 503") from http_exc
             return TflStopPoint(naptan_id=naptan_id, common_name=self.recovered_name)
 
-    pool = fake_pool_factory([], [])  # two empty seed batches → both calls miss
     fake_client = FlakyClient()
 
     first = await stations.resolve_naptans(
-        pool=pool,
         tfl_client=fake_client,  # type: ignore[arg-type]
         naptan_ids=["490FLAKY"],
     )
     second = await stations.resolve_naptans(
-        pool=pool,
         tfl_client=fake_client,  # type: ignore[arg-type]
         naptan_ids=["490FLAKY"],
     )
@@ -249,9 +188,95 @@ async def test_transient_failures_are_not_cached(
 
 
 @pytest.mark.asyncio
-async def test_definitive_404_is_cached(
-    fake_pool_factory: Callable[..., Any],
+async def test_lookups_past_the_deadline_return_none_uncached(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """A hung ``/StopPoint`` call is cut at the batch deadline: fast ids
+    resolve, the slow id maps to ``None`` and is retried next time."""
+    monkeypatch.setattr(stations, "_LOOKUP_DEADLINE_SECONDS", 0.05)
+
+    @dataclass
+    class HangingClient:
+        hang_for: set[str]
+        calls: list[str] = field(default_factory=list)
+
+        async def fetch_stop_point(self, naptan_id: str) -> TflStopPoint:
+            self.calls.append(naptan_id)
+            if naptan_id in self.hang_for:
+                await asyncio.sleep(60)
+            return TflStopPoint(naptan_id=naptan_id, common_name=f"Name {naptan_id}")
+
+    slow_client = HangingClient(hang_for={"490SLOW"})
+    first = await stations.resolve_naptans(
+        tfl_client=slow_client,  # type: ignore[arg-type]
+        naptan_ids=["490FAST", "490SLOW"],
+    )
+    assert first == {"490FAST": "Name 490FAST", "490SLOW": None}
+
+    recovered_client = HangingClient(hang_for=set())
+    second = await stations.resolve_naptans(
+        tfl_client=recovered_client,  # type: ignore[arg-type]
+        naptan_ids=["490FAST", "490SLOW"],
+    )
+    assert second == {"490FAST": "Name 490FAST", "490SLOW": "Name 490SLOW"}
+    assert recovered_client.calls == ["490SLOW"]
+
+
+@pytest.mark.asyncio
+async def test_cancelled_caller_cancels_lookups_and_frees_semaphore() -> None:
+    """Cancelling the caller (e.g. a dropped chat stream) must cancel every
+    in-flight ``/StopPoint`` call, so no orphan keeps a semaphore slot."""
+    concurrency = stations._TFL_LOOKUP_CONCURRENCY
+    semaphore_full = asyncio.Event()
+
+    @dataclass
+    class BlockingClient:
+        in_flight: int = 0
+        cancelled: int = 0
+
+        async def fetch_stop_point(self, naptan_id: str) -> TflStopPoint:
+            self.in_flight += 1
+            if self.in_flight == concurrency:
+                semaphore_full.set()
+            try:
+                await asyncio.sleep(60)
+                raise AssertionError(f"lookup for {naptan_id} was never cancelled")
+            except asyncio.CancelledError:
+                self.cancelled += 1
+                raise
+            finally:
+                self.in_flight -= 1
+
+    blocking_client = BlockingClient()
+    naptan_ids = [f"490BLOCK{i}" for i in range(concurrency + 2)]
+    caller = asyncio.create_task(
+        stations.resolve_naptans(
+            tfl_client=blocking_client,  # type: ignore[arg-type]
+            naptan_ids=naptan_ids,
+        )
+    )
+    await asyncio.wait_for(semaphore_full.wait(), timeout=1)
+
+    caller.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await caller
+
+    assert blocking_client.in_flight == 0
+    assert blocking_client.cancelled == concurrency
+
+    free_client = FakeTflClient(responses={"490FREE": "Free Station"})
+    resolved = await asyncio.wait_for(
+        stations.resolve_naptans(
+            tfl_client=free_client,  # type: ignore[arg-type]
+            naptan_ids=["490FREE"],
+        ),
+        timeout=1,
+    )
+    assert resolved == {"490FREE": "Free Station"}
+
+
+@pytest.mark.asyncio
+async def test_definitive_404_is_cached() -> None:
     """A 404 confirms the NaPTAN does not exist — cache the miss so the
     next request short-circuits without another TfL round-trip."""
 
@@ -268,16 +293,13 @@ async def test_definitive_404_is_cached(
             )
             raise TflClientError("TfL request failed: HTTP 404") from http_exc
 
-    pool = fake_pool_factory([], [])
     fake_client = NotFoundClient()
 
     first = await stations.resolve_naptans(
-        pool=pool,
         tfl_client=fake_client,  # type: ignore[arg-type]
         naptan_ids=["490DEPRECATED"],
     )
     second = await stations.resolve_naptans(
-        pool=pool,
         tfl_client=fake_client,  # type: ignore[arg-type]
         naptan_ids=["490DEPRECATED"],
     )

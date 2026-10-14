@@ -1,9 +1,9 @@
 """FastAPI entrypoint for the tfl-monitor API.
 
-Status, reliability, disruptions, bus, and chat endpoints query Postgres
-via a shared ``AsyncConnectionPool`` opened by the lifespan. The chat
-agent is compiled once in the lifespan and cached on
-``app.state.agent``. The shape of the API is fixed by
+Status and disruption endpoints read the TfL Unified API live through a
+shared ``TflClient`` opened by the lifespan. The chat agent is compiled
+once in the lifespan and cached on ``app.state.agent``. The API is
+stateless (ADR 015): no database. The shape of the API is fixed by
 ``contracts/openapi.yaml``.
 """
 
@@ -21,13 +21,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from sse_starlette.sse import EventSourceResponse
 
-from api.agent.history import append_message, fetch_history
 from api.agent.streaming import frame_end, project, serialise
-from api.db import build_pool
 from api.live import fetch_live_status, fetch_recent_disruptions
 from api.observability import configure_observability
 from api.schemas import (
-    ChatMessageResponse,
     ChatRequest,
     DisruptionResponse,
     LineStatusResponse,
@@ -36,69 +33,56 @@ from api.schemas import (
 )
 from ingestion.tfl_client.client import TflClient
 
+# Cached GET responses are shared by every dashboard viewer: the CDN
+# collapses concurrent polls into at most one function run per window.
+# ``Vary: Origin`` is set on every cached response, not only when
+# CORSMiddleware echoes an origin: otherwise a request without ``Origin``
+# (curl, an uptime probe) could seed the shared cache with a response that
+# lacks ``Access-Control-Allow-Origin`` and break the cross-origin dashboard.
+_LIVE_CACHE_CONTROL = "public, s-maxage=30, stale-while-revalidate=30"
+
+# LangGraph super-step ceiling per chat turn (roughly five tool calls).
+_CHAT_RECURSION_LIMIT = 12
+
+_CHAT_UNAVAILABLE_MESSAGE = (
+    "The assistant is unavailable right now (the demo's monthly AI budget "
+    "may be used up). Live line status on the dashboard still works."
+)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Open and close the shared Postgres connection pool.
+    """Open and close the shared TfL client and compile the chat agent.
 
-    Mirrors Logfire's ``if-token-present`` pattern: when ``DATABASE_URL``
-    is unset the lifespan no-ops and ``app.state.db_pool`` stays ``None``.
-    Handlers that need the pool must return ``503`` in that case so the
-    smoke test (``/health``) keeps working without secrets.
+    When ``TFL_APP_KEY`` is unset the TfL client stays ``None`` and the
+    live endpoints return ``503``; ``/health`` keeps working without
+    secrets. When ``ANTHROPIC_API_KEY`` is unset the agent stays ``None``
+    and ``/chat/stream`` returns ``503``.
     """
-    dsn = os.environ.get("DATABASE_URL")
-    if not dsn:
-        logfire.info(
-            "api_start_without_db_pool",
-            service="tfl-monitor-api",
-            database_url_configured=False,
-        )
-        yield
-        return
-
-    pool = build_pool(dsn)
-    await pool.open()
-    app.state.db_pool = pool
-
-    # Open the TfL client only when an app key is wired. The station
-    # resolver falls back gracefully to seed-only when the client is
-    # ``None``, so an unset ``TFL_APP_KEY`` does not block the API.
     tfl_app_key = os.environ.get("TFL_APP_KEY")
+    tfl_client: TflClient | None = None
     if tfl_app_key:
         tfl_client = TflClient(app_key=tfl_app_key)
         await tfl_client.__aenter__()
-        app.state.tfl_client = tfl_client
-    else:
-        app.state.tfl_client = None
-    # Lazy import: pulls langchain_anthropic + llama_index transitively.
-    # Keeping it out of module scope shaves cold-start when DATABASE_URL
-    # is unset (smoke tests, /health-only deploys).
+    app.state.tfl_client = tfl_client
+
+    # Lazy import: pulls langchain_anthropic + langgraph transitively.
     from api.agent.graph import compile_agent  # noqa: PLC0415
 
-    app.state.agent = compile_agent(pool=pool, tfl_client=app.state.tfl_client)
+    app.state.agent = compile_agent(tfl_client=tfl_client)
     logfire.info(
-        "api_db_pool_opened",
+        "api_started",
         service="tfl-monitor-api",
-        database_url_configured=True,
-        pool_min_size=1,
-        pool_max_size=4,
+        tfl_client_configured=tfl_client is not None,
         chat_agent_configured=app.state.agent is not None,
     )
-    if app.state.agent is None:
-        logfire.info(
-            "api_chat_agent_disabled_no_credentials",
-            service="tfl-monitor-api",
-        )
     try:
         yield
     finally:
-        if app.state.tfl_client is not None:
-            await app.state.tfl_client.__aexit__(None, None, None)
-            app.state.tfl_client = None
-        await pool.close()
-        app.state.db_pool = None
+        if tfl_client is not None:
+            await tfl_client.__aexit__(None, None, None)
+        app.state.tfl_client = None
         app.state.agent = None
-        logfire.info("api_db_pool_closed", service="tfl-monitor-api")
 
 
 app = FastAPI(
@@ -110,8 +94,7 @@ app = FastAPI(
 
 # Pre-seed so unit tests that build ``TestClient(app)`` outside an
 # ``async with`` block (and therefore skip the lifespan) still see the
-# attribute. Tests that need a live pool / agent monkeypatch these slots.
-app.state.db_pool = None
+# attribute. Tests that need a client / agent monkeypatch these slots.
 app.state.agent = None
 app.state.tfl_client = None
 
@@ -162,15 +145,20 @@ async def get_health() -> dict[str, Any]:
     operation_id="get_status_live",
     response_model=list[LineStatusResponse],
 )
-async def get_status_live(request: Request) -> list[LineStatusResponse] | Response:
+async def get_status_live(
+    request: Request, response: Response
+) -> list[LineStatusResponse] | Response:
     tfl_client = getattr(request.app.state, "tfl_client", None)
     if tfl_client is None:
         return _problem(503, "Service Unavailable", "TfL client is not configured")
     try:
-        return await fetch_live_status(tfl_client)
+        rows = await fetch_live_status(tfl_client)
     except Exception:
         logfire.exception("get_status_live_failed")
         return _problem(502, "Bad Gateway", "Failed to fetch live status from TfL")
+    response.headers["Cache-Control"] = _LIVE_CACHE_CONTROL
+    response.headers["Vary"] = "Origin"
+    return rows
 
 
 @app.get(
@@ -180,49 +168,42 @@ async def get_status_live(request: Request) -> list[LineStatusResponse] | Respon
 )
 async def get_recent_disruptions(
     request: Request,
+    response: Response,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     mode: Annotated[Mode | None, Query()] = None,
 ) -> list[DisruptionResponse] | Response:
-    pool = request.app.state.db_pool
     tfl_client = getattr(request.app.state, "tfl_client", None)
     if tfl_client is None:
         return _problem(503, "Service Unavailable", "TfL client is not configured")
-    if pool is None:
-        return _problem(503, "Service Unavailable", "Database pool is not available")
     try:
-        return await fetch_recent_disruptions(
-            tfl_client,
-            pool=pool,
-            limit=limit,
-            mode=mode,
-        )
+        rows = await fetch_recent_disruptions(tfl_client, limit=limit, mode=mode)
     except Exception:
         logfire.exception("get_recent_disruptions_failed")
         return _problem(502, "Bad Gateway", "Failed to fetch recent disruptions from TfL")
+    response.headers["Cache-Control"] = _LIVE_CACHE_CONTROL
+    response.headers["Vary"] = "Origin"
+    return rows
 
 
 @app.post("/api/v1/chat/stream", operation_id="post_chat_stream", response_model=None)
 async def post_chat_stream(request: Request, body: ChatRequest) -> Response:
     """Stream a LangGraph agent response over Server-Sent Events.
 
-    Persists the user turn before yielding the first frame and the
-    assistant turn after the final ``end`` frame so a concurrent
-    ``GET /history`` always sees a coherent view of the conversation.
+    Conversation memory lives in the agent's in-process checkpointer,
+    keyed by ``thread_id``; nothing is persisted (ADR 015).
     """
-    pool = request.app.state.db_pool
     agent = getattr(request.app.state, "agent", None)
-    if pool is None:
-        return _problem(503, "Service Unavailable", "Database pool is not available")
     if agent is None:
         return _problem(503, "Service Unavailable", "Chat agent is not configured")
 
-    await append_message(pool, thread_id=body.thread_id, role="user", content=body.message)
-
     async def event_stream() -> AsyncIterator[dict[str, str]]:
-        config: dict[str, Any] = {"configurable": {"thread_id": body.thread_id}}
+        from anthropic import APIStatusError  # noqa: PLC0415
+
+        config: dict[str, Any] = {
+            "configurable": {"thread_id": body.thread_id},
+            "recursion_limit": _CHAT_RECURSION_LIMIT,
+        }
         inputs = {"messages": [{"role": "user", "content": body.message}]}
-        assistant_buffer: list[str] = []
-        completed = False
         try:
             async for mode, payload in agent.astream(
                 inputs, config=config, stream_mode=["messages", "updates"]
@@ -230,44 +211,22 @@ async def post_chat_stream(request: Request, body: ChatRequest) -> Response:
                 if await request.is_disconnected():
                     return
                 for frame in project(mode, payload):
-                    if frame["type"] == "token":
-                        assistant_buffer.append(frame["content"])
                     yield {"data": serialise(frame)}
             yield {"data": serialise(frame_end())}
-            completed = True
         except asyncio.CancelledError:
             raise
+        except APIStatusError as exc:
+            # Spend-limit, auth, and rate-limit rejections from Anthropic:
+            # tell the user plainly instead of a bare error bubble.
+            logfire.warn(
+                "chat_llm_rejected",
+                thread_id=body.thread_id,
+                status_code=exc.status_code,
+            )
+            yield {"data": serialise({"type": "token", "content": _CHAT_UNAVAILABLE_MESSAGE})}
+            yield {"data": serialise(frame_end("error"))}
         except Exception:
             logfire.exception("chat_stream_failed", thread_id=body.thread_id)
             yield {"data": serialise(frame_end("error"))}
-        finally:
-            # Only persist the assistant turn when the stream finished
-            # cleanly. Disconnects and errors leave ``completed=False`` so
-            # ``analytics.chat_messages`` never sees a truncated reply.
-            if completed and assistant_buffer:
-                await append_message(
-                    pool,
-                    thread_id=body.thread_id,
-                    role="assistant",
-                    content="".join(assistant_buffer),
-                )
 
     return EventSourceResponse(event_stream(), ping=15)
-
-
-@app.get(
-    "/api/v1/chat/{thread_id}/history",
-    operation_id="get_chat_history",
-    response_model=list[ChatMessageResponse],
-)
-async def get_chat_history(
-    request: Request,
-    thread_id: str,
-) -> list[ChatMessageResponse] | Response:
-    pool = request.app.state.db_pool
-    if pool is None:
-        return _problem(503, "Service Unavailable", "Database pool is not available")
-    rows = await fetch_history(pool, thread_id=thread_id)
-    if not rows:
-        return _problem(404, "Not Found", f"No history for thread {thread_id}")
-    return rows

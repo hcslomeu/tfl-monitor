@@ -1,10 +1,8 @@
 """TfL live read-through layer for the API service.
 
 Reads current network state directly from the TfL Unified API on each
-request (ADR 014 — the ``raw.*`` warehouse was decommissioned). Mirrors
-the role :mod:`api.db` plays for Postgres: it returns the same response
-schemas the endpoints and agent tools consume, sourced live instead of
-from SQL. Disruption normalisation is reused from
+request (ADR 014). It returns the response schemas the endpoints and
+agent tools consume. Disruption normalisation is reused from
 :mod:`ingestion.tfl_client.normalise` so the synthetic-id and
 affected-stop logic stays in one place.
 """
@@ -14,8 +12,6 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from typing import cast, get_args
-
-from psycopg_pool import AsyncConnectionPool
 
 from api.schemas import (
     AffectedStop,
@@ -81,7 +77,6 @@ async def fetch_live_status(
 async def fetch_recent_disruptions(
     tfl_client: TflClient,
     *,
-    pool: AsyncConnectionPool,
     limit: int,
     mode: Mode | None,
     modes: Sequence[str] = DEFAULT_STATUS_MODES,
@@ -92,12 +87,10 @@ async def fetch_recent_disruptions(
     ``affectedStops`` on the free tier, so the detailed line-status call
     is the only source that populates them. Each disruption's NaPTAN
     stops are resolved to station names via
-    :func:`api.stations.resolve_naptans` (dim_stations fast path + TfL
-    fallback).
+    :func:`api.stations.resolve_naptans` (cached TfL ``/StopPoint`` lookups).
 
     Args:
         tfl_client: Active TfL client.
-        pool: Open pool, used by the station-name resolver.
         limit: Maximum number of disruptions to return.
         mode: When given, restricts the query to that single mode;
             otherwise the dashboard's default modes are queried.
@@ -108,11 +101,11 @@ async def fetch_recent_disruptions(
     """
     query_modes: Sequence[str] = (mode,) if mode is not None else modes
     lines = await tfl_client.fetch_line_disruptions(query_modes)
-    payloads = disruption_payloads(lines)
+    # Cut to ``limit`` before enrichment so dropped disruptions cost no lookups.
+    payloads = disruption_payloads(lines)[:limit]
 
     all_naptan_ids = {nid for payload in payloads for nid in payload.affected_stops}
     name_by_naptan = await resolve_naptans(
-        pool=pool,
         tfl_client=tfl_client,
         naptan_ids=all_naptan_ids,
     )
@@ -136,7 +129,7 @@ async def fetch_recent_disruptions(
         )
         for payload in payloads
     ]
-    return results[:limit]
+    return results
 
 
 def _primary_status(statuses: list[TflLineStatusItem]) -> TflLineStatusItem | None:
@@ -159,12 +152,7 @@ def _primary_status(statuses: list[TflLineStatusItem]) -> TflLineStatusItem | No
 
 
 def _validity_window(status: TflLineStatusItem, now: datetime) -> tuple[datetime, datetime]:
-    """Return the validity window for a status, falling back to ``now + 12h``.
-
-    Matches the fallback convention in
-    :func:`ingestion.tfl_client.normalise.line_status_payloads` for
-    statuses with no validity periods.
-    """
+    """Return the validity window for a status, falling back to ``now + 12h``."""
     if status.validity_periods:
         # Prefer the currently-active window when TfL returns several; fall
         # back to the first entry otherwise.

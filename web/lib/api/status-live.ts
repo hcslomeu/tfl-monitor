@@ -101,7 +101,8 @@ export async function getStatusLive(
 		return MOCK_LINES.map((line) => lineSummaryToLineStatus(line, now));
 	}
 	return apiFetch<LineStatus[]>("/api/v1/status/live", {
-		cache: "no-store",
+		// No `cache` override: `no-store` makes the browser send `Cache-Control:
+		// no-cache`, which can defeat the CDN's shared 30-second cache (ADR 015).
 		signal,
 	});
 }

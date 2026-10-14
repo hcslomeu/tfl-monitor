@@ -1,4 +1,4 @@
-"""LangChain tools wrapping the live TfL read-through and the RAG retriever.
+"""LangChain tools wrapping the live TfL read-through.
 
 Tools exposed to the agent (each gated on its dependency being wired):
 
@@ -6,7 +6,6 @@ Tools exposed to the agent (each gated on its dependency being wired):
 - ``query_recent_disruptions`` — most recent disruptions (live TfL).
 - ``plan_journey_tool`` — plan a route between two stations.
 - ``get_arrivals_tool`` — next arrivals at a stop.
-- ``search_tfl_docs`` — RAG over the TfL strategy corpus.
 
 Inputs are Pydantic models with ``extra="forbid"`` so the LLM cannot
 smuggle unknown fields past the type system. Every tool that calls the
@@ -18,20 +17,17 @@ crash the chat stream (ADR 010).
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any
 
 import logfire
-from psycopg_pool import AsyncConnectionPool
 from pydantic import BaseModel, ConfigDict, Field
 
-from api.agent.rag import retrieve
 from api.live import fetch_live_status, fetch_recent_disruptions
 from api.schemas import Mode
 from api.stations import resolve_name
 
 if TYPE_CHECKING:
     from langchain_core.tools import BaseTool
-    from llama_index.core import VectorStoreIndex
 
     from ingestion.tfl_client.client import TflClient
 
@@ -45,26 +41,6 @@ class RecentDisruptionsQuery(BaseModel):
 
     limit: int = Field(default=10, ge=1, le=200)
     mode: Mode | None = None
-
-
-DocId = Literal[
-    "business_plan_2026",
-    "mts_delivery_2024_25",
-    "bus_action_plan",
-    "vision_zero",
-    "cycling_action_plan",
-    "travel_in_london_2025",
-]
-
-
-class TflDocSearchQuery(BaseModel):
-    """Input schema for ``search_tfl_docs``."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    query: str = Field(min_length=1, max_length=512)
-    doc_id: DocId | None = None
-    top_k: int = Field(default=5, ge=1, le=20)
 
 
 class PlanJourneyQuery(BaseModel):
@@ -95,27 +71,16 @@ def _parse_departure_time(value: str | None) -> datetime | None:
         return None
 
 
-def make_tools(
-    *,
-    pool: AsyncConnectionPool,
-    tfl_client: TflClient | None = None,
-    retriever: VectorStoreIndex | None = None,
-) -> list[BaseTool]:
-    """Build the LangGraph tools bound to a pool (+ optional dependencies).
+def make_tools(*, tfl_client: TflClient | None) -> list[BaseTool]:
+    """Build the LangGraph tools bound to the TfL client.
 
     Args:
-        pool: Shared ``AsyncConnectionPool``. The disruptions tool reuses
-            it for station-name resolution.
-        tfl_client: Optional ``TflClient``. When ``None`` the live status,
-            disruptions, journey, and arrivals tools are all omitted,
-            since each reads from the TfL API.
-        retriever: pgvector index from ``build_retriever``. When ``None``
-            the RAG tool is omitted.
+        tfl_client: Optional ``TflClient``. When ``None`` no tools are
+            returned, since every tool reads from the TfL API.
 
     Returns:
         List of LangChain ``BaseTool`` instances ready for
-        ``create_react_agent``: the live TfL tools when a ``TflClient`` is
-        supplied and ``search_tfl_docs`` when a retriever is supplied.
+        ``create_react_agent``.
     """
     from langchain_core.tools import tool  # noqa: PLC0415
 
@@ -142,12 +107,7 @@ def make_tools(
             """Return the most recent disruptions, optionally scoped by mode."""
             with logfire.span("agent.tool.query_recent_disruptions", limit=limit, mode=mode):
                 try:
-                    rows = await fetch_recent_disruptions(
-                        tfl_client,
-                        pool=pool,
-                        limit=limit,
-                        mode=mode,
-                    )
+                    rows = await fetch_recent_disruptions(tfl_client, limit=limit, mode=mode)
                 except Exception:  # noqa: BLE001 - never let an upstream error crash the stream
                     logfire.exception("agent.tool.query_recent_disruptions_failed")
                     return "Sorry, I couldn't fetch recent disruptions right now."
@@ -258,30 +218,5 @@ def make_tools(
         tools.extend(
             [query_tube_status, query_recent_disruptions, plan_journey_tool, get_arrivals_tool]
         )
-
-    if retriever is not None:
-
-        @tool(args_schema=TflDocSearchQuery)
-        async def search_tfl_docs(
-            query: str,
-            doc_id: DocId | None = None,
-            top_k: int = 5,
-        ) -> list[dict[str, Any]]:
-            """Return passages from TfL strategy docs ranked by relevance.
-
-            Cite each hit by ``doc_title`` and ``page_start``. Use this tool
-            for policy or forecast questions; reach for the live tools for
-            current operational data.
-            """
-            with logfire.span(
-                "agent.tool.search_tfl_docs",
-                doc_id=doc_id,
-                top_k=top_k,
-                query_chars=len(query),
-            ):
-                snippets = await retrieve(retriever, query=query, doc_id=doc_id, top_k=top_k)
-                return [s.model_dump(mode="json") for s in snippets]
-
-        tools.append(search_tfl_docs)
 
     return tools

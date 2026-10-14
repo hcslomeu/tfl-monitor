@@ -1,8 +1,7 @@
 """Tier-1 → tier-2 normalisation for TfL responses.
 
 Pure functions mapping the raw camelCase shapes returned by the TfL
-Unified API (``contracts.schemas.tfl_api``) onto the snake_case tier-2
-payloads in ``contracts.schemas.{line_status,arrivals,disruptions}``.
+Unified API (``contracts.schemas.tfl_api``) onto snake_case payloads.
 ``disruption_payloads`` builds the shape that ``/api/v1/disruptions/recent``
 returns; ``api.live`` consumes it so the synthetic-id and affected-stop
 logic lives in one place.
@@ -12,123 +11,18 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
-import logfire
-
-from contracts.schemas.arrivals import ArrivalPayload
-from contracts.schemas.common import DisruptionCategory, TransportMode
+from contracts.schemas.common import DisruptionCategory
 from contracts.schemas.disruptions import DisruptionPayload
-from contracts.schemas.line_status import LineStatusPayload
 from contracts.schemas.tfl_api import (
-    TflArrivalPrediction,
     TflLineResponse,
 )
 
-__all__ = [
-    "arrival_payloads",
-    "disruption_payloads",
-    "line_status_payloads",
-]
+__all__ = ["disruption_payloads"]
 
-_DEFAULT_VALIDITY_HOURS = 12
 _SUMMARY_MAX_LENGTH = 160
 _SYNTHETIC_ID_HEX_LENGTH = 32
-
-
-def line_status_payloads(
-    response: list[TflLineResponse],
-) -> list[LineStatusPayload]:
-    """Flatten TfL ``Line`` records into one payload per validity window.
-
-    Each entry in ``lineStatuses`` produces one payload per attached
-    ``validityPeriods`` entry. Lines (or status entries) with no
-    validity periods fall back to a single payload covering ``now`` to
-    ``now + 12h`` — matching the convention exercised in
-    ``tests/test_contracts.py``.
-
-    Args:
-        response: Tier-1 line records as returned by
-            ``/Line/Mode/{modes}/Status``.
-
-    Returns:
-        Flat list of tier-2 :class:`LineStatusPayload` objects, in input
-        order with stable iteration over ``lineStatuses`` and
-        ``validityPeriods``.
-    """
-    fallback_now = datetime.now(UTC)
-    fallback_until = fallback_now + timedelta(hours=_DEFAULT_VALIDITY_HOURS)
-    payloads: list[LineStatusPayload] = []
-    for line in response:
-        try:
-            mode = TransportMode(line.mode_name)
-        except ValueError:
-            logfire.warn(
-                "tfl.normalise.unknown_transport_mode",
-                line_id=line.id,
-                mode_name=line.mode_name,
-            )
-            continue
-        for status in line.line_statuses:
-            common: dict[str, object] = {
-                "line_id": line.id,
-                "line_name": line.name,
-                "mode": mode,
-                "status_severity": status.status_severity,
-                "status_severity_description": status.status_severity_description,
-                "reason": status.reason,
-            }
-            if status.validity_periods:
-                for period in status.validity_periods:
-                    payloads.append(
-                        LineStatusPayload(
-                            **common,  # type: ignore[arg-type]
-                            valid_from=period.from_date,
-                            valid_to=period.to_date,
-                        )
-                    )
-            else:
-                payloads.append(
-                    LineStatusPayload(
-                        **common,  # type: ignore[arg-type]
-                        valid_from=fallback_now,
-                        valid_to=fallback_until,
-                    )
-                )
-    return payloads
-
-
-def arrival_payloads(
-    response: list[TflArrivalPrediction],
-) -> list[ArrivalPayload]:
-    """Map tier-1 arrival predictions to tier-2 payloads.
-
-    The tier-1 ``direction`` and ``destinationName`` fields are nullable
-    in the upstream contract; tier-2 requires non-null strings, so empty
-    strings are substituted when missing.
-
-    Args:
-        response: Tier-1 predictions as returned by
-            ``/StopPoint/{id}/Arrivals``.
-
-    Returns:
-        Tier-2 :class:`ArrivalPayload` list in input order.
-    """
-    return [
-        ArrivalPayload(
-            arrival_id=item.id,
-            station_id=item.naptan_id,
-            station_name=item.station_name,
-            line_id=item.line_id,
-            platform_name=item.platform_name,
-            direction=item.direction or "",
-            destination=item.destination_name or "",
-            expected_arrival=item.expected_arrival,
-            time_to_station_seconds=item.time_to_station,
-            vehicle_id=item.vehicle_id,
-        )
-        for item in response
-    ]
 
 
 def disruption_payloads(

@@ -1,7 +1,7 @@
 site_name: tfl-monitor
 site_description: >-
-  A real-time data + AI engineering portfolio project — a live Transport for
-  London proxy with a RAG agent over TfL strategy documents.
+  A real-time data + AI engineering portfolio project: a live Transport for
+  London proxy with a LangGraph chat agent over live TfL tools.
 site_author: Humberto Slomeu
 site_url: https://hcslomeu.github.io/tfl-monitor/
 
@@ -154,8 +154,6 @@ nav:
   - Pipelines:
       - pipelines/index.md
       - Live TfL proxy: pipelines/ingestion.md
-      - Reference data: pipelines/warehouse.md
-      - RAG ingestion: pipelines/rag.md
       - LangGraph agent: pipelines/agent.md
       - FastAPI surface: pipelines/api.md
       - Next.js frontend: pipelines/frontend.md

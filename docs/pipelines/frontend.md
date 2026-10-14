@@ -2,14 +2,17 @@
 
 A single-page dashboard + chat, all server components by default, types
 regenerated from the OpenAPI contract. Single linter (Biome) and single test
-runner (Vitest + RTL).
+runner (Vitest + RTL). Hosted on Vercel as the `tfl-monitor` project at
+`https://tfl-monitor.humbertolomeu.com`; it calls the API at
+`NEXT_PUBLIC_API_URL` (`https://tfl-monitor-api.humbertolomeu.com` in
+production).
 
 ## Code map
 
 | Concern | Path |
 |---------|------|
 | App Router route | `web/app/page.tsx` (one-pager; legacy `/disruptions`, `/ask` 308-redirect to `/`) |
-| Server-side fetchers | `web/lib/api/*.ts` |
+| Server-side fetchers | `web/lib/api/*.ts` (base URL from `NEXT_PUBLIC_API_URL` in `web/lib/api-client.ts`) |
 | SSE parser + chat fetcher | `web/lib/sse-parser.ts`, `web/lib/api/chat-stream.ts` |
 | Generated TS types | `web/lib/types.ts` (do not edit) |
 | Dashboard + chat UI | `web/components/dashboard/*.tsx` (cards, `chat-panel.tsx`, journey/arrivals cards) |
@@ -21,12 +24,14 @@ runner (Vitest + RTL).
 
 The four routes collapsed into a single page (TM-E5): live status, disruptions,
 and chat sit side by side, with the legacy paths kept alive via 308 redirects.
+Both live panels poll every 30 seconds; the API's `s-maxage=30` header lets the
+Vercel CDN absorb those polls.
 
 ```mermaid
 flowchart LR
     PAGE[/page.tsx<br/>dashboard one-pager/]
     PAGE -->|poll 30s| SL[/api/v1/status/live]
-    PAGE -->|poll 5min| DR[/api/v1/disruptions/recent]
+    PAGE -->|poll 30s| DR[/api/v1/disruptions/recent]
     PAGE -->|POST SSE| CHAT[/api/v1/chat/stream]
 ```
 

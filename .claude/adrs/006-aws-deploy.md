@@ -1,6 +1,6 @@
 # 006 — AWS Bedrock + shared Lightsail deploy
 
-Status: accepted
+Status: superseded by ADR 015 (2026-10-12)
 Date: 2026-05-15
 
 ## Context

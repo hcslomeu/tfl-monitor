@@ -1,1 +1,1 @@
-"""Cross-service utilities shared by api/, ingestion/, and rag/."""
+"""Cross-package utilities shared by api/ and ingestion/."""

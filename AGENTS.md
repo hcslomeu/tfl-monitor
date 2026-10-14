@@ -65,7 +65,7 @@ This project explicitly refuses over-engineering. When reviewing code, flag (and
 
 ## Project overview
 
-**tfl-monitor** is a standalone portfolio project with an end-to-end architecture: streaming TfL → Kafka (Redpanda) → Postgres → dbt → FastAPI → Next.js, plus a LangGraph agent that routes between SQL (warehouse) and RAG (TfL strategy documents via Pinecone + LlamaIndex + Docling).
+**tfl-monitor** is a standalone portfolio project: a stateless FastAPI service on Vercel that reads the TfL Unified API live, a Next.js dashboard, and a LangGraph chat agent (Anthropic Claude) with live TfL tools for status, disruptions, journeys, and arrivals. No database, broker, or RAG layer (ADR 014, ADR 015).
 
 It is independent from `ai-engineering-monorepo`. Any reused code is **copied and adapted**, not imported.
 
@@ -77,22 +77,16 @@ It is independent from `ai-engineering-monorepo`. Any reused code is **copied an
 |---|---|---|
 | Python package manager | `uv` | Recent, fast, already decided |
 | Python | 3.12 | All libs verified here |
-| Warehouse | PostgreSQL 16 | Supabase-compatible |
-| Broker | Redpanda | Kafka API, single binary |
-| Orchestration | Airflow 2.10+ | Explicit portfolio skill |
-| Transformations | dbt-core + dbt-postgres | — |
+| Database | None | Stateless API (ADR 015) |
+| Broker | None | Live TfL proxy (ADR 014) |
 | API | FastAPI + sse-starlette | — |
 | Agent | LangGraph 1.x | — |
-| Structured extraction | Pydantic AI | For tool-level typed LLM calls only |
-| RAG | LlamaIndex | — |
-| Vector DB | Pinecone serverless | — |
-| PDF | Docling | — |
-| Embeddings | OpenAI text-embedding-3-small | — |
-| LLMs | Claude Haiku (router) + Sonnet (answer) | — |
+| LLMs | Anthropic Claude via the Anthropic API direct, default Haiku 5.5 | Spend capped by the Anthropic workspace limit (ADR 015) |
 | Validation | Pydantic v2 | Used at every boundary |
 | LLM observability | LangSmith | — |
-| App observability | Logfire | Covers FastAPI/Postgres/HTTP/OTel |
+| App observability | Logfire | Covers FastAPI/HTTP/OTel |
 | Frontend | Next.js 16 + shadcn/ui (Radix + Nova) + TS | Design from claude.design |
+| Hosting | Vercel (API: Python Fluid compute; web: Next.js) | ADR 015 |
 | Python linter | Ruff | Sole Python linter/formatter |
 | Types | Mypy strict | — |
 | TS linter | Biome | Sole TS linter/formatter |
@@ -108,7 +102,7 @@ It is independent from `ai-engineering-monorepo`. Any reused code is **copied an
 
 - A PR must reference exactly one WP (`TM-XXX`)
 - A PR must touch **only the WP's track directories**
-- If a PR crosses tracks (e.g. touches `ingestion/` and `dbt/` at once), reject and ask for a split
+- If a PR crosses tracks (e.g. touches `src/api/` and `web/` at once), reject and ask for a split, unless it is a `contract:` PR regenerating `web/lib/types.ts`
 
 ### 2. Contracts
 
@@ -157,10 +151,8 @@ It is independent from `ai-engineering-monorepo`. Any reused code is **copied an
 
 `contracts/` is the single source of truth for interfaces:
 
-- `contracts/schemas/*.py` — Pydantic v2 for Kafka events
+- `contracts/schemas/*.py` — Pydantic v2 for tier-1 TfL API shapes and normalised payloads
 - `contracts/openapi.yaml` — OpenAPI 3.1 for every endpoint
-- `contracts/sql/*.sql` — Postgres DDL for raw tables
-- `contracts/dbt_sources.yml` — dbt sources derived from the DDL
 
 No other directory defines these interfaces. If a schema appears duplicated elsewhere, that is a bug.
 
@@ -190,7 +182,7 @@ When reviewing, Codex should respond with:
 If Codex detects any of the following, escalate to the author before approving:
 
 1. Introduction of a new runtime dependency not listed in the locked stack
-2. Change to `docker-compose.yml` that adds a new service
+2. Addition of a new hosted service or deployment target (database, queue, second host)
 3. Change to `pyproject.toml` that alters `python-version` or adds a new linter tool
 4. Creation of a new top-level directory
 5. Deletion of tests

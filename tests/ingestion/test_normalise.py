@@ -1,4 +1,4 @@
-"""Tests for tier-1 → tier-2 normalisation adapters."""
+"""Tests for the tier-1 disruption normaliser."""
 
 from __future__ import annotations
 
@@ -6,102 +6,16 @@ from typing import Any
 
 from pydantic import TypeAdapter
 
-from contracts.schemas.arrivals import ArrivalPayload
-from contracts.schemas.common import DisruptionCategory, TransportMode
+from contracts.schemas.common import DisruptionCategory
 from contracts.schemas.disruptions import DisruptionPayload
-from contracts.schemas.line_status import LineStatusPayload
 from contracts.schemas.tfl_api import (
     TflArrivalPrediction,
     TflLineResponse,
 )
-from ingestion.tfl_client.normalise import (
-    arrival_payloads,
-    disruption_payloads,
-    line_status_payloads,
-)
+from ingestion.tfl_client.normalise import disruption_payloads
 
 _LINE_RESPONSE_ADAPTER = TypeAdapter(list[TflLineResponse])
 _ARRIVAL_ADAPTER = TypeAdapter(list[TflArrivalPrediction])
-
-
-def test_line_status_payloads_from_multi_mode_fixture(
-    line_status_multi_mode_fixture: list[dict[str, Any]],
-) -> None:
-    response = _LINE_RESPONSE_ADAPTER.validate_python(line_status_multi_mode_fixture)
-
-    payloads = line_status_payloads(response)
-
-    assert payloads, "expected at least one payload"
-    assert all(isinstance(p, LineStatusPayload) for p in payloads)
-    expected = sum(
-        max(len(status.validity_periods), 1) for line in response for status in line.line_statuses
-    )
-    assert len(payloads) == expected
-    assert {p.mode for p in payloads} <= set(TransportMode)
-    sample = payloads[0]
-    LineStatusPayload.model_validate(sample.model_dump())
-
-
-def test_line_status_payloads_default_validity_when_missing() -> None:
-    response = _LINE_RESPONSE_ADAPTER.validate_python(
-        [
-            {
-                "id": "victoria",
-                "name": "Victoria",
-                "modeName": "tube",
-                "lineStatuses": [
-                    {
-                        "statusSeverity": 10,
-                        "statusSeverityDescription": "Good Service",
-                        "validityPeriods": [],
-                    }
-                ],
-            }
-        ]
-    )
-
-    payloads = line_status_payloads(response)
-
-    assert len(payloads) == 1
-    assert (payloads[0].valid_to - payloads[0].valid_from).total_seconds() > 0
-
-
-def test_arrival_payloads_from_oxford_circus_fixture(
-    arrivals_oxford_circus_fixture: list[dict[str, Any]],
-) -> None:
-    response = _ARRIVAL_ADAPTER.validate_python(arrivals_oxford_circus_fixture)
-
-    payloads = arrival_payloads(response)
-
-    assert len(payloads) == len(response)
-    assert all(isinstance(p, ArrivalPayload) for p in payloads)
-    sample = payloads[0]
-    assert sample.station_id == response[0].naptan_id
-    assert sample.expected_arrival == response[0].expected_arrival
-    ArrivalPayload.model_validate(sample.model_dump())
-
-
-def test_arrival_payloads_handles_missing_optional_strings() -> None:
-    response = _ARRIVAL_ADAPTER.validate_python(
-        [
-            {
-                "id": "abc",
-                "naptanId": "940GZZLUOXC",
-                "stationName": "Oxford Circus",
-                "lineId": "bakerloo",
-                "lineName": "Bakerloo",
-                "platformName": "Northbound - Platform 1",
-                "expectedArrival": "2026-04-22T11:22:53Z",
-                "timeToStation": 60,
-                "modeName": "tube",
-            }
-        ]
-    )
-
-    payloads = arrival_payloads(response)
-
-    assert payloads[0].direction == ""
-    assert payloads[0].destination == ""
 
 
 def test_disruption_payloads_from_detailed_fixture(
@@ -396,67 +310,3 @@ def test_disruption_affected_stops_dedupes_repeated_naptan_ids() -> None:
     [payload] = disruption_payloads(response)
 
     assert payload.affected_stops == ["940GZZLUVIC", "940GZZLUKSX"]
-
-
-def test_line_status_skips_unknown_transport_mode() -> None:
-    response = _LINE_RESPONSE_ADAPTER.validate_python(
-        [
-            {
-                "id": "alien-line",
-                "name": "Alien Line",
-                "modeName": "hyperloop",
-                "lineStatuses": [
-                    {
-                        "statusSeverity": 10,
-                        "statusSeverityDescription": "Good Service",
-                        "validityPeriods": [],
-                    }
-                ],
-            },
-            {
-                "id": "victoria",
-                "name": "Victoria",
-                "modeName": "tube",
-                "lineStatuses": [
-                    {
-                        "statusSeverity": 10,
-                        "statusSeverityDescription": "Good Service",
-                        "validityPeriods": [],
-                    }
-                ],
-            },
-        ]
-    )
-
-    payloads = line_status_payloads(response)
-
-    assert len(payloads) == 1
-    assert payloads[0].line_id == "victoria"
-
-
-def test_line_status_default_validity_shared_across_payloads() -> None:
-    response = _LINE_RESPONSE_ADAPTER.validate_python(
-        [
-            {
-                "id": f"line-{idx}",
-                "name": f"Line {idx}",
-                "modeName": "tube",
-                "lineStatuses": [
-                    {
-                        "statusSeverity": 10,
-                        "statusSeverityDescription": "Good Service",
-                        "validityPeriods": [],
-                    }
-                ],
-            }
-            for idx in range(5)
-        ]
-    )
-
-    payloads = line_status_payloads(response)
-
-    assert len(payloads) == 5
-    valid_from_values = {p.valid_from for p in payloads}
-    valid_to_values = {p.valid_to for p in payloads}
-    assert len(valid_from_values) == 1, "default valid_from must be captured once per call"
-    assert len(valid_to_values) == 1, "default valid_to must be captured once per call"

@@ -1,4 +1,4 @@
-"""Unit tests for the live TfL agent tools + the RAG tool."""
+"""Unit tests for the live TfL agent tools."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import pytest
 from pydantic import ValidationError
 
 from api.agent import tools as tools_module
-from api.agent.tools import RecentDisruptionsQuery, TflDocSearchQuery, make_tools
+from api.agent.tools import RecentDisruptionsQuery, make_tools
 from api.schemas import DisruptionResponse, LineStatusResponse
 
 # ---------- input schema validation ---------------------------------------
@@ -25,34 +25,22 @@ def test_recent_disruptions_query_caps_limit() -> None:
         RecentDisruptionsQuery(limit=201)
 
 
-def test_doc_search_query_rejects_unknown_doc_id() -> None:
-    with pytest.raises(ValidationError):
-        TflDocSearchQuery(query="forecasts", doc_id="random_blog")  # type: ignore[arg-type]
-
-
-def test_doc_search_query_caps_top_k() -> None:
-    with pytest.raises(ValidationError):
-        TflDocSearchQuery(query="forecasts", top_k=21)
-
-
 # ---------- make_tools wiring ---------------------------------------------
 
 
-def test_make_tools_with_tfl_client_and_retriever() -> None:
-    tools = make_tools(pool=object(), tfl_client=object(), retriever={})  # type: ignore[arg-type]
+def test_make_tools_with_tfl_client() -> None:
+    tools = make_tools(tfl_client=object())  # type: ignore[arg-type]
     names = [t.name for t in tools]
     assert names == [
         "query_tube_status",
         "query_recent_disruptions",
         "plan_journey_tool",
         "get_arrivals_tool",
-        "search_tfl_docs",
     ]
 
 
-def test_make_tools_without_tfl_client_omits_live_tools() -> None:
-    tools = make_tools(pool=object(), retriever={})  # type: ignore[arg-type]
-    assert [t.name for t in tools] == ["search_tfl_docs"]
+def test_make_tools_without_tfl_client_is_empty() -> None:
+    assert make_tools(tfl_client=None) == []
 
 
 # ---------- happy-path forwarding -----------------------------------------
@@ -98,7 +86,7 @@ async def test_query_tube_status_forwards(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(tools_module, "fetch_live_status", fake_fetch_live_status)
 
     tfl_client = object()
-    tools = make_tools(pool=object(), tfl_client=tfl_client)  # type: ignore[arg-type]
+    tools = make_tools(tfl_client=tfl_client)  # type: ignore[arg-type]
     tube_tool = next(t for t in tools if t.name == "query_tube_status")
 
     result = await tube_tool.ainvoke({})
@@ -117,7 +105,7 @@ async def test_query_tube_status_returns_friendly_string_on_error(
 
     monkeypatch.setattr(tools_module, "fetch_live_status", boom)
 
-    tools = make_tools(pool=object(), tfl_client=object())  # type: ignore[arg-type]
+    tools = make_tools(tfl_client=object())  # type: ignore[arg-type]
     tube_tool = next(t for t in tools if t.name == "query_tube_status")
 
     result = await tube_tool.ainvoke({})
@@ -130,22 +118,19 @@ async def test_query_tube_status_returns_friendly_string_on_error(
 async def test_query_recent_disruptions_forwards(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[dict[str, Any]] = []
 
-    async def fake_fetch(
-        tfl_client: Any, *, pool: Any, limit: int, mode: Any
-    ) -> list[DisruptionResponse]:
-        calls.append({"tfl_client": tfl_client, "pool": pool, "limit": limit, "mode": mode})
+    async def fake_fetch(tfl_client: Any, *, limit: int, mode: Any) -> list[DisruptionResponse]:
+        calls.append({"tfl_client": tfl_client, "limit": limit, "mode": mode})
         return [_make_disruption()]
 
     monkeypatch.setattr(tools_module, "fetch_recent_disruptions", fake_fetch)
 
     tfl_client = object()
-    pool = object()
-    tools = make_tools(pool=pool, tfl_client=tfl_client)  # type: ignore[arg-type]
+    tools = make_tools(tfl_client=tfl_client)  # type: ignore[arg-type]
     disr_tool = next(t for t in tools if t.name == "query_recent_disruptions")
 
     result = await disr_tool.ainvoke({"limit": 5, "mode": "tube"})
 
-    assert calls == [{"tfl_client": tfl_client, "pool": pool, "limit": 5, "mode": "tube"}]
+    assert calls == [{"tfl_client": tfl_client, "limit": 5, "mode": "tube"}]
     assert result[0]["disruption_id"] == "d1"
 
 
@@ -158,41 +143,10 @@ async def test_query_recent_disruptions_returns_friendly_string_on_error(
 
     monkeypatch.setattr(tools_module, "fetch_recent_disruptions", boom)
 
-    tools = make_tools(pool=object(), tfl_client=object())  # type: ignore[arg-type]
+    tools = make_tools(tfl_client=object())  # type: ignore[arg-type]
     disr_tool = next(t for t in tools if t.name == "query_recent_disruptions")
 
     result = await disr_tool.ainvoke({})
 
     assert isinstance(result, str)
     assert "couldn't fetch recent disruptions" in result.lower()
-
-
-@pytest.mark.asyncio
-async def test_search_tfl_docs_delegates_to_retrieve(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    captured: dict[str, Any] = {}
-
-    async def fake_retrieve(index: Any, *, query: str, doc_id: str | None, top_k: int) -> list[Any]:
-        captured["index"] = index
-        captured["query"] = query
-        captured["doc_id"] = doc_id
-        captured["top_k"] = top_k
-        return []
-
-    monkeypatch.setattr(tools_module, "retrieve", fake_retrieve)
-
-    retriever = object()
-    tools = make_tools(pool=object(), retriever=retriever)  # type: ignore[arg-type]
-    docs_tool = next(t for t in tools if t.name == "search_tfl_docs")
-    result = await docs_tool.ainvoke(
-        {"query": "Bakerloo extension", "doc_id": "business_plan_2026", "top_k": 3}
-    )
-
-    assert captured == {
-        "index": retriever,
-        "query": "Bakerloo extension",
-        "doc_id": "business_plan_2026",
-        "top_k": 3,
-    }
-    assert result == []

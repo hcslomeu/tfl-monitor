@@ -1,150 +1,132 @@
 # Deployment
 
-The production stack is intentionally minimalist: the API runs as a **single
-container on a shared AWS Lightsail box**, **AWS Bedrock** powers the LLM, and
-every other tier rides on a free plan. There is no broker and no ingestion
-worker — the app reads TfL live (ADR 014). The infra is locked in
-[`infra/README.md`](https://github.com/hcslomeu/tfl-monitor/blob/main/infra/README.md)
-and ADR 006.
+Both halves of the app run on **Vercel**. The API is a stateless FastAPI
+function (Fluid compute, Pro plan, region `lhr1`) and the dashboard is a
+Next.js project. There is no server, database, broker, or AWS resource to
+operate (ADR 015).
 
-## Cost lock
+## Projects
 
-tfl-monitor is a **second tenant** on a Lightsail box it shares with
-`alpha-whale` and future portfolio projects, so the $10/mo box splits roughly
-three ways.
+| Project | What it serves | Public URL |
+|---------|----------------|------------|
+| `tfl-monitor-api` | FastAPI (`src/api/main.py`), Python runtime | `https://tfl-monitor-api.humbertolomeu.com` |
+| `tfl-monitor` | Next.js dashboard (`web/`) | `https://tfl-monitor.humbertolomeu.com` |
 
-| Layer | Host | Tier | $/mo |
-|-------|------|------|------|
-| Backend compute | Shared AWS Lightsail (eu-west-2, 2 GB RAM, 60 GB SSD) | shared $10 box | ~3.50 effective |
-| LLM | AWS Bedrock — Claude Sonnet 4.5 + Haiku 4.5 (`eu.anthropic.*` inference profiles) | on-demand | ~2-3 |
-| Postgres + pgvector | Supabase | free | 0 |
-| Frontend | Vercel | hobby | 0 |
-| HTTPS termination | shared Caddy + Let's Encrypt + Cloudflare DNS-only | — | 0 |
-| Image build | on-box `docker compose --build` | — | 0 |
-| Observability | Logfire + LangSmith | free | 0 |
-| **Steady-state target** | | | **~$5-7** |
+The frontend reaches the API through `NEXT_PUBLIC_API_URL`. The API's CORS
+allowlist pins the production origins plus an anchored regex for
+`tfl-monitor-*.vercel.app` preview deployments.
 
-A CloudWatch billing alarm guards the Bedrock spend.
-
-## Topology on the box
+## Topology
 
 ```mermaid
-flowchart TB
-    INET((Internet))
-    INET -->|443 / 80| CADDY
-    subgraph LS["AWS Lightsail · Ubuntu 24.04 · eu-west-2 · 13.41.145.33"]
-      direction TB
-      CADDY[shared Caddy<br/>/opt/caddy/ · caddy_net]
-      subgraph INFRA["docker compose -p infra -f infra/docker-compose.prod.yml"]
-        API[api<br/>tfl-monitor-api-1 · FastAPI :8000]
-      end
-      ALPHA[alpha-whale<br/>other tenant]
-    end
-    subgraph CLOUD[Managed services]
-      SB[(Supabase Postgres<br/>+ pgvector)]
-      BR[AWS Bedrock]
-    end
-    subgraph EDGE[Edge]
-      VER[Vercel<br/>tfl-monitor.vercel.app]
+flowchart LR
+    USER((Browser))
+    subgraph VERCEL["Vercel · region lhr1"]
+      WEB[tfl-monitor<br/>Next.js]
+      CDN[Vercel CDN<br/>s-maxage=30 on live GETs]
+      FN[tfl-monitor-api<br/>FastAPI function]
     end
     TFL[TfL Unified API]
+    ANT[Anthropic API]
+    LF[Logfire]
+    LS[LangSmith]
 
-    CADDY -->|tfl-monitor-api.humbertolomeu.com| API
-    CADDY --> ALPHA
-    API -->|read-through| TFL
-    API --> SB
-    API --> BR
-    VER -.fetch.-> CADDY
+    USER --> WEB
+    USER -->|REST + SSE| CDN
+    CDN --> FN
+    FN -->|read-through| TFL
+    FN -->|chat| ANT
+    FN -.spans.-> LF
+    FN -.traces.-> LS
 ```
 
-One long-running container for tfl-monitor (`tfl-monitor-api-1`, compose project
-`infra`). The producers, consumers, broker, and Airflow that the original design
-ran are all gone (ADR 014 / ADR 008).
+## How the API is built
 
-## DNS + reverse proxy
+| File | Setting |
+|------|---------|
+| `pyproject.toml` | `[tool.vercel] entrypoint = "src.api.main:app"` |
+| `vercel.json` | `regions: ["lhr1"]`; `maxDuration: 300` for the SSE chat; `excludeFiles` drops `.claude/`, `.github/`, `docs/`, `scripts/`, `tests/`, `web/` and Markdown from the bundle |
 
-- **DNS:** a Cloudflare A record `tfl-monitor-api.humbertolomeu.com` → the static
-  IP, **DNS-only** (gray cloud) — no Cloudflare proxy, no Origin Cert.
-- **TLS:** the shared Caddy at `/opt/caddy/` joins the external `caddy_net`
-  docker network and reverse-proxies the hostname to `tfl-monitor-api-1:8000`,
-  issuing a Let's Encrypt cert via HTTP-01. `infra/caddyfile.snippet` is the
-  source of truth for the tfl-monitor site block, merged once into
-  `/opt/caddy/Caddyfile`.
+Vercel installs the runtime dependencies from `uv.lock`. Without the RAG,
+Postgres, and AWS libraries the unzipped bundle is about 100 MB.
 
-SSE needs `flush_interval -1` in the Caddy site block — Caddy buffers by
-default, which times out the chat stream.
+## How a deploy happens
 
-## LLM access
+Vercel's Git integration builds every push:
 
-AWS Bedrock cross-region inference profiles serve Claude Sonnet 4.5 (answers)
-and Haiku 4.5 (extraction), authenticated through a scoped `tfl-monitor-bedrock`
-IAM user — Lightsail has no native instance role, so the access keys live in
-`/opt/tfl-monitor/.env` (chmod 600). Anthropic-direct stays as an opt-in
-local-dev fallback for contributors who only have an Anthropic key.
+- **Branch push or PR:** a preview deployment on a `*.vercel.app` URL.
+- **Merge to `main`:** a production deployment, aliased to the custom domains.
 
-## Deploy pipeline
+There is no deploy workflow in GitHub Actions and no SSH step. CI
+(`ci.yml`) runs lint and tests; Vercel does the build and release.
 
-```mermaid
-sequenceDiagram
-    participant Dev as push to main
-    participant GHA as GitHub Actions
-    participant BOX as Lightsail box
-    participant TFL as deploy.sh
+## Environment variables
 
-    Dev->>GHA: push (backend paths only)
-    GHA->>BOX: rsync source (pinned host key)
-    GHA->>BOX: ssh (keepalive) → bash scripts/deploy.sh
-    TFL->>TFL: docker compose -p infra up -d --build
-    TFL->>TFL: internal + external healthcheck
-    TFL->>TFL: one-shot dbt seed + dim_stations build
-    BOX-->>Dev: /health 200
+Set on the `tfl-monitor-api` project (Production and Preview):
+
+| Variable | Required | Purpose |
+|----------|----------|---------|
+| `TFL_APP_KEY` | yes | TfL Unified API key. Unset means `/status/live` and `/disruptions/recent` return `503` |
+| `ANTHROPIC_API_KEY` | yes | Chat model. Unset means `/chat/stream` returns `503` |
+| `CHAT_MODEL` | no | Overrides the default `claude-haiku-5-5` without a code change |
+| `LOGFIRE_TOKEN` | no | Enables Logfire export; without it Logfire runs as a no-op |
+| `LANGSMITH_TRACING` | no | `true` to send agent traces |
+| `LANGSMITH_API_KEY` | no | LangSmith key |
+| `LANGSMITH_PROJECT` | no | `tfl-monitor` |
+| `ENVIRONMENT` | no | Logfire environment tag (e.g. `production`) |
+| `APP_VERSION` | no | Logfire service version tag |
+
+The `tfl-monitor` frontend project only needs `NEXT_PUBLIC_API_URL`.
+
+## DNS
+
+The domain lives on Cloudflare. A CNAME record `tfl-monitor-api` points to
+Vercel and is **DNS only** (grey cloud): Vercel terminates TLS and issues the
+certificate. The frontend hostname `tfl-monitor` follows the same pattern.
+
+## CDN caching
+
+`GET /api/v1/status/live` and `GET /api/v1/disruptions/recent` return:
+
+```text
+Cache-Control: public, s-maxage=30, stale-while-revalidate=30
 ```
 
-`.github/workflows/deploy.yml` triggers on push to `main`, ignoring
-markdown / `web/` / `.claude/` / `docs/` changes. Hardening learned the hard way
-(see the napkin): `set -o pipefail` through every pipe so `docker compose … | tail`
-can't mask a build failure; `ssh -o ServerAliveInterval=60` so buildkit's silent
-unpack phase doesn't drop the connection; a pinned `LIGHTSAIL_HOST_KEY` to close
-the keyscan TOFU window.
+The dashboard polls every 30 seconds per viewer. The Vercel CDN collapses
+those requests into at most one function run per 30-second window, so viewer
+count does not drive TfL calls or function invocations. `/chat/stream` is a
+`POST` and is never cached.
 
-`scripts/deploy.sh` also removes any legacy cron schedule (ADR 014 dropped the
-recurring dbt + retention cron) and runs a **one-shot** `dbt seed` +
-`dim_stations` build after the health check — non-fatal, because the
-station-name resolver falls back to a live TfL `/StopPoint` lookup when
-`dim_stations` is absent.
+## Spend caps
+
+| Cost | Guard |
+|------|-------|
+| Vercel usage (function time, bandwidth) | Vercel Spend Management limit on the team |
+| LLM tokens | The API key comes from a dedicated Anthropic Console workspace with a monthly spend limit |
+
+When Anthropic rejects a call (spend limit reached, auth, rate limit), the
+chat stream emits a readable token explaining the assistant is unavailable,
+then `end: "error"`. The live dashboard keeps working.
 
 ## Operations
 
-| Action | Command |
-|--------|---------|
-| SSH to the box | `ssh ubuntu@13.41.145.33` |
+| Action | How |
+|--------|-----|
 | Public smoke | `curl -fsS https://tfl-monitor-api.humbertolomeu.com/health` |
-| Recreate the API container | `cd /opt/tfl-monitor && docker compose -p infra -f infra/docker-compose.prod.yml up -d --force-recreate` |
-| Manual dbt rebuild | `ssh ubuntu@13.41.145.33 '/opt/tfl-monitor/scripts/cron-dbt-run.sh'` |
-| Reload Caddy | `docker exec shared-caddy caddy reload --config /etc/caddy/Caddyfile` |
+| Check CDN caching | `curl -sS -D - -o /dev/null https://tfl-monitor-api.humbertolomeu.com/api/v1/status/live` (a GET; the route answers HEAD with 405) and look for `x-vercel-cache` |
+| Function logs | Vercel dashboard, `tfl-monitor-api` project, Logs tab |
+| Run the API locally | `make api` (uvicorn with `.env` loaded) |
 
-!!! warning "Shared box etiquette"
-    The box is a noisy-neighbour to two other tenants on 2 GB of RAM. Never run
-    a multi-GB-RAM job (RAG ingest, torch) on it — that OOMs the guest kernel and
-    takes every tenant down. Run RAG ingest off-box against the same Supabase
-    pgvector DSN. Use the `-p infra` project name for every compose op so it
-    targets `tfl-monitor-api-1` and not the local-dev stack.
+## Rollback
 
-## What changed from the original plan
+1. **Instant rollback:** promote a previous production deployment from the
+   Vercel dashboard (or `vercel rollback`).
+2. **Per-PR:** `git revert -m 1 <merge-sha>`; the next push to `main` deploys.
+3. **Model change:** set `CHAT_MODEL` and redeploy; no code change needed.
 
-The first TM-A5 iteration targeted a dedicated EC2 spot box on DuckDNS with a
-full 6-service compose (producers, consumers, Airflow). Two shifts collapsed it:
+## History
 
-1. An existing 2 GB Lightsail box had spare capacity, so tfl-monitor became a
-   second tenant behind a shared Caddy — cheaper than a dedicated instance
-   (ADR 006 supersedes ADR 003).
-2. ADR 014 removed the broker, ingestion workers, and warehouse entirely, so the
-   box now runs a single API container reading TfL live.
-
-## Rollback paths
-
-1. **Per-image** — `docker compose -p infra up -d` against a previous build /
-   git checkout on the box.
-2. **Per-PR** — `git revert -m 1 <merge-sha>`; the next push redeploys.
-3. **LLM fallback** — unset the Bedrock vars and set `ANTHROPIC_API_KEY` in
-   `/opt/tfl-monitor/.env` to fall back to Anthropic-direct.
+The API previously ran as a Docker container on a shared AWS Lightsail box
+behind Caddy, with AWS Bedrock for the LLM and Supabase Postgres for pgvector
+and reference data (ADR 006). ADR 015 replaced all of that with the Vercel
+function above.

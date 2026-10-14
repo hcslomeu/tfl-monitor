@@ -52,7 +52,7 @@ Hard rules:
 1. **One `pyproject.toml` at the root.** Python modules are plain folders under `src/`, not sub-packages with their own `pyproject.toml`.
 2. **A short `Makefile`** (max ~15 targets) for system orchestration (Docker, bootstrap, `check`). Pure-Python dev tasks use `uv run task <name>` via `[tool.taskipy.tasks]` in `pyproject.toml`.
 3. **Minimal Docker Compose**: only services essential for local dev. No sidecars, no local observability (Grafana/Prometheus stay out — we use hosted observability instead).
-4. **No "just-in-case" abstractions.** If there is one consumer of a function, don't create an interface. If there is one vector store (pgvector), don't create an abstract factory. Abstract when the second case arrives.
+4. **No "just-in-case" abstractions.** If there is one consumer of a function, don't create an interface. If there is one LLM provider, don't create a provider factory. Abstract when the second case arrives.
 5. **No elaborate hierarchical configuration.** One `.env` file. No nested Pydantic `BaseSettings` unless there are ≥15 variables.
 6. **No custom structured logging wrapper.** Logfire handles structured logs; `logging.basicConfig` for anything it doesn't cover.
 7. **No custom CLI** (Typer/Click) when a ~20-line script solves it.
@@ -77,7 +77,7 @@ If a detailed spec exists at `.claude/specs/TM-XXX-spec.md` for the active WP, i
 
 ## Project overview
 
-**tfl-monitor** is a standalone portfolio project demonstrating data + AI engineering: a live TfL (Transport for London) proxy that reads through to the TfL API on demand, with a RAG layer over TfL strategy documents and a conversational agent that routes between live TfL queries and document retrieval (ADR 014 — the warehouse and streaming pipeline were decommissioned).
+**tfl-monitor** is a standalone portfolio project demonstrating data + AI engineering: a live TfL (Transport for London) proxy that reads through to the TfL API on demand, plus a conversational agent with live TfL tools (status, disruptions, journeys, arrivals). The API is stateless and runs on Vercel (ADR 014 decommissioned the warehouse and streaming pipeline; ADR 015 removed RAG, Postgres, and AWS).
 
 **This is NOT part of the `ai-engineering-monorepo`.** It is a standalone repo. If you know patterns from the monorepo (`AsyncHTTPClient`, `VectorStore` abstraction, LangGraph agent state, etc.), **copy and adapt them** — do not import.
 
@@ -89,25 +89,17 @@ If a detailed spec exists at `.claude/specs/TM-XXX-spec.md` for the active WP, i
 |---|---|
 | Python package manager | `uv` |
 | Python version | 3.12 |
-| Database | PostgreSQL 16 (app-essentials + pgvector; no warehouse — ADR 014) |
+| Database | None — stateless API (ADR 015) |
 | Streaming broker | None — live TfL proxy, no broker (ADR 014) |
-| Batch orchestration | Host cron (one-shot dbt seed + `dim_stations`; ADR 008/014) |
-| Transformations | dbt-core + dbt-postgres |
 | API | FastAPI + sse-starlette |
 | Agent framework | LangGraph v1.x |
-| Structured LLM extraction | Pydantic AI (for tool-level extraction; LangGraph remains the main agent) |
-| RAG framework | LlamaIndex |
-| Vector DB | pgvector (Supabase Postgres) |
-| PDF ingestion | PyMuPDF (ADR 013) |
-| Embeddings | AWS Bedrock Titan `amazon.titan-embed-text-v2:0` |
-| LLMs | Anthropic Claude (Haiku for routing, Sonnet for final answer) |
+| LLMs | Anthropic Claude via the Anthropic API direct; model from `CHAT_MODEL`, default Haiku 5.5 (ADR 015) |
 | Data validation | Pydantic v2 (everywhere — API models, agent tools, config) |
 | LLM observability | LangSmith |
-| App observability | Logfire (FastAPI, Postgres, OpenTelemetry) |
+| App observability | Logfire (FastAPI, httpx, OpenTelemetry) |
 | Frontend | Next.js 16 + shadcn/ui (Radix + Nova preset) + TypeScript (design via claude.design) |
-| Backend hosting | Railway |
-| Frontend hosting | Vercel |
-| Postgres (prod) | Supabase free tier |
+| Backend hosting | Vercel (Python Fluid compute, project `tfl-monitor-api`; ADR 015) |
+| Frontend hosting | Vercel (project `tfl-monitor`) |
 | Python linter/formatter | Ruff (lint + format) |
 | Type checker | Mypy strict |
 | TS linter/formatter | Biome (chosen — do not add ESLint or Prettier) |
@@ -124,8 +116,7 @@ Two hosted tools, clearly separated by concern:
 
 - Set `LANGSMITH_TRACING=true`, `LANGSMITH_API_KEY=...`, `LANGSMITH_PROJECT=tfl-monitor`
 - LangGraph auto-instruments: every node, tool call, LLM invocation becomes a trace
-- Pydantic AI also emits to LangSmith when the env vars are set
-- Use it to debug: "why did the router pick the SQL tool?", "which retrieval chunks made it to the context?"
+- Use it to debug: "why did the agent pick the journey tool?", "which tool results made it into the answer?"
 
 ### Logfire — application and data tracing
 
@@ -136,13 +127,12 @@ import logfire
 
 logfire.configure(service_name="tfl-monitor-api")
 logfire.instrument_fastapi(app)
-logfire.instrument_psycopg()
 logfire.instrument_httpx()
 ```
 
 - Use structured logging via `logfire.info("message", **attributes)` rather than `print()` or bare `logging`
-- Covers: request latency, SQL query plans, HTTP client calls, Kafka produce/consume timings
-- Use it to debug: "which consumer is lagging?", "why is /reliability/{line_id} slow?"
+- Covers: request latency, HTTP client calls (TfL, Anthropic), cold starts
+- Use it to debug: "which TfL call is slow?", "why is /status/live slow?"
 
 **Division of labour:**
 
@@ -152,8 +142,8 @@ logfire.instrument_httpx()
 | Which TfL endpoint is throttling us? | Logfire |
 | How many tokens did this conversation cost? | LangSmith |
 | Why is this endpoint p99 latency high? | Logfire |
-| Did the retriever pull the right chunks? | LangSmith |
-| Is the Kafka consumer keeping up? | Logfire |
+| Which tools did the agent call? | LangSmith |
+| Is TfL returning errors? | Logfire |
 
 Both free tiers are generous enough for this project. Do not implement custom metrics/tracing.
 
@@ -200,7 +190,6 @@ Always run:
 ```bash
 uv run task lint      # ruff check + ruff format --check + mypy
 uv run task test      # pytest
-uv run task dbt-parse # if you touched dbt/
 
 # TypeScript (if you touched web/)
 pnpm --dir web lint
@@ -224,7 +213,7 @@ git checkout -b feature/TM-XXX-short-description
 # Commits in Conventional Commits style (subject in English)
 git commit -m "feat(api): add /status/live endpoint"
 git commit -m "fix(ingestion): handle TfL 429 rate limit"
-git commit -m "chore(dbt): add not_null tests to stg_line_status"
+git commit -m "chore(api): add cache headers to live endpoints"
 
 # PR referencing the Linear issue
 gh pr create --title "feat: TM-XXX description (LIN-Y)" --body "Closes LIN-Y"
@@ -248,7 +237,7 @@ All `git commit` commands provided to the author **must use inline `-m "..."` fo
   ```
 - ✅ Correct — multi-line message using multiple `-m` flags (git concatenates them with blank lines):
   ```bash
-  git commit -m "feat(api): add /status/live endpoint" -m "Implements the live line-status query against the warehouse. Closes LIN-12."
+  git commit -m "feat(api): add /status/live endpoint" -m "Implements the live line-status read-through. Closes LIN-12."
   ```
 - ❌ Wrong — heredoc, breaks the author's terminal:
   ```bash
@@ -352,23 +341,17 @@ def create_issue(self, title: str, body: str) -> dict:
 
 Pydantic is used **everywhere** data crosses a boundary:
 
-- **Kafka events**: `contracts/schemas/*.py` — frozen Pydantic models, JSON-serialised on wire
+- **TfL contracts**: `contracts/schemas/*.py` — tier-1 TfL API shapes and normalised payloads
 - **FastAPI request/response**: route signatures use Pydantic models; FastAPI auto-generates OpenAPI
-- **Config**: single `Settings(BaseSettings)` class at `src/<service>/config.py` reading from env
+- **Config**: plain `os.environ` reads at the entrypoint; a single `Settings(BaseSettings)` class only once there are ≥15 variables (Principle #1, rule 5)
 - **Tool arguments for agent**: every LangGraph tool has typed Pydantic input/output — the agent cannot call a tool with malformed args
 
-### When to use Pydantic AI
+### Structured LLM extraction
 
-Pydantic AI is a thin structured-output LLM client. It earns its place when:
-
-- A tool needs to extract a typed struct from free text (e.g. `LineQuery(line_id, window_days)` from `"how's the Piccadilly line been lately?"`)
-- A sub-task inside a LangGraph node needs a quick type-safe LLM call without the full graph machinery
-
-Do **not** use Pydantic AI for:
-
-- The main routing agent — LangGraph's stateful graph + tool calling handles this
-- Anything that already has an Anthropic SDK equivalent with less ceremony
-- Replacing Instructor patterns just for the sake of migration
+Pydantic AI was removed in ADR 015 (its only caller was gone). If a tool
+ever needs a typed struct extracted from free text, prefer a typed tool
+argument the main agent fills in; reintroduce a structured-output client
+only through an ADR.
 
 ---
 
@@ -384,7 +367,7 @@ Do **not** use Pydantic AI for:
 
 | Server | When to use |
 |---|---|
-| **context7** | Up-to-date library docs (LangChain, FastAPI, pytest, Pydantic AI) |
+| **context7** | Up-to-date library docs (LangChain, LangGraph, FastAPI, pytest) |
 | **Linear** | Create/update issues when completing WPs |
 | **ide** | VS Code diagnostics |
 
@@ -399,7 +382,6 @@ When a WP is done:
 1. [ ] All acceptance criteria from the spec met
 2. [ ] `uv run task lint` passes
 3. [ ] `uv run task test` passes
-4. [ ] `uv run task dbt-parse` passes if `dbt/` or `contracts/sql/` was touched
 4. [ ] `make check` passes end-to-end
 5. [ ] `PROGRESS.md` updated with completion date and notes
 6. [ ] Linear issue moved to `Done` (via Linear MCP)

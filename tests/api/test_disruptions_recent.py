@@ -48,18 +48,17 @@ def _disrupted_line(
 def test_happy_path_default_limit_and_modes(
     fake_tfl_client_factory: Callable[..., Any],
     attach_tfl_client: Callable[[Any], None],
-    fake_pool_factory: Callable[..., Any],
-    attach_pool: Callable[[Any], None],
 ) -> None:
     client = fake_tfl_client_factory(
         disruptions=[_disrupted_line("piccadilly"), _disrupted_line("victoria")]
     )
     attach_tfl_client(client)
-    attach_pool(fake_pool_factory([]))
 
     response = TestClient(app).get("/api/v1/disruptions/recent")
 
     assert response.status_code == 200
+    assert response.headers["cache-control"] == "public, s-maxage=30, stale-while-revalidate=30"
+    assert response.headers["vary"] == "Origin"
     body = response.json()
     assert {item["affected_routes"][0] for item in body} == {"piccadilly", "victoria"}
     assert client.disruption_calls == [DEFAULT_STATUS_MODES]
@@ -68,11 +67,8 @@ def test_happy_path_default_limit_and_modes(
 def test_returns_empty_list_when_no_disruptions(
     fake_tfl_client_factory: Callable[..., Any],
     attach_tfl_client: Callable[[Any], None],
-    fake_pool_factory: Callable[..., Any],
-    attach_pool: Callable[[Any], None],
 ) -> None:
     attach_tfl_client(fake_tfl_client_factory(disruptions=[]))
-    attach_pool(fake_pool_factory([]))
 
     response = TestClient(app).get("/api/v1/disruptions/recent")
 
@@ -83,12 +79,9 @@ def test_returns_empty_list_when_no_disruptions(
 def test_mode_filter_scopes_the_tfl_query(
     fake_tfl_client_factory: Callable[..., Any],
     attach_tfl_client: Callable[[Any], None],
-    fake_pool_factory: Callable[..., Any],
-    attach_pool: Callable[[Any], None],
 ) -> None:
     client = fake_tfl_client_factory(disruptions=[])
     attach_tfl_client(client)
-    attach_pool(fake_pool_factory([]))
 
     TestClient(app).get("/api/v1/disruptions/recent", params={"mode": "tube"})
 
@@ -98,18 +91,20 @@ def test_mode_filter_scopes_the_tfl_query(
 def test_custom_limit_truncates_results(
     fake_tfl_client_factory: Callable[..., Any],
     attach_tfl_client: Callable[[Any], None],
-    fake_pool_factory: Callable[..., Any],
-    attach_pool: Callable[[Any], None],
 ) -> None:
     client = fake_tfl_client_factory(
-        disruptions=[_disrupted_line("piccadilly"), _disrupted_line("victoria")]
+        disruptions=[
+            _disrupted_line("piccadilly", affected_stops=["940GZZLUKSX"]),
+            _disrupted_line("victoria", affected_stops=["940GZZLUOXC"]),
+        ]
     )
     attach_tfl_client(client)
-    attach_pool(fake_pool_factory([]))
 
     response = TestClient(app).get("/api/v1/disruptions/recent", params={"limit": 1})
 
     assert len(response.json()) == 1
+    # Disruptions past ``limit`` are dropped before station enrichment.
+    assert client.stop_point_calls == ["940GZZLUKSX"]
 
 
 def test_invalid_mode_returns_422(
@@ -139,8 +134,6 @@ def test_limit_above_max_returns_422(
 def test_closure_text_passes_through_as_string(
     fake_tfl_client_factory: Callable[..., Any],
     attach_tfl_client: Callable[[Any], None],
-    fake_pool_factory: Callable[..., Any],
-    attach_pool: Callable[[Any], None],
 ) -> None:
     client = fake_tfl_client_factory(
         disruptions=[
@@ -151,7 +144,6 @@ def test_closure_text_passes_through_as_string(
         ]
     )
     attach_tfl_client(client)
-    attach_pool(fake_pool_factory([]))
 
     response = TestClient(app).get("/api/v1/disruptions/recent")
 
@@ -159,24 +151,15 @@ def test_closure_text_passes_through_as_string(
     assert body[0]["closure_text"].startswith("No service between Seven Sisters")
 
 
-def test_affected_stops_resolved_via_dim_stations(
+def test_affected_stops_resolved_via_tfl_stop_points(
     fake_tfl_client_factory: Callable[..., Any],
     attach_tfl_client: Callable[[Any], None],
-    fake_pool_factory: Callable[..., Any],
-    attach_pool: Callable[[Any], None],
 ) -> None:
     client = fake_tfl_client_factory(
-        disruptions=[_disrupted_line("piccadilly", affected_stops=["940GZZLUOXC", "940GZZLUHBN"])]
+        disruptions=[_disrupted_line("piccadilly", affected_stops=["940GZZLUOXC", "940GZZLUHBN"])],
+        stop_names={"940GZZLUOXC": "Oxford Circus", "940GZZLUHBN": "Holborn"},
     )
     attach_tfl_client(client)
-    attach_pool(
-        fake_pool_factory(
-            [
-                {"naptan_id": "940GZZLUOXC", "name": "Oxford Circus"},
-                {"naptan_id": "940GZZLUHBN", "name": "Holborn"},
-            ]
-        )
-    )
 
     response = TestClient(app).get("/api/v1/disruptions/recent")
 
@@ -190,15 +173,13 @@ def test_affected_stops_resolved_via_dim_stations(
 def test_affected_stops_unmatched_surface_name_none(
     fake_tfl_client_factory: Callable[..., Any],
     attach_tfl_client: Callable[[Any], None],
-    fake_pool_factory: Callable[..., Any],
-    attach_pool: Callable[[Any], None],
 ) -> None:
-    """A NaPTAN absent from dim_stations (and TfL fallback) surfaces name=None."""
+    """A NaPTAN TfL cannot resolve surfaces name=None."""
     client = fake_tfl_client_factory(
-        disruptions=[_disrupted_line("piccadilly", affected_stops=["940GZZLUOXC", "490UNKNOWN"])]
+        disruptions=[_disrupted_line("piccadilly", affected_stops=["940GZZLUOXC", "490UNKNOWN"])],
+        stop_names={"940GZZLUOXC": "Oxford Circus"},
     )
     attach_tfl_client(client)
-    attach_pool(fake_pool_factory([{"naptan_id": "940GZZLUOXC", "name": "Oxford Circus"}]))
 
     response = TestClient(app).get("/api/v1/disruptions/recent")
 
@@ -218,32 +199,16 @@ def test_missing_tfl_client_returns_503(attach_tfl_client: Callable[[Any], None]
     assert "TfL client" in body["detail"]
 
 
-def test_missing_pool_returns_503(
-    fake_tfl_client_factory: Callable[..., Any],
-    attach_tfl_client: Callable[[Any], None],
-    attach_pool: Callable[[Any], None],
-) -> None:
-    attach_tfl_client(fake_tfl_client_factory())
-    attach_pool(None)
-
-    response = TestClient(app).get("/api/v1/disruptions/recent")
-
-    assert response.status_code == 503
-    assert response.json()["status"] == 503
-
-
 def test_tfl_upstream_failure_returns_502(
     fake_tfl_client_factory: Callable[..., Any],
     attach_tfl_client: Callable[[Any], None],
-    fake_pool_factory: Callable[..., Any],
-    attach_pool: Callable[[Any], None],
 ) -> None:
     attach_tfl_client(fake_tfl_client_factory(fail=True))
-    attach_pool(fake_pool_factory([]))
 
     response = TestClient(app).get("/api/v1/disruptions/recent")
 
     assert response.status_code == 502
+    assert "cache-control" not in response.headers
     body = response.json()
     assert body["status"] == 502
     assert body["title"] == "Bad Gateway"

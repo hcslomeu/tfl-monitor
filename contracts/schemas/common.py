@@ -1,13 +1,8 @@
-"""Shared enums, envelope, and type aliases for TfL event contracts."""
+"""Shared enums and type aliases for the TfL contracts."""
 
 from __future__ import annotations
 
-from datetime import datetime
 from enum import IntEnum, StrEnum
-from typing import ClassVar, Literal
-from uuid import UUID
-
-from pydantic import BaseModel, ConfigDict, Field
 
 
 class TransportMode(StrEnum):
@@ -62,25 +57,3 @@ class DisruptionCategory(StrEnum):
 
 LineId = str
 StationId = str
-
-
-class Event[P: BaseModel](BaseModel):
-    """Immutable envelope serialised to Kafka as JSON.
-
-    Attributes:
-        event_id: Unique event identifier (UUIDv7 preferred).
-        event_type: Event-type discriminator for consumers.
-        source: Fixed upstream origin.
-        ingested_at: UTC timestamp when the event was ingested.
-        payload: Typed payload specific to the topic.
-    """
-
-    model_config = ConfigDict(frozen=True)
-
-    event_id: UUID = Field(..., description="Unique event identifier (UUIDv7 preferred)")
-    event_type: str = Field(..., description="Event type discriminator")
-    source: Literal["tfl-unified-api"] = "tfl-unified-api"
-    ingested_at: datetime = Field(..., description="UTC timestamp when ingested")
-    payload: P
-
-    TOPIC_NAME: ClassVar[str]
