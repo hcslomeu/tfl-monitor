@@ -121,7 +121,9 @@ async def _lookup(
     failures (timeouts, 5xx, network errors) uncached so a future request
     retries them instead of surfacing ``Unknown`` for the rest of the
     process lifetime. Lookups still running after
-    ``_LOOKUP_DEADLINE_SECONDS`` are cancelled and stay in ``pending``.
+    ``_LOOKUP_DEADLINE_SECONDS`` are cancelled and stay in ``pending``; if
+    the caller is cancelled, every lookup is cancelled before the
+    ``CancelledError`` propagates, so none outlives the request.
     """
     semaphore = _get_tfl_semaphore()
 
@@ -140,11 +142,16 @@ async def _lookup(
             return nid, stop_point.common_name, True
 
     tasks = [asyncio.create_task(_resolve_one(nid)) for nid in pending]
-    done, unfinished = await asyncio.wait(tasks, timeout=_LOOKUP_DEADLINE_SECONDS)
-    if unfinished:
-        for task in unfinished:
+    try:
+        done, unfinished = await asyncio.wait(tasks, timeout=_LOOKUP_DEADLINE_SECONDS)
+    finally:
+        # ``asyncio.wait`` does not cancel its tasks when the caller is
+        # cancelled; without this, orphaned lookups would keep semaphore
+        # slots (and TfL calls) busy for other requests.
+        for task in tasks:
             task.cancel()
-        await asyncio.gather(*unfinished, return_exceptions=True)
+        await asyncio.gather(*tasks, return_exceptions=True)
+    if unfinished:
         logfire.warning("stations.lookup_deadline_exceeded", unresolved=len(unfinished))
     for task in done:
         nid, name, is_definitive = task.result()

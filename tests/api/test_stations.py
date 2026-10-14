@@ -223,6 +223,59 @@ async def test_lookups_past_the_deadline_return_none_uncached(
 
 
 @pytest.mark.asyncio
+async def test_cancelled_caller_cancels_lookups_and_frees_semaphore() -> None:
+    """Cancelling the caller (e.g. a dropped chat stream) must cancel every
+    in-flight ``/StopPoint`` call, so no orphan keeps a semaphore slot."""
+    concurrency = stations._TFL_LOOKUP_CONCURRENCY
+    semaphore_full = asyncio.Event()
+
+    @dataclass
+    class BlockingClient:
+        in_flight: int = 0
+        cancelled: int = 0
+
+        async def fetch_stop_point(self, naptan_id: str) -> TflStopPoint:
+            self.in_flight += 1
+            if self.in_flight == concurrency:
+                semaphore_full.set()
+            try:
+                await asyncio.sleep(60)
+                raise AssertionError(f"lookup for {naptan_id} was never cancelled")
+            except asyncio.CancelledError:
+                self.cancelled += 1
+                raise
+            finally:
+                self.in_flight -= 1
+
+    blocking_client = BlockingClient()
+    naptan_ids = [f"490BLOCK{i}" for i in range(concurrency + 2)]
+    caller = asyncio.create_task(
+        stations.resolve_naptans(
+            tfl_client=blocking_client,  # type: ignore[arg-type]
+            naptan_ids=naptan_ids,
+        )
+    )
+    await asyncio.wait_for(semaphore_full.wait(), timeout=1)
+
+    caller.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await caller
+
+    assert blocking_client.in_flight == 0
+    assert blocking_client.cancelled == concurrency
+
+    free_client = FakeTflClient(responses={"490FREE": "Free Station"})
+    resolved = await asyncio.wait_for(
+        stations.resolve_naptans(
+            tfl_client=free_client,  # type: ignore[arg-type]
+            naptan_ids=["490FREE"],
+        ),
+        timeout=1,
+    )
+    assert resolved == {"490FREE": "Free Station"}
+
+
+@pytest.mark.asyncio
 async def test_definitive_404_is_cached() -> None:
     """A 404 confirms the NaPTAN does not exist — cache the miss so the
     next request short-circuits without another TfL round-trip."""
